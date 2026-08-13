@@ -453,29 +453,85 @@ function useReducer<S, A>(reducer: (s: S, a: A) => S, initial: S) {
 
 ### `useRef`
 
-**Use when:** you need a box whose `.current` you can change **without** a re-render — a DOM node, a timer id, “latest callback,” previous value.
+**Use when:** you need a box whose `.current` you can mutate **without** a re-render. The box identity (`inputRef`) is stable for the life of the component. Putting a **function** in `useRef(fn)` stores that function — it does **not** call it (unlike `useState(() => compute())`).
+
+Pick a pattern below. Do not put UI the user should see in a ref; that is `useState`.
+
+#### DOM node
+
+`ref={…}` on an element fills `.current` with the node. Focus, scroll, select, play/pause, measure.
 
 ```tsx
-function TextBox({ onChange }: { onChange: (value: string) => void }) {
+function SearchField() {
   const inputRef = useRef<HTMLInputElement>(null);
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
 
   return (
     <>
-      <input
-        ref={inputRef}
-        onBlur={() => onChangeRef.current(inputRef.current?.value ?? "")}
-      />
-      <button onClick={() => inputRef.current?.focus()}>Focus</button>
+      <input ref={inputRef} />
+      <button type="button" onClick={() => inputRef.current?.focus()}>
+        Focus
+      </button>
     </>
   );
 }
 ```
 
-`useRef(onChange)` stores that **function** as `.current`. It does **not** call it (unlike `useState(() => compute())`). Use that for “always the latest handler” without putting the function in an Effect’s deps.
+#### Timer or interval id
 
-For an expensive object, skip a factory argument — React would run `new Player()` every render and only keep the first result. Lazy-init instead:
+Store the handle so a later click or unmount can `clearTimeout` / `clearInterval`. The id is not UI.
+
+```tsx
+function DebouncedSave({ text }: { text: string }) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function schedule() {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => persist(text), 300);
+  }
+
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+  }, []);
+
+  return <button onClick={schedule}>Save soon</button>;
+}
+```
+
+#### Latest callback (avoid a stale closure)
+
+Keep the newest prop in `.current` every render. Read it later from an Effect, interval, or DOM listener that should **not** re-subscribe when the function identity changes.
+
+```tsx
+function TextBox({ onChange }: { onChange: (value: string) => void }) {
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  return (
+    <input
+      onBlur={(e) => onChangeRef.current(e.target.value)}
+    />
+  );
+}
+```
+
+For “event-like logic inside an Effect,” React 19’s `useEffectEvent` is the dedicated hook. A ref is the older, still-valid version of the same idea.
+
+#### Previous value
+
+Write the current value into a ref *after* you have compared it. Useful for “did this id change?” without storing `prev` in state.
+
+```tsx
+function usePrevious<T>(value: T) {
+  const prevRef = useRef<T | undefined>(undefined);
+  const prev = prevRef.current;
+  prevRef.current = value;
+  return prev;
+}
+```
+
+#### Lazy instance (not a factory)
+
+`useRef(new Player())` still constructs a `Player` **every render**; React only keeps the first `.current`. Init once yourself:
 
 ```tsx
 const playerRef = useRef<Player | null>(null);
@@ -483,6 +539,28 @@ if (playerRef.current === null) {
   playerRef.current = new Player();
 }
 ```
+
+#### Ignore a stale request
+
+A render starts a fetch; a later render should ignore the first response. A number or boolean in a ref is enough — bumping it does not re-render.
+
+```tsx
+function User({ id }: { id: string }) {
+  const [user, setUser] = useState<User | null>(null);
+  const requestIdRef = useRef(0);
+
+  useEffect(() => {
+    const requestId = ++requestIdRef.current;
+    getUser(id).then((next) => {
+      if (requestId === requestIdRef.current) setUser(next);
+    });
+  }, [id]);
+
+  return user ? <p>{user.name}</p> : <p>Loading…</p>;
+}
+```
+
+(`AbortController` is often cleaner for fetch; the ref pattern still shows up for “this generation of work.”)
 
 **Polyfill:**
 
@@ -493,7 +571,7 @@ function useRef<T>(initial: T) {
 }
 ```
 
-`useState` gives a stable object. Mutating `.current` does not call `setState`, so no re-render. That is the whole trick. If `initial` is a function, the box holds that function.
+`useState` gives a stable object. Mutating `.current` does not call `setState`, so no re-render. If `initial` is a function, the box holds that function.
 
 ---
 
@@ -709,7 +787,14 @@ Call hooks only at the top level of a React function, and only from components o
 <details>
 <summary>useRef vs useState?</summary>
 
-Updating state re-renders. Mutating `ref.current` does not. Use state for anything the user should see. Use a ref for DOM nodes, timer ids, and “the latest callback” you will read later. A ref is a stable `{ current }` box; `useState({ current })` is a common way to picture it. `useRef(fn)` stores `fn` — it does not run it the way `useState(() => compute())` does.
+Updating state re-renders the component. Mutating `ref.current` does not. The ref object itself is stable for the component’s life. Use **state** for anything the user should see. Use a **ref** for values you need to remember between renders but that are not UI: DOM nodes (`ref={el}`), timer/interval ids you will clear later, the latest callback (assign `ref.current = fn` every render, read it from an Effect so you do not re-subscribe), the previous value of a prop, a lazily created instance (`if (ref.current === null) ref.current = new Player()` — `useRef` does **not** take a factory like `useState(() => compute())`), or a generation flag so a stale fetch is ignored. A teaching picture of a ref is `useState({ current: initial })[0]`.
+
+</details>
+
+<details>
+<summary>What are the common useRef use cases?</summary>
+
+**DOM:** `inputRef.current.focus()`, measure, play video. **Handles:** `setTimeout` / `setInterval` ids so you can clear them on click or unmount. **Latest fn:** `onChangeRef.current = onChange` so a long-lived listener always calls the newest prop (`useEffectEvent` is the React 19 spelling). **Previous value:** store last render’s prop, compare, then overwrite. **Lazy object:** init once in render with a null check; do not write `useRef(new Thing())` if construction is expensive. **Stale work:** increment a counter in a ref when `id` changes; only `setState` if the response matches the current counter. Never put rendered text or “isOpen” in a ref and expect the screen to update.
 
 </details>
 

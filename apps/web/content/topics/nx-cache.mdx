@@ -1,0 +1,28 @@
+---
+title: What is the Nx cache?
+description: Hash the inputs of a task; replay the output if nothing relevant changed.
+slug: nx-cache
+date: 2026-08-14
+tags:
+  - glossary
+  - nx
+---
+
+The **Nx cache** skips work you already did. For `nx build web`, Nx hashes the files that `build` listed as inputs (and often the inputs of projects it depends on). Same hash → restore `dist` from cache instead of running Vite again.
+
+```json
+{
+  "targetDefaults": {
+    "build": {
+      "cache": true,
+      "inputs": ["production", "^production"]
+    }
+  }
+}
+```
+
+`^production` means “also hash production files of **dependencies**.” Change `libs/utils` → `web`’s build cache misses on purpose.
+
+Cache lives under `.nx` locally (gitignored). Nx Cloud can share it across laptops and CI.
+
+Related: [Nx](/blog/nx), [Nx affected](/blog/nx-affected).

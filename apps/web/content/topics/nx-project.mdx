@@ -1,0 +1,31 @@
+---
+title: What is an Nx project?
+description: One app or library Nx tracks, with a name and targets like build and test.
+slug: nx-project
+date: 2026-08-14
+tags:
+  - glossary
+  - nx
+---
+
+An **Nx project** is a package in the [monorepo](/blog/monorepo) that Nx can address by name. This repo puts a `project.json` next to each one.
+
+```json
+{
+  "name": "web",
+  "projectType": "application",
+  "sourceRoot": "apps/web",
+  "implicitDependencies": ["widgets", "utils"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm build", "cwd": "apps/web" },
+      "outputs": ["{projectRoot}/dist"]
+    }
+  }
+}
+```
+
+`nx build web` means “run the `build` target on the project named `web`.” Libraries (`utils`, `widgets`) are projects too.
+
+Related: [Nx](/blog/nx), [Nx monorepo](/blog/nx-monorepo).

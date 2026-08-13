@@ -157,6 +157,31 @@ export const glossary = {
     explain:
       "Components that run on the server, can read files or databases, and send HTML to the browser. They do not use useState or useEffect.",
   },
+  nx: {
+    slug: "nx",
+    explain:
+      "A build tool for monorepos. It knows which apps and libraries depend on which, caches task results, and can rerun only what a git change actually touched.",
+  },
+  "nx-project": {
+    slug: "nx-project",
+    explain:
+      "One app or library Nx knows about — usually a folder with project.json. It has a name (web, utils) and named jobs called targets (build, test, dev).",
+  },
+  "project-graph": {
+    slug: "project-graph",
+    explain:
+      "Nx’s map of the repo: boxes for projects, arrows for “this package imports that one.” Task order, cache, and affected all read this map.",
+  },
+  "nx-cache": {
+    slug: "nx-cache",
+    explain:
+      "Nx hashes a task’s inputs. If it has seen that hash before, it restores the previous output instead of running the command again. Local by default; can be shared in CI.",
+  },
+  "nx-affected": {
+    slug: "nx-affected",
+    explain:
+      "Run a target only on projects whose files changed in git, plus any project that depends on those. Saves CI from rebuilding the whole monorepo.",
+  },
 } as const;
 
 export type GlossaryId = keyof typeof glossary;

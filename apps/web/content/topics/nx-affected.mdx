@@ -1,0 +1,22 @@
+---
+title: What is Nx affected?
+description: Run tasks only on projects changed in git, plus anything that depends on them.
+slug: nx-affected
+date: 2026-08-14
+tags:
+  - glossary
+  - nx
+---
+
+**Affected** means: look at a git range, see which files changed, walk the [project graph](/blog/project-graph) *upward*, and run the target only on that set.
+
+```bash
+pnpm nx affected -t test
+pnpm nx affected -t build --base=origin/main --head=HEAD
+```
+
+Edit `libs/utils/src/json.ts` → `utils` tests run, and `web` build is affected because the app depends on utils. A change only in `README.md` (if it is not an input) may affect nothing.
+
+In [CI](/blog/continuous-integration), `--base` is usually the target branch of the PR so you do not rebuild every library on every push.
+
+Related: [Nx cache](/blog/nx-cache), [Nx monorepo](/blog/nx-monorepo).

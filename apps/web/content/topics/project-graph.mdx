@@ -1,0 +1,28 @@
+---
+title: What is the Nx project graph?
+description: The map of which apps and libraries depend on which. Cache and affected read it.
+slug: project-graph
+date: 2026-08-14
+tags:
+  - glossary
+  - nx
+---
+
+The **project graph** is Nx’s picture of the repo: nodes are [projects](/blog/nx-project), edges are “this one imports that one.”
+
+```txt
+web → widgets → components → store
+ ↘     ↘ utils → types
+   tools
+```
+
+Nx builds it from `package.json` dependencies, TypeScript path imports, and `implicitDependencies` in `project.json`.
+
+```bash
+pnpm nx graph
+pnpm nx show project web --web
+```
+
+Task order follows the arrows: `utils` tests can run before `web` build if you ask Nx to respect deps (`^test` as a dependsOn).
+
+Related: [Nx affected](/blog/nx-affected), [Nx monorepo](/blog/nx-monorepo).

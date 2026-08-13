@@ -1,0 +1,375 @@
+---
+title: Nx in a JavaScript monorepo
+description: How Nx sits next to pnpm — projects, the project graph, targets, cache, affected, and how this site is wired. Interview questions with answers.
+slug: nx-monorepo
+date: 2026-08-14
+tags:
+  - nx
+  - monorepo
+  - javascript
+  - tooling
+  - interview
+---
+
+A <Term id="monorepo">monorepo</Term> is one git repo with several packages. This site has an app (`apps/web`) and libraries (`libs/types`, `utils`, `store`, `components`, `widgets`, `tools`). You install **once at the root** with <Term id="package-manager">pnpm</Term>. You still need something that knows *which package to build, in what order, and when you can skip the work*.
+
+That something is <Term id="nx">Nx</Term> (`^21.4.1` here). It does **not** replace pnpm. pnpm writes the <Term id="lockfile">lockfile</Term> and `node_modules`. Nx runs **named jobs** (`dev`, `build`, `test`) on named <Term id="nx-project">projects</Term>, hashes their inputs, and can rerun only what a git change actually touched.
+
+Dotted, sky-colored words are glossary terms — hover for a short note; each is also a **link** to a full page with an example.
+
+## What Nx is (and is not)
+
+**Nx is a task runner with a map of the repo.** The map is the <Term id="project-graph">project graph</Term>: boxes for apps and libs, arrows for “this package imports that one.” From that map it can:
+
+1. Run `build` on one project (`nx build web`)
+2. Run the same target on every project that has it (`nx run-many -t test`)
+3. Skip a target when the <Term id="nx-cache">cache</Term> already has that input hash
+4. Run a target only on <Term id="nx-affected">affected</Term> projects (git diff + walk the graph upward)
+
+**Nx is not:**
+
+- A <Term id="package-manager">package manager</Term>. There is still one `pnpm-lock.yaml`. Root `"packageManager": "pnpm@9.15.0"` still wins.
+- A CMS, a database, or a way to split the site into microfrontends. This repo forbids those on purpose.
+- Required to *import* local libraries. `workspace:*` and TypeScript `paths` already do that. Nx is required to *orchestrate* jobs across those libraries without you memorizing the order.
+
+If you only ever had one `package.json` and one `npm run build`, you would not need Nx. The moment you have six libraries and an app that should rebuild when `utils` changes, the graph pays rent.
+
+## Map of this repo
+
+pnpm decides *which folders are packages*:
+
+```yaml
+# pnpm-workspace.yaml
+packages:
+  - "apps/*"
+  - "libs/*"
+```
+
+Nx decides *where apps and libs live* (used by generators and mental layout):
+
+```json
+{
+  "workspaceLayout": {
+    "appsDir": "apps",
+    "libsDir": "libs"
+  }
+}
+```
+
+| Folder | Nx name | Type | What it is |
+| --- | --- | --- | --- |
+| `apps/web` | `web` | application | Vike + React site |
+| `libs/types` | `types` | library | Shared TypeScript types |
+| `libs/utils` | `utils` | library | Helpers (JSON, MDX frontmatter, collections) |
+| `libs/store` | `store` | library | Zustand (theme) |
+| `libs/components` | `components` | library | Primitives widgets use |
+| `libs/widgets` | `widgets` | library | Home, blog, portfolio UI |
+| `libs/tools` | `tools` | library | Browser tools + registry |
+
+Pages in `apps/web` import widgets. Widgets import components. That layering is a convention (`AGENTS.md`); Nx records it so cache and affected stay honest.
+
+```txt
+web → widgets → components → store
+ ↘     ↘ utils → types
+   tools
+```
+
+## Package manager vs Nx
+
+Three files, three jobs.
+
+| File | Job |
+| --- | --- |
+| `apps/web/package.json` | Scripts Vite actually runs (`vike build`, `vitest run`) and npm dependencies |
+| `apps/web/project.json` | Nx name, tags, `implicitDependencies`, wrappers that call those scripts |
+| Root `package.json` | Thin aliases: `"build": "nx build web"` so humans type `pnpm build` |
+
+The app depends on local libs with the <Term id="workspace-protocol">workspace protocol</Term>, not a published version:
+
+```json
+{
+  "dependencies": {
+    "@webdev/widgets": "workspace:*",
+    "@webdev/utils": "workspace:*"
+  }
+}
+```
+
+TypeScript `paths` in `tsconfig.base.json` (and Vite aliases) point `@webdev/utils` at `libs/utils/src/index.ts` so the bundler compiles source, not a prebuilt `dist` of every lib. That is why most libraries here have **no** `build` target — only `web` produces `{projectRoot}/dist`. `utils` has `test` because Vitest lives there.
+
+`pnpm --filter web build` would also run the app script. You lose Nx cache, affected, and a single place to list outputs. This repo always goes through Nx for those jobs.
+
+## An Nx project
+
+Each package Nx can address has a `project.json`. The **name** is what you pass on the CLI (`web`, not `@webdev/web`).
+
+```json
+{
+  "name": "web",
+  "projectType": "application",
+  "sourceRoot": "apps/web",
+  "tags": ["scope:web"],
+  "implicitDependencies": [
+    "types",
+    "utils",
+    "store",
+    "components",
+    "widgets",
+    "tools"
+  ],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm build",
+        "cwd": "apps/web"
+      },
+      "outputs": ["{projectRoot}/dist"]
+    }
+  }
+}
+```
+
+### Targets and executors
+
+A **target** is a named job (`build`). An **executor** is the plugin that runs it. This workspace uses `nx:run-commands`: “run this shell command in this `cwd`.” That is enough when Vite and Vitest already know how to work.
+
+Nx also ships executors for webpack, Jest, ESLint, and so on. You would use those if Nx *owned* the toolchain. Here the toolchain is Vite; Nx is the orchestrator.
+
+`outputs` tells the cache *which folders to store and restore*. Without `outputs`, a cache hit cannot put `dist` back.
+
+### implicitDependencies
+
+Nx infers edges from `package.json` and from TypeScript imports. **Implicit** edges cover cases the scanner might miss: MDX globbing `content/`, Vite config that pulls widgets, or “if `types` changes, treat `web` as dirty even if no `import` line moved.”
+
+`web` lists every `@webdev/*` library. `utils` lists `types`. If you add a new lib and forget this list, **affected and cache can lie**: you change the lib, `nx affected -t build` thinks `web` is fine, Netlify ships yesterday’s JS.
+
+### Tags
+
+`"tags": ["scope:web"]` / `"type:utils"` are labels for `nx run-many --projects=tag:type:utils`. This small repo barely needs them. They matter when you have 80 libraries and want “test every `type:ui` project.”
+
+## The project graph
+
+```bash
+pnpm nx graph
+pnpm nx show project web
+pnpm nx show project web --web
+```
+
+`nx graph` opens a browser picture. Use it when “why did this CI job run?” — follow arrows from the file you edited up to `web`.
+
+Nx writes a computed graph under `.nx/` (gitignored). Do not commit it. Do not hand-edit it. Fix `project.json` and imports instead.
+
+Task **order** can follow arrows. In `nx.json` you can say a target `dependsOn` another:
+
+```json
+{
+  "targetDefaults": {
+    "build": {
+      "dependsOn": ["^build"]
+    }
+  }
+}
+```
+
+`^build` means “run `build` on **dependencies** first.” This site does **not** set that, because libraries are consumed as TypeScript source. `web`’s Vite build already compiles them. `^` still matters for **cache inputs** (`^production` below).
+
+## Cache
+
+The <Term id="nx-cache">Nx cache</Term> hashes a target’s **inputs**. Same hash → restore **outputs** instead of running Vite again.
+
+From this repo’s `nx.json`:
+
+```json
+{
+  "namedInputs": {
+    "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "production": ["default", "!{projectRoot}/**/*.spec.ts"],
+    "sharedGlobals": []
+  },
+  "targetDefaults": {
+    "build": {
+      "cache": true,
+      "inputs": ["production", "^production"]
+    },
+    "test": {
+      "cache": true
+    }
+  }
+}
+```
+
+Read that as:
+
+- **namedInputs** are reusable file globs. `production` is “the project, minus spec files,” so editing a test does not bust a production build hash.
+- **`inputs: ["production", "^production"]`** hashes this project’s production files **and** production files of projects it depends on. Change `libs/utils/src/json.ts` → `web` build cache **misses**. That is the point.
+- **`cache: true`** on `test` means a second `nx test utils` with the same sources is instant.
+
+Cache lives locally under `.nx` (do not commit). **Nx Cloud** can share the same hashes across laptops and <Term id="ci">CI</Term> so the first machine to build `web` pays, and the rest restore. This site does not require Cloud; local cache still helps `pnpm nx build web` after a docs-only tweak that is excluded from inputs.
+
+**Cache is not affected.** Cache answers “have I run this exact task before?” Affected answers “which projects did this git range touch?” You often use both: `nx affected -t test` then each of those tests may still hit cache.
+
+If cache feels “stuck,” you changed a file that is **not** in `inputs`, or you changed a file that **is** in inputs but Nx thought it was a spec. `NX_VERBOSE_LOGGING=true` and `nx reset` (clears the local cache) are the debugging pair. Do not make `reset` a habit in CI — that throws away the reason you installed Nx.
+
+## Affected
+
+<Term id="nx-affected">Affected</Term> walks git, then walks the graph *upward*.
+
+```bash
+pnpm nx affected -t test
+pnpm nx affected -t build --base=origin/main --head=HEAD
+pnpm nx show projects --affected --base=origin/main
+```
+
+Examples in this repo:
+
+| You change | Typically affected |
+| --- | --- |
+| `libs/utils/src/json.ts` | `utils` tests, and `web` (depends on utils) |
+| `apps/web/pages/index/+Page.tsx` | `web` only |
+| `libs/widgets/src/blog/Blog.tsx` | `widgets` (if it has targets) and `web` |
+| Root `README.md` | often nothing, unless you listed it in `sharedGlobals` |
+
+`--base` in a pull request is the **target branch** (`origin/main`), not “two commits ago on my laptop.” Wrong base → either you rebuild the world or you skip a library a reviewer actually changed.
+
+`nx affected` compared to `nx run-many`:
+
+- `run-many -t test` — every project that defines `test`
+- `affected -t test` — that set **intersected** with the graph of the diff
+
+On a tiny repo, `run-many` is simpler and fine. The win shows up when CI minutes track library count.
+
+## TypeScript paths vs workspace packages
+
+Two wiring layers, both required:
+
+1. **pnpm `workspace:*`** — install-time: `web` may import `@webdev/utils` because it is a workspace package, not a phantom folder.
+2. **`compilerOptions.paths` / Vite `resolve.alias`** — compile-time: the specifier resolves to `libs/utils/src/index.ts`.
+
+Nx’s graph mostly follows (1) plus `implicitDependencies`. If you import a lib in Vite config but never add `workspace:*`, pnpm may still fail (strict node_modules). If you add `workspace:*` but forget `implicitDependencies` and the import is too dynamic for the scanner, **Nx** may fail silently (stale cache). Add both when you add a library.
+
+## Everyday commands
+
+From the repo root (Nx is a root `devDependency`):
+
+```bash
+pnpm install                 # pnpm, not Nx
+
+pnpm nx dev web              # same as pnpm dev
+pnpm nx build web            # same as pnpm build
+pnpm nx preview web
+pnpm nx test utils           # one library
+pnpm nx run-many -t test     # same as pnpm test
+
+pnpm nx graph
+pnpm nx show project web
+pnpm nx affected -t test --base=origin/main
+pnpm nx reset                # clear local cache (last resort)
+```
+
+`nx run web:build` is the same as `nx build web`. The `project:target` form is useful when the target name collides with an Nx CLI verb.
+
+Pass flags through to the underlying command after `--`:
+
+```bash
+pnpm nx test utils -- --watch=false
+```
+
+## CI and this site’s deploy
+
+Netlify runs `pnpm nx build web` and publishes `apps/web/dist/client`. That is **one project’s build**, not `run-many`. Cache still helps if the same commit is rebuilt or if inputs did not change.
+
+A fuller CI job for a PR looks like:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm nx affected -t test --base=origin/main --head=HEAD
+pnpm nx affected -t build --base=origin/main --head=HEAD
+```
+
+Pin the <Term id="package-manager">package manager</Term> (`packageManager` + Corepack) so Nx’s hash of `node_modules` is not a lottery. Hash includes the lockfile when install is an input of the workspace; drifting pnpm versions cause mysterious cache misses, not just “works on my machine.”
+
+Do not run `nx reset` at the start of every CI job. Do not commit `.nx`. Do not commit two lockfiles.
+
+## When not to use Nx
+
+- **One package, one script.** `pnpm build` in a single app is enough.
+- **You only wanted workspaces.** pnpm filters (`pnpm --filter utils test`) already run one package’s script. Add Nx when you care about cache, affected, or a graph you can draw.
+- **Turborepo** is the close cousin: also cache + affected, often less “workspace framework.” Nx adds generators, plugins, and a stricter project model (`project.json`). This repo picked Nx because the layout is already `apps/` + `libs/` and the CLI is one `devDependency`.
+- **Bazel** is a different league (hermetic, remote execution). Overkill for a Vike site.
+
+Nx does not require you to generate apps from `@nx/react`. A hand-written `project.json` + `nx:run-commands` is a valid, small setup — that is this site.
+
+## Interview questions
+
+Open a question to see a sample answer. Short version first; extra sentence if they probe.
+
+<details>
+<summary>What is Nx, and how is it different from pnpm?</summary>
+
+pnpm installs packages and workspaces. Nx is a build tool: it knows the project graph, runs named targets (`build`, `test`), caches results by hashing inputs, and can run only affected projects from a git diff. You typically use both: pnpm for `node_modules`, Nx for `nx build web`.
+
+</details>
+
+<details>
+<summary>What is a project vs a target vs an executor?</summary>
+
+A project is one app or library Nx can name (`web`, `utils`), usually a folder with `project.json`. A target is a job on that project (`build`). An executor is the implementation — here `nx:run-commands` shells out to `pnpm build` in `apps/web`. Same idea as “npm script,” but with declared inputs, outputs, and a graph.
+
+</details>
+
+<details>
+<summary>What is the project graph, and how does Nx build it?</summary>
+
+Nodes are projects; edges are “A depends on B.” Nx infers edges from `package.json` workspace deps, TypeScript/import analysis, and `implicitDependencies` you list by hand. `nx graph` visualizes it. Cache invalidation and `affected` both walk this graph. If an edge is missing, CI can skip a build that should have run.
+
+</details>
+
+<details>
+<summary>Explain Nx cache. What makes a cache hit?</summary>
+
+Nx hashes the files listed in the target’s `inputs` (and often `^` dependency inputs), plus things like the command. If that hash exists in the local (or remote) cache, it restores `outputs` (for example `dist`) and does not rerun the process. `namedInputs` let you exclude tests from a production build hash. A cache hit is “same inputs as a previous successful run,” not “same git branch.”
+
+</details>
+
+<details>
+<summary>What does <code>^production</code> mean in inputs?</summary>
+
+`production` is a named glob for this project. `^production` means the same named input, but on **projects this one depends on**. So `web`’s build hash includes `libs/utils` production files. Changing a library busts the app’s build cache on purpose.
+
+</details>
+
+<details>
+<summary>What is <code>nx affected</code>?</summary>
+
+Take a git range (`--base` / `--head`), find which projects own the changed files, then include every project that depends on those (walking the graph toward apps). Run the target only on that set. In CI, `--base` is usually `origin/main` for the PR. It is complementary to cache: affected picks projects; cache may still skip the actual command.
+
+</details>
+
+<details>
+<summary>Why would you set <code>implicitDependencies</code>?</summary>
+
+When Nx cannot see a real coupling from static imports — generated files, globbed MDX, a bundler config, or a types-only package. This site’s `web` project lists every `@webdev/*` lib so a change in `tools` or `widgets` still invalidates `web`. Missing implicit deps cause false cache hits and empty affected sets.
+
+</details>
+
+<details>
+<summary>Nx vs Turborepo vs “just pnpm filters”?</summary>
+
+pnpm `--filter` runs one workspace package’s scripts; no computation cache, no affected graph. Turborepo is cache + pipelines with `turbo.json`, lighter on generators. Nx is a fuller monorepo toolkit (graph, plugins, generators, optional Cloud) and a first-class `project.json` model. Pick filters for two packages; pick Turbo or Nx when CI time and “what depends on this lib?” matter. This repo uses Nx with `run-commands` rather than `@nx/vite` plugins.
+
+</details>
+
+<details>
+<summary>Does every library need a <code>build</code> target?</summary>
+
+No. If the app bundler compiles library TypeScript from source (`paths` / aliases), libraries may only need `test` (or nothing). You add `build` + `dependsOn: ["^build"]` when libraries emit `dist` that apps consume, or when you publish packages. Extra build targets without outputs just add cache keys you have to keep honest.
+
+</details>
+
+<details>
+<summary>How would you add a new library to this kind of repo?</summary>
+
+Create `libs/foo` with `package.json` (name `@webdev/foo`), `project.json` (Nx `name`, targets, tags), and `src/index.ts`. Add it to `pnpm-workspace.yaml` if the glob does not already cover it (`libs/*` does). Add `workspace:*` on consumers, `paths` + Vite alias, and `implicitDependencies` on `web` (and any other app). Run `pnpm install`, then `pnpm nx graph` to confirm the edge. Do not publish to the registry first.
+
+</details>
