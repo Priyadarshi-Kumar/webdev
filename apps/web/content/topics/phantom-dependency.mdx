@@ -1,0 +1,37 @@
+---
+title: What is a phantom dependency?
+description: An import that works only because some other package hoisted a library you never declared.
+slug: phantom-dependency
+date: 2026-08-12
+tags:
+  - glossary
+  - javascript
+  - tooling
+---
+
+A **phantom dependency** is a module your code imports that is **not** in your `package.json`. It is on disk only because a dependency of a dependency was [hoisted](/blog/hoisting).
+
+```ts
+// lodash is NOT in your package.json — this can still compile on npm
+import { debounce } from "lodash";
+
+export const onResize = debounce(() => {
+  window.dispatchEvent(new Event("layout"));
+}, 150);
+```
+
+On pnpm (and Yarn PnP) you get:
+
+```txt
+Error: Cannot find module 'lodash'
+```
+
+Fix: declare it.
+
+```bash
+pnpm add lodash
+```
+
+The error is annoying for a day and cheaper than an outage after someone bumps a nested package.
+
+Related: [hoisting](/blog/hoisting), [shamefully-hoist](/blog/shamefully-hoist), [pnpm vs npm vs Yarn](/blog/pnpm-vs-npm-vs-yarn).

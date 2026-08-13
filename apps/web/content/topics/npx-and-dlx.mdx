@@ -1,0 +1,29 @@
+---
+title: npx vs yarn dlx vs pnpm dlx
+description: Run a published CLI once without adding it to package.json.
+slug: npx-and-dlx
+date: 2026-08-12
+tags:
+  - glossary
+  - javascript
+  - tooling
+---
+
+**npx** (npm) and **dlx** (Yarn / pnpm) download a package, run its binary, and do not add it to your dependencies. Use this for generators and one-off tools.
+
+```bash
+npx create-vite@latest my-app
+yarn dlx create-vite@latest my-app
+pnpm dlx create-vite@latest my-app
+```
+
+Pin the version (`create-vite@latest` or `@6.0.0`) so you do not silently get a new major next month.
+
+If you run the tool **every day**, add it as a devDependency and call it with `pnpm exec`:
+
+```bash
+pnpm add -D typescript
+pnpm exec tsc --noEmit
+```
+
+Related: [package manager](/blog/package-manager), [package.json](/blog/package-json).

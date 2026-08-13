@@ -1,0 +1,32 @@
+---
+title: What is the workspace protocol?
+description: A version that means “use the package in this repo,” not a copy from the npm registry.
+slug: workspace-protocol
+date: 2026-08-12
+tags:
+  - glossary
+  - pnpm
+  - javascript
+---
+
+In a [monorepo](/blog/monorepo), an app should depend on a sibling library **by workspace**, not by a published version you might forget to bump.
+
+```json
+{
+  "name": "web",
+  "dependencies": {
+    "@webdev/widgets": "workspace:*",
+    "react": "^19.2.8"
+  }
+}
+```
+
+`workspace:*` = whatever version is in this repo’s `libs/widgets/package.json`. pnpm links it. `workspace:^` is stricter about the sibling’s version field.
+
+```bash
+pnpm --filter web add @webdev/utils --workspace
+```
+
+npm/Yarn workspaces also link local packages when the name matches a workspace; pnpm makes the protocol explicit in `package.json`.
+
+Related: [monorepo](/blog/monorepo), [package.json](/blog/package-json).

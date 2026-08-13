@@ -1,0 +1,36 @@
+---
+title: What is tearing in React?
+description: One render seeing two different snapshots of the same external store. useSyncExternalStore exists to prevent it.
+slug: react-tearing
+date: 2026-08-12
+tags:
+  - glossary
+  - react
+---
+
+**Tearing** means part of the UI read store version A and another part read version B in the **same** render — or the server HTML does not match the first client render.
+
+```tsx
+// risky: window width during render differs on server (0) vs client
+function Width() {
+  return <span>{window.innerWidth}</span>;
+}
+```
+
+```tsx
+import { useSyncExternalStore } from "react";
+
+function subscribe(onChange: () => void) {
+  window.addEventListener("resize", onChange);
+  return () => window.removeEventListener("resize", onChange);
+}
+
+export function Width() {
+  const width = useSyncExternalStore(subscribe, () => window.innerWidth, () => 0);
+  return <span>{width}</span>;
+}
+```
+
+The third argument is the **server snapshot** (here `0`) so SSR has a defined value.
+
+Related: [hydration](/blog/hydration), [React Hooks by version](/blog/react-hooks).

@@ -1,0 +1,25 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "strict": true,
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@webdev/types": ["libs/types/src/index.ts"],
+      "@webdev/utils": ["libs/utils/src/index.ts"],
+      "@webdev/store": ["libs/store/src/index.ts"],
+      "@webdev/components": ["libs/components/src/index.ts"],
+      "@webdev/widgets": ["libs/widgets/src/index.ts"],
+      "@webdev/widgets/config": ["libs/widgets/src/site/config.ts"],
+      "@webdev/widgets/blog-data": ["libs/widgets/src/blog/data.ts"],
+      "@webdev/widgets/portfolio-data": ["libs/widgets/src/portfolio/data.ts"],
+      "@webdev/tools": ["libs/tools/src/index.ts"]
+    }
+  }
+}

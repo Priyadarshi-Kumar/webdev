@@ -1,0 +1,8 @@
+{
+  "name": "store",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/store/src",
+  "projectType": "library",
+  "tags": ["type:lib"],
+  "implicitDependencies": ["types"]
+}

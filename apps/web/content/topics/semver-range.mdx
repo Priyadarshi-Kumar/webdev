@@ -1,0 +1,31 @@
+---
+title: What is a semver range?
+description: How ^ and ~ pick versions. package.json uses ranges; the lockfile stores the exact number.
+slug: semver-range
+date: 2026-08-12
+tags:
+  - glossary
+  - javascript
+---
+
+**SemVer** versions look like `MAJOR.MINOR.PATCH` (`19.2.8`). A **range** in `package.json` allows more than one version. A **pin** is exact (`19.2.8` with no `^`).
+
+```json
+{
+  "dependencies": {
+    "react": "^19.2.8",
+    "left-pad": "~1.3.0",
+    "webpack": "5.97.1"
+  }
+}
+```
+
+| Spec | Meaning (usual) |
+| --- | --- |
+| `^19.2.8` | 19.2.8 up to (not including) 20.0.0 |
+| `~1.3.0` | 1.3.0 up to (not including) 1.4.0 |
+| `19.2.8` | exactly 19.2.8 |
+
+`npm install` / `pnpm update` may move within the range. The lockfile records what you actually got. CI should install from the lockfile, not “whatever ^ allows today.”
+
+Related: [lockfile](/blog/lockfile), [npm ci](/blog/npm-ci).

@@ -1,0 +1,38 @@
+---
+title: What is a peer dependency?
+description: A package the host must provide (usually React) so plugins do not bundle a second copy.
+slug: peer-dependency
+date: 2026-08-12
+tags:
+  - glossary
+  - javascript
+---
+
+A UI library often says: “I need React, but I will not ship my own.” That is `peerDependencies`. **You** install React once. Two Reacts in one page cause “Invalid hook call.”
+
+```json
+{
+  "name": "fancy-button",
+  "peerDependencies": {
+    "react": "^19.0.0"
+  }
+}
+```
+
+```json
+{
+  "name": "web",
+  "dependencies": {
+    "react": "^19.2.8",
+    "fancy-button": "^2.0.0"
+  }
+}
+```
+
+npm 7+ auto-installs peers (and can still duplicate). pnpm prints `WARN` if a peer is missing. Inspect the tree:
+
+```bash
+pnpm why react
+```
+
+Related: [package.json](/blog/package-json), [React hooks](/blog/react-hooks).

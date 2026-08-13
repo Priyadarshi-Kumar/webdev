@@ -1,0 +1,24 @@
+---
+title: What is pnpm’s content-addressable store?
+description: One copy of each package version on disk, keyed by content, shared across projects.
+slug: content-addressable-store
+date: 2026-08-12
+tags:
+  - glossary
+  - pnpm
+  - tooling
+---
+
+pnpm keeps a **store** (often `~/.local/share/pnpm/store`). Packages are filed by a hash of their contents. React 19.2.8 exists **once** on your laptop even if twelve repos use it.
+
+Each project’s `node_modules` [hard-links](/blog/hard-links) (or ref-links) into that store.
+
+```txt
+~/.local/share/pnpm/store/v3/     ← real tarball contents
+apps/web/node_modules/react  →  .pnpm/react@19.2.8/...
+apps/admin/node_modules/react →  same store entry
+```
+
+A **cold** CI machine still downloads. A **warm** laptop mostly links. `pnpm store path` prints the location; `pnpm store prune` drops unused entries.
+
+Related: [hard links](/blog/hard-links), [node_modules](/blog/node-modules).

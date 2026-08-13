@@ -1,0 +1,36 @@
+---
+title: What is package.json?
+description: "The manifest: name, scripts, and dependency ranges. It is not the exact install — the lockfile is."
+slug: package-json
+date: 2026-08-12
+tags:
+  - glossary
+  - javascript
+---
+
+`package.json` is the project manifest. Humans edit it. The lockfile is the machine-exact copy of what got installed.
+
+```json
+{
+  "name": "web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vike dev",
+    "build": "vike build"
+  },
+  "dependencies": {
+    "react": "^19.2.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0"
+  }
+}
+```
+
+- `dependencies` — needed to run the app (React).
+- `devDependencies` — needed to build/test (TypeScript).
+- `scripts` — `npm run dev` / `pnpm dev`.
+- `^19.2.8` is a **range**, not a pin.
+
+Related: [semver range](/blog/semver-range), [lockfile](/blog/lockfile), [peer dependency](/blog/peer-dependency).

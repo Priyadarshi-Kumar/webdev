@@ -1,0 +1,25 @@
+---
+title: What is a hard link?
+description: Two names for the same bytes on disk. pnpm uses this so many projects share one React.
+slug: hard-links
+date: 2026-08-12
+tags:
+  - glossary
+  - pnpm
+  - tooling
+---
+
+A **hard link** is a second directory entry that points at the **same inode** (same bytes). Delete one name, the bytes stay until the last name is gone.
+
+```bash
+echo hello > a.txt
+ln a.txt b.txt          # hard link (not a shortcut)
+echo world >> a.txt
+cat b.txt               # hello\nworld — same file
+```
+
+pnpm hard-links (or copy-on-Windows fallbacks) from the [content-addressable store](/blog/content-addressable-store) into each project. Ten apps × React is still one copy of React’s files.
+
+A **symlink** (`ln -s`) is different: it stores a path to another name. If the target moves, the symlink breaks. Hard links do not care about the other name.
+
+Related: [content-addressable store](/blog/content-addressable-store), [pnpm vs npm vs Yarn](/blog/pnpm-vs-npm-vs-yarn).

@@ -1,0 +1,38 @@
+---
+title: What is a custom hook?
+description: A function you write that starts with use and calls other hooks, so you can reuse stateful logic.
+slug: custom-hook
+date: 2026-08-12
+tags:
+  - glossary
+  - react
+---
+
+A **custom hook** is not a special React feature. It is a function that calls hooks. Extract it when two components share the same state + effect pattern.
+
+```tsx
+import { useEffect, useState } from "react";
+
+export function useWindowWidth() {
+  const [width, setWidth] = useState(() => window.innerWidth);
+
+  useEffect(() => {
+    const onResize = () => setWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  return width;
+}
+```
+
+```tsx
+function Sidebar() {
+  const width = useWindowWidth();
+  return width < 768 ? <MobileNav /> : <DesktopNav />;
+}
+```
+
+Name it `useSomething` so lint can enforce the rules of hooks.
+
+Related: [React hook](/blog/react-hook), [React Hooks by version](/blog/react-hooks).

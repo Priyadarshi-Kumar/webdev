@@ -1,0 +1,26 @@
+---
+title: What is shamefully-hoist?
+description: A pnpm switch that flattens node_modules like npm. Last resort for stubborn tools.
+slug: shamefully-hoist
+date: 2026-08-12
+tags:
+  - glossary
+  - pnpm
+---
+
+`shamefully-hoist=true` tells pnpm to lift packages to the root of `node_modules`, npm-style. Phantom imports start working again — which is why the name includes **shamefully**.
+
+```ini
+# .npmrc  (project root)
+shamefully-hoist=true
+```
+
+```ini
+# slightly less nuclear: hoist only what a tool needs
+public-hoist-pattern[]=*eslint*
+public-hoist-pattern[]=*prettier*
+```
+
+Prefer declaring the real dependency (`pnpm add lodash`). Use hoist when a generator or old bundler **requires** a flat tree and you cannot fix it today.
+
+Related: [hoisting](/blog/hoisting), [phantom dependency](/blog/phantom-dependency).

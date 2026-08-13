@@ -1,0 +1,26 @@
+{
+  "name": "@webdev/widgets",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./config": "./src/site/config.ts",
+    "./blog-data": "./src/blog/data.ts",
+    "./portfolio-data": "./src/portfolio/data.ts"
+  },
+  "dependencies": {
+    "@webdev/components": "workspace:*",
+    "@webdev/types": "workspace:*",
+    "@webdev/utils": "workspace:*"
+  },
+  "peerDependencies": {
+    "lucide-react": "^0.525.0",
+    "react": "^19.0.0",
+    "vike-react": "^0.6.25"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "typescript": "^6.0.3"
+  }
+}

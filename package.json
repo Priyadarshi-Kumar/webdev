@@ -1,0 +1,17 @@
+{
+  "name": "webdev",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "nx dev web",
+    "build": "nx build web",
+    "preview": "nx preview web",
+    "test": "nx run-many -t test"
+  },
+  "devDependencies": {
+    "nx": "^21.4.1"
+  }
+}

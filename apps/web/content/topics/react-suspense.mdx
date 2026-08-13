@@ -1,0 +1,29 @@
+---
+title: What is React Suspense?
+description: A boundary that shows fallback UI while children wait on data or lazy code.
+slug: react-suspense
+date: 2026-08-12
+tags:
+  - glossary
+  - react
+---
+
+**Suspense** lets a parent declare “show this spinner until the child is ready.” Children can wait on `lazy()` code-splitting or on `use(promise)`.
+
+```tsx
+import { lazy, Suspense } from "react";
+
+const Editor = lazy(() => import("./Editor"));
+
+export function Notes() {
+  return (
+    <Suspense fallback={<p>Loading editor…</p>}>
+      <Editor />
+    </Suspense>
+  );
+}
+```
+
+You still need an **error** boundary for failures. Suspense is for “not ready yet,” not for “it threw.”
+
+Related: [React use()](/blog/react-use), [React Hooks by version](/blog/react-hooks).

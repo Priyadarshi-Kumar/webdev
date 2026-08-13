@@ -1,0 +1,32 @@
+---
+title: What is a stale closure?
+description: A function from an old render that still sees old state. Fix it with deps, functional setters, a ref, or useEffectEvent.
+slug: stale-closure
+date: 2026-08-14
+tags:
+  - glossary
+  - react
+---
+
+A **closure** is a function that remembers the variables around it. In React, each render creates new functions. A **stale** closure is one that still remembers *yesterday’s* `count`.
+
+```tsx
+function Counter() {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setCount(count + 1); // always the count from the first render
+    }, 1000);
+    return () => clearInterval(id);
+  }, []); // Effect never re-runs, so the interval is stuck
+}
+```
+
+Fixes:
+
+1. Put `count` in the dependency array so the Effect re-subscribes.
+2. Use the functional setter: `setCount((c) => c + 1)` — no stale value needed.
+3. For “event from an Effect” (latest `theme`, but do not reconnect), use `useEffectEvent`.
+
+Related: [React hook](/blog/react-hook), [React Hooks by version](/blog/react-hooks).

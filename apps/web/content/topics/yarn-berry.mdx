@@ -1,0 +1,34 @@
+---
+title: What is Yarn Berry (v2+)?
+description: "Modern Yarn: Plug’n’Play by default, .yarnrc.yml, and yarn install --immutable in CI."
+slug: yarn-berry
+date: 2026-08-12
+tags:
+  - glossary
+  - javascript
+  - yarn
+---
+
+**Yarn Berry** is Yarn **2, 3, 4+**. New config (`.yarnrc.yml`), new constraints, and **Plug’n’Play** unless you opt out.
+
+```yml
+# .yarnrc.yml
+nodeLinker: node-modules   # optional: behave like Yarn 1 on disk
+```
+
+```json
+{
+  "packageManager": "yarn@4.9.1"
+}
+```
+
+```bash
+corepack enable
+yarn install --immutable    # CI
+yarn add lodash
+yarn why react
+```
+
+Corepack reads `packageManager` so everyone runs the same Yarn 4, not a leftover Yarn 1 from `brew`.
+
+Related: [Yarn Plug’n’Play](/blog/yarn-plug-n-play), [Yarn Classic](/blog/yarn-classic), [Corepack](/blog/corepack).

@@ -1,0 +1,122 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+/* Vite root is apps/web; class names live in libs and would otherwise be dropped. */
+@source "../../../libs/**/*.{ts,tsx}";
+@source "./**/*.{ts,tsx}";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --color-accent: #38bdf8;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 5rem;
+    overflow-x: clip;
+  }
+
+  body {
+    @apply overflow-x-clip bg-zinc-50 font-sans text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
+  }
+
+  a {
+    text-decoration: none;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-sky-400;
+  }
+
+  ::selection {
+    @apply bg-sky-400/30;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-full bg-sky-400 px-5 py-2.5 text-sm font-semibold text-zinc-950 shadow-sm transition hover:bg-sky-300 active:scale-[0.98];
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-full border border-zinc-300 bg-transparent px-5 py-2.5 text-sm font-semibold text-zinc-800 transition hover:border-sky-400 hover:text-sky-700 dark:border-white/15 dark:text-zinc-100 dark:hover:border-sky-400/70 dark:hover:text-sky-300;
+  }
+
+  .card {
+    @apply rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.04)] transition duration-200 sm:p-5 dark:border-white/10 dark:bg-zinc-900/70 dark:shadow-none;
+  }
+
+  a.card {
+    @apply hover:-translate-y-0.5 hover:border-sky-400/60 hover:shadow-lg hover:shadow-sky-500/5 dark:hover:border-sky-400/40;
+  }
+
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.22em] text-sky-600 dark:text-sky-400;
+  }
+
+  .page-title {
+    @apply mt-3 text-[1.65rem] font-extrabold leading-tight tracking-tight text-zinc-950 sm:text-4xl dark:text-white;
+  }
+
+  .page-lead {
+    @apply mt-3 max-w-2xl text-[0.95rem] leading-relaxed text-zinc-600 sm:text-lg dark:text-zinc-400;
+  }
+
+  .prose-article {
+    @apply prose prose-zinc mt-8 max-w-none sm:mt-10 dark:prose-invert;
+    @apply prose-headings:scroll-mt-24 prose-headings:font-bold prose-headings:tracking-tight prose-headings:break-words;
+    @apply prose-h2:mt-8 prose-h2:text-xl sm:prose-h2:mt-12 sm:prose-h2:text-2xl;
+    @apply prose-h3:mt-6 prose-h3:text-base sm:prose-h3:mt-8 sm:prose-h3:text-lg;
+    @apply prose-p:leading-7 prose-li:leading-7;
+    @apply prose-a:font-medium prose-a:text-sky-600 prose-a:no-underline hover:prose-a:underline dark:prose-a:text-sky-400;
+    @apply prose-strong:text-zinc-950 dark:prose-strong:text-white;
+    @apply prose-code:rounded-md prose-code:bg-zinc-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:font-mono prose-code:text-[0.85em] prose-code:font-medium prose-code:break-all prose-code:text-sky-700 prose-code:before:content-none prose-code:after:content-none dark:prose-code:bg-zinc-800 dark:prose-code:text-sky-300;
+    @apply prose-pre:my-5 prose-pre:max-w-full prose-pre:overflow-x-auto prose-pre:border prose-pre:border-zinc-200 prose-pre:bg-zinc-950 prose-pre:text-[13px] prose-pre:text-zinc-100 sm:prose-pre:text-sm dark:prose-pre:border-white/10;
+    @apply prose-blockquote:border-sky-400 prose-blockquote:text-zinc-600 dark:prose-blockquote:text-zinc-300;
+    @apply prose-th:text-left prose-td:align-top;
+    @apply prose-table:my-5 prose-table:block prose-table:max-w-full prose-table:overflow-x-auto;
+    @apply prose-hr:border-zinc-200 dark:prose-hr:border-white/10;
+    @apply prose-img:max-w-full;
+  }
+
+  .prose-article pre code {
+    @apply bg-transparent p-0 text-inherit;
+  }
+
+  .prose-article details {
+    @apply my-3 overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-white/10 dark:bg-zinc-900/60;
+  }
+
+  .prose-article details summary {
+    @apply cursor-pointer px-3 py-3 text-left text-sm font-semibold leading-snug text-zinc-950 marker:text-sky-500 sm:px-4 sm:text-base dark:text-white;
+  }
+
+  .prose-article details summary:hover {
+    @apply bg-zinc-50 dark:bg-white/5;
+  }
+
+  .prose-article details[open] summary {
+    @apply border-b border-zinc-200 dark:border-white/10;
+  }
+
+  .prose-article details > :not(summary) {
+    @apply mx-3 mb-4 mt-3 sm:mx-4;
+  }
+
+  .prose-article .group\/term > a {
+    @apply font-[inherit] no-underline;
+  }
+}
+
+#page-content {
+  opacity: 1;
+  transition: opacity 0.18s ease;
+}
+
+body.page-transition #page-content {
+  opacity: 0.45;
+}

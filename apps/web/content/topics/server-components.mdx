@@ -1,0 +1,31 @@
+---
+title: What are React Server Components?
+description: Components that run on the server, can load data, and do not use client hooks like useState.
+slug: server-components
+date: 2026-08-14
+tags:
+  - glossary
+  - react
+---
+
+A **Server Component** runs on the server (or at build time). It can `await` a database or file. It sends UI to the client. It **cannot** use `useState`, `useEffect`, or browser APIs.
+
+```tsx
+// Server Component (no "use client")
+export async function PostList() {
+  const posts = await db.posts.findMany();
+  return (
+    <ul>
+      {posts.map((post) => (
+        <li key={post.id}>{post.title}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+A file with `"use client"` is a Client Component. That is where hooks live. Pass data down as props; do not fetch in `useEffect` if a Server Component can do it.
+
+This site’s pages are prerendered; interactive bits (theme toggle, tools) are client components.
+
+Related: [React hook](/blog/react-hook), [Suspense](/blog/react-suspense), [React Hooks by version](/blog/react-hooks).

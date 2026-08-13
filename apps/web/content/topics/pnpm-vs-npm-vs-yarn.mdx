@@ -1,0 +1,381 @@
+---
+title: pnpm vs npm vs Yarn
+description: A beginner-friendly comparison of Node package managers — lockfiles, node_modules, workspaces, when to pick each one, and interview questions with answers.
+slug: pnpm-vs-npm-vs-yarn
+date: 2026-08-13
+tags:
+  - javascript
+  - tooling
+  - pnpm
+  - npm
+  - yarn
+---
+
+When you write `import React from "react"`, that code is not in your repo. A <Term id="package-manager">package manager</Term> downloads it from the <Term id="npm-registry">npm registry</Term> (the public warehouse), records the exact version, and puts files on disk so Node can find them.
+
+**npm**, **Yarn**, and **pnpm** all talk to that same registry. They are not three different stores of packages. They are three different *installers*. The differences that matter are:
+
+1. How they lay out <Term id="node-modules">`node_modules`</Term>
+2. How they save disk space
+3. How strict they are about “you may only import what you declared”
+4. How they handle a repo with many packages (a <Term id="monorepo">monorepo</Term>)
+
+This site uses **pnpm**. Below is enough to choose one, use it daily, and explain the choice in an interview.
+
+Dotted, sky-colored words are glossary terms — hover (or tap on a phone) for a plain-language note.
+
+## Start here: the mental model
+
+Your app has a shopping list called <Term id="package-json">`package.json`</Term>:
+
+```json
+{
+  "dependencies": {
+    "react": "^19.2.8"
+  }
+}
+```
+
+- `^19.2.8` means “19.2.8 or a compatible newer 19.x.” It is a <Term id="semver-range">range</Term>, not a pin.
+- The <Term id="lockfile">lockfile</Term> is the receipt: “we actually installed React 19.2.8, plus these exact nested packages.”
+- `node_modules/` is the groceries on the shelf.
+
+If two people install from the same lockfile, they should get the same tree. If they use *different* managers, or skip the lockfile, they will not.
+
+## Side-by-side comparison
+
+Four tools, one registry. Scroll sideways on a phone — the Topic column stays put.
+
+<ManagerCompare />
+
+<Term id="hoisting">Hoisted</Term> means “flatten many packages toward the root `node_modules` so copies are shared.” Convenient. Also leaky.
+
+<Term id="yarn-plug-n-play">Plug’n’Play (PnP)</Term> means Node does not walk `node_modules`. It asks a Yarn-generated map (`.pnp.cjs`) where each package lives.
+
+Yarn is two products with one name:
+
+- <Term id="yarn-classic">Yarn 1 (Classic)</Term> — “faster npm with a lockfile.” Still common on inherited repos.
+- <Term id="yarn-berry">Yarn Berry (2+)</Term> — PnP by default, unless you set `nodeLinker: node-modules`.
+
+If a teammate says “we use Yarn,” ask **which generation**.
+
+## Everyday commands
+
+Same jobs, different verbs. Memorize the column your repo uses.
+
+```bash
+# install everything from the lockfile
+npm install
+yarn
+pnpm install
+
+# add a library your app needs at runtime
+npm install lodash
+yarn add lodash
+pnpm add lodash
+
+# add a tool only used while developing (TypeScript, Vitest, …)
+npm install -D typescript
+yarn add -D typescript
+pnpm add -D typescript
+
+# remove a package
+npm uninstall lodash
+yarn remove lodash
+pnpm remove lodash
+
+# run a script from package.json
+npm run dev
+yarn dev
+pnpm dev
+
+# run a package once, without adding it to package.json
+npx create-vite@latest
+yarn dlx create-vite@latest
+pnpm dlx create-vite@latest
+```
+
+`yarn dev` skips the word `run`. npm and pnpm also accept `pnpm dev` when a `dev` script exists. <Term id="npx-and-dlx">npx</Term> / dlx is for one-off generators like `create-vite`.
+
+## Lockfiles are not interchangeable
+
+Pick **one** manager per repo. Commit **one** lockfile.
+
+```bash
+package-lock.json   # npm
+yarn.lock           # Yarn
+pnpm-lock.yaml      # pnpm
+```
+
+Two lockfiles in git is how you get “works on my machine.” If you migrate, delete the old lockfile, install with the new tool, commit the new file.
+
+In <Term id="ci">CI</Term>, **do not** let the install rewrite the lockfile:
+
+```bash
+npm ci
+yarn install --frozen-lockfile     # Yarn 1
+yarn install --immutable           # Yarn Berry
+pnpm install --frozen-lockfile
+```
+
+`npm install` can bump the lockfile. <Term id="npm-ci">`npm ci`</Term> deletes `node_modules`, requires `package-lock.json`, and installs exactly that graph. Prefer `npm ci` on CI.
+
+## How `node_modules` is built (this is the real difference)
+
+### npm and Yarn Classic: a flat pile
+
+They <Term id="hoisting">hoist</Term>: nested dependencies get lifted so one copy of React is reused.
+
+```txt
+node_modules/
+  react/
+  scheduler/     ← React needs this. You never listed it.
+  lodash/
+```
+
+Because `scheduler` sits at the top, this can compile even though it is **not** in your `package.json`:
+
+```ts
+import { unstable_scheduleCallback } from "scheduler";
+```
+
+That is a <Term id="phantom-dependency">phantom dependency</Term> — you borrowed a package that just happened to be on the floor. A later upgrade of React can move or remove it. Then production breaks with `Cannot find module`.
+
+### pnpm: a store, then a strict storefront
+
+pnpm keeps a <Term id="content-addressable-store">content-addressable store</Term> on your machine (often under `~/.local/share/pnpm/store`). Each project’s `node_modules` is mostly <Term id="hard-links">hard links</Term> into that store, plus a layout that only *exposes* packages you declared.
+
+```txt
+node_modules/
+  .pnpm/           ← real files (linked from the global store)
+  react -> .pnpm/react@19.2.8/node_modules/react
+  lodash -> .pnpm/lodash@4.17.21/node_modules/lodash
+```
+
+`import "scheduler"` fails unless `scheduler` is in *your* `package.json`. That is intentional.
+
+Disk: ten apps on React 19 share **one** store copy. npm/Yarn copy React into every project.
+
+If a stubborn tool expects a flat tree:
+
+```ini
+# .npmrc
+shamefully-hoist=true
+```
+
+<Term id="shamefully-hoist">shamefully-hoist</Term> turns pnpm back toward npm’s leaky layout. Use it as a last resort.
+
+### Yarn Berry: often no `node_modules`
+
+Resolution goes through `.pnp.cjs`. Fast and strict. Painful for tools that still do `fs.readdir("node_modules")`. Many teams opt out:
+
+```yml
+# .yarnrc.yml
+nodeLinker: node-modules
+```
+
+Then Berry looks closer to Yarn 1 / npm on disk.
+
+## Phantom dependencies, in code
+
+This can work on hoisted npm if some other package already pulled in `lodash`:
+
+```ts
+// lodash is NOT in your package.json
+import { debounce } from "lodash";
+
+export const onResize = debounce(() => {
+  window.dispatchEvent(new Event("layout"));
+}, 150);
+```
+
+On pnpm (and usually Yarn PnP):
+
+```txt
+Error: Cannot find module 'lodash'
+```
+
+Fix: declare it.
+
+```bash
+pnpm add lodash
+```
+
+The error is annoying for an afternoon and cheaper than an outage after someone bumps a lockfile.
+
+## Workspaces (many packages, one install)
+
+A <Term id="monorepo">monorepo</Term> is several packages in one git repo — for example `apps/web` and `libs/utils` — with **one** install at the root.
+
+**pnpm** lists them in a dedicated file:
+
+```yaml
+# pnpm-workspace.yaml
+packages:
+  - "apps/*"
+  - "libs/*"
+```
+
+An app depends on a sibling library with <Term id="workspace-protocol">`workspace:*`</Term> (“whatever version is in this repo”):
+
+```json
+{
+  "name": "web",
+  "dependencies": {
+    "@webdev/widgets": "workspace:*",
+    "react": "^19.2.8"
+  }
+}
+```
+
+```bash
+pnpm install                 # once, at the repo root
+pnpm --filter web dev        # run the web app’s "dev" script
+pnpm --filter web add zod    # add a dependency only to web
+```
+
+**npm** and **Yarn** put the glob list in root `package.json`:
+
+```json
+{
+  "workspaces": ["apps/*", "libs/*"]
+}
+```
+
+```bash
+npx -w web run dev
+yarn workspace web dev
+```
+
+Install once at the root. Do not run `npm install` inside every app folder unless you know why.
+
+## Peer dependencies, in one paragraph
+
+A UI library often says: “I need React, but I will not bundle my own copy.” That is a <Term id="peer-dependency">peer dependency</Term>.
+
+- **npm 7+** installs peers for you (and can still create a second React if version ranges fight).
+- **Yarn** warns when ranges clash.
+- **pnpm** is louder. Missing peers show as `WARN`. Two Reacts in one app cause “Invalid hook call.”
+
+```bash
+pnpm why react
+```
+
+You want **one** React for the whole workspace.
+
+## How to install the manager itself
+
+npm is already there if Node is. Pin Yarn or pnpm with <Term id="corepack">Corepack</Term> so the repo’s `packageManager` field wins on every laptop and in CI:
+
+```json
+{
+  "packageManager": "pnpm@9.15.0"
+}
+```
+
+```bash
+corepack enable
+corepack prepare pnpm@9.15.0 --activate
+```
+
+`npm install -g pnpm` works, but global versions drift. Corepack is the shared pin.
+
+## What to pick
+
+**npm** — zero extra tools. Fine for a single `package.json`, courses, and small repos. Use `npm ci` in CI.
+
+**Yarn Classic** — you inherited `yarn.lock` and Yarn 1 scripts. Do not rewrite it for sport.
+
+**Yarn Berry** — you want PnP and will fix editors/tools. Otherwise set `nodeLinker: node-modules`.
+
+**pnpm** — workspaces, Nx, “do not import what you did not declare,” and disk that does not multiply by repo count. That is this site.
+
+If you remember one rule: **one manager + one lockfile + declared dependencies**. The CLI logo is secondary. The graph is not.
+
+## Interview questions
+
+Open a question to see a sample answer. Say the short version first, then offer the extra sentence if they probe.
+
+<details>
+<summary>What is the difference between npm, Yarn, and pnpm?</summary>
+
+They all install packages from the same npm registry. npm ships with Node and uses a hoisted `node_modules` plus `package-lock.json`. Yarn Classic is a similar hoisted installer with `yarn.lock`. Yarn Berry often uses Plug’n’Play instead of `node_modules`. pnpm uses a global content-addressable store, hard-links files into each project, and only exposes packages you declared, which blocks phantom dependencies and saves disk in monorepos.
+
+</details>
+
+<details>
+<summary>What is a lockfile, and should it be committed?</summary>
+
+`package.json` lists version *ranges* (`^19.2.8`). A lockfile records the *exact* tree that was installed (React 19.2.8, plus every nested package and integrity hash). Commit it so CI, production, and every laptop reproduce the same graph. Do not commit two lockfiles from two managers.
+
+</details>
+
+<details>
+<summary>What is the difference between <code>npm install</code> and <code>npm ci</code>?</summary>
+
+`npm install` may update `package-lock.json` to satisfy ranges. `npm ci` requires an existing lockfile, removes `node_modules`, and installs that graph exactly — it fails if the lockfile is out of date. Use `npm ci` (or Yarn/pnpm frozen/immutable install) in CI so builds are not silently moving.
+
+</details>
+
+<details>
+<summary>What is a phantom dependency?</summary>
+
+A package your code imports that is *not* in your `package.json`, but happens to exist in `node_modules` because a dependency of a dependency was hoisted to the root. It works until that nested package is upgraded, deduped, or missing on another machine. pnpm and Yarn PnP make this fail at install/import time so you add the real dependency.
+
+</details>
+
+<details>
+<summary>How does pnpm save disk space compared to npm?</summary>
+
+npm copies package files into each project’s `node_modules`. pnpm keeps one copy per unique package version in a global store, then hard-links (or ref-links) those files into each project. Ten apps on React 19 share one store entry instead of ten full copies. Reinstalls on a warm machine are mostly linking, not re-downloading.
+
+</details>
+
+<details>
+<summary>Why does pnpm sometimes fail with “Cannot find module” when npm worked?</summary>
+
+pnpm’s default layout does not put undeclared packages on Node’s resolution path. npm’s hoist often does. The missing module was probably a phantom dependency. Add it with `pnpm add <pkg>`, or stop importing it. `shamefully-hoist=true` hides the issue; it is not the real fix.
+
+</details>
+
+<details>
+<summary>Yarn 1 vs Yarn Berry — what should I say in an interview?</summary>
+
+Yarn 1 (Classic) uses `node_modules` and a `yarn.lock`, similar to npm. Yarn 2+ (Berry) defaults to Plug’n’Play (`.pnp.cjs`) and can skip `node_modules`. Many teams on Berry set `nodeLinker: node-modules` for compatibility. Always ask which Yarn a company uses; the debugging story is different.
+
+</details>
+
+<details>
+<summary>What are workspaces / a monorepo in this context?</summary>
+
+Several packages in one repository sharing one install. Apps depend on local libraries with a protocol like `workspace:*` instead of publishing to the registry first. npm/Yarn list globs in `package.json` (`"workspaces"`). pnpm uses `pnpm-workspace.yaml`. You install at the root and run scripts with `-w`, `yarn workspace`, or `pnpm --filter`.
+
+</details>
+
+<details>
+<summary>dependencies vs devDependencies vs peerDependencies?</summary>
+
+`dependencies` ship with the app (React). `devDependencies` are for build/test (TypeScript, Vitest) and are skipped in production installs when you set production mode. `peerDependencies` mean “the host must provide this” — typical for plugins and React libraries — so you do not bundle a second copy of React. Duplicate Reacts cause “Invalid hook call.” `pnpm why react` shows why a version is in the tree.
+
+</details>
+
+<details>
+<summary>What is Corepack?</summary>
+
+A Node-shipped tool that reads `"packageManager": "pnpm@9.15.0"` (or Yarn) from `package.json` and runs that exact version. `corepack enable` then `corepack prepare … --activate`. It stops “I have pnpm 8, CI has pnpm 9” drift. npm itself still comes from the Node install.
+
+</details>
+
+<details>
+<summary>How would you migrate a repo from npm to pnpm?</summary>
+
+Enable Corepack, add `"packageManager"`, add `pnpm-workspace.yaml` if it is a monorepo, delete `node_modules` and `package-lock.json`, run `pnpm install`, commit `pnpm-lock.yaml`. Fix any “Cannot find module” by declaring real dependencies. Update CI to `pnpm install --frozen-lockfile`. Do not keep `package-lock.json` around.
+
+</details>
+
+<details>
+<summary>Which package manager would you choose for a new project, and why?</summary>
+
+For a single small app or a tutorial: npm is enough (everyone already has it). For a monorepo or a team that cares about strict imports and disk: pnpm. I would not start Yarn Classic on a greenfield app in 2026 unless the org standardizes on it. If the org is on Yarn Berry, I would confirm PnP vs `nodeLinker: node-modules` before promising tooling will just work.
+
+</details>

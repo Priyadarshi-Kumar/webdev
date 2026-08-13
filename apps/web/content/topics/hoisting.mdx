@@ -1,0 +1,31 @@
+---
+title: What is hoisting in node_modules?
+description: Flattening nested packages to the top of node_modules. Convenient, and the source of phantom dependencies.
+slug: hoisting
+date: 2026-08-12
+tags:
+  - glossary
+  - javascript
+  - tooling
+---
+
+**Hoisting** means nested dependencies get lifted toward the root `node_modules` so one copy of React is reused.
+
+```txt
+# hoisted (npm / Yarn Classic)
+node_modules/
+  react/
+  scheduler/     ← React needs this; it sits at the top
+  lodash/
+```
+
+Because `scheduler` is at the top, **your** app can `import "scheduler"` even if you never listed it. That accidental import is a [phantom dependency](/blog/phantom-dependency).
+
+pnpm does **not** hoist by default. Yarn PnP does not use this folder layout. `shamefully-hoist=true` turns pnpm back into a flat tree.
+
+```js
+// works on hoisted npm if scheduler was lifted — brittle
+import { unstable_now } from "scheduler";
+```
+
+Related: [phantom dependency](/blog/phantom-dependency), [shamefully-hoist](/blog/shamefully-hoist), [node_modules](/blog/node-modules).

@@ -1,0 +1,28 @@
+---
+title: What is Corepack?
+description: Node’s built-in way to run the exact Yarn or pnpm version written in package.json.
+slug: corepack
+date: 2026-08-12
+tags:
+  - glossary
+  - nodejs
+  - tooling
+---
+
+**Corepack** ships with Node. It reads `"packageManager"` and downloads that Yarn/pnpm version so laptops and CI match. npm itself still comes from Node.
+
+```json
+{
+  "packageManager": "pnpm@9.15.0"
+}
+```
+
+```bash
+corepack enable
+corepack prepare pnpm@9.15.0 --activate
+pnpm --version    # 9.15.0
+```
+
+`npm install -g pnpm` works until one person has 8 and CI has 9. Put `packageManager` in git; enable Corepack in the CI setup step.
+
+Related: [CI](/blog/continuous-integration), [Yarn Berry](/blog/yarn-berry), [pnpm vs npm vs Yarn](/blog/pnpm-vs-npm-vs-yarn).

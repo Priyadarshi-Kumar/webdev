@@ -1,0 +1,27 @@
+---
+title: What is Yarn Classic (v1)?
+description: "The original Yarn: hoisted node_modules and yarn.lock. Still common on inherited repos."
+slug: yarn-classic
+date: 2026-08-12
+tags:
+  - glossary
+  - javascript
+  - yarn
+---
+
+**Yarn Classic** is Yarn **1.x**. It was built as a faster, lockfile-first npm. Layout is a hoisted `node_modules`, same idea as npm.
+
+```bash
+yarn              # install
+yarn add lodash
+yarn add -D vitest
+yarn remove lodash
+yarn dev          # run script (no "run" needed)
+yarn dlx create-vite@latest
+```
+
+Lockfile: `yarn.lock`. Workspaces: `"workspaces"` in root `package.json`. Frozen CI: `yarn install --frozen-lockfile`.
+
+If a teammate says “we use Yarn,” ask **1 or Berry**. The debugging story is different.
+
+Related: [Yarn Berry](/blog/yarn-berry), [hoisting](/blog/hoisting), [lockfile](/blog/lockfile).

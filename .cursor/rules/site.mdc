@@ -1,0 +1,40 @@
+---
+description: How to add blog topics, tools, and portfolio data on this site
+alwaysApply: true
+---
+
+# Site conventions
+
+Apps live in `apps/`. Libraries live in `libs/`. Pages import widgets directly. Dark theme is the default.
+
+- `@webdev/types` — shared types
+- `@webdev/utils` — helpers
+- `@webdev/store` — all store code
+- `@webdev/components` — primitives used by widgets
+- `@webdev/widgets` — site, blog, portfolio widgets
+- `@webdev/tools` — browser tools
+
+## New blog topic
+
+- Create only `apps/web/content/topics/<slug>.mdx`
+- Required frontmatter: `title`, `description`, `slug`, `date` (YYYY-MM-DD), `tags`
+- Optional jargon: `<Term id="lockfile">lockfile</Term>` — hover preview **and** a link to `/blog/<slug>`
+- Every Term **must** have a matching glossary page. Add `id` to `libs/components/src/glossary.ts` (`explain` + `slug`) **and** `apps/web/content/topics/<slug>.mdx` with `tags` including `glossary`, a short explanation, and a code example. Do not add a dotted term without that page. The tooltip is a preview; the page is the full note.
+- Structure with markdown `##` topics and `###` subtopics. Do not skip heading levels. The post page builds an “On this page” nav from those headings (topic → nested subtopic links). Do not hand-write a table of contents in the MDX.
+- “On this page” sits at the **right edge of the viewport** on desktop (`lg` and up), sticky while scrolling. Article stays centered; list text is left-aligned. **Hide it on mobile.** Section jumps **replace** the hash (no `history.push`); Back leaves the article instead of stepping through headings.
+- Short glossary notes with no sections can omit headings; the nav hides itself when there are none.
+
+## New tool
+
+- Add UI in `libs/tools/src/`
+- Register it in `libs/tools/src/registry.ts`
+
+## Portfolio
+
+- Edit `libs/widgets/src/portfolio/data.ts`
+
+## Do not
+
+- Introduce a CMS, database, or microfrontends
+- Use a hash router
+- Make light the default theme

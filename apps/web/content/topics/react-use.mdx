@@ -1,0 +1,34 @@
+---
+title: What is React’s use() ?
+description: Read a Promise or Context and wait. Combine it with Suspense for a fallback UI.
+slug: react-use
+date: 2026-08-12
+tags:
+  - glossary
+  - react
+---
+
+`use` (React 19) can unwrap a **Promise** or a Context. For a promise, the component **pauses** until it resolves. A parent [Suspense](/blog/react-suspense) shows a fallback meanwhile.
+
+```tsx
+import { Suspense, use } from "react";
+
+const userPromise = fetch("/api/me").then((r) => r.json());
+
+function Profile() {
+  const user = use(userPromise);
+  return <p>{user.name}</p>;
+}
+
+export function Page() {
+  return (
+    <Suspense fallback={<p>Loading…</p>}>
+      <Profile />
+    </Suspense>
+  );
+}
+```
+
+Unlike other hooks, `use` **may** sit in `if` / `switch` if the condition is stable for that render. Prefer loading data in a Server Component when you can.
+
+Related: [Suspense](/blog/react-suspense), [React Hooks by version](/blog/react-hooks).

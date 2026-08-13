@@ -1,0 +1,31 @@
+---
+title: npm install vs npm ci
+description: npm ci is the clean, lockfile-exact install. Use it in CI, not npm install.
+slug: npm-ci
+date: 2026-08-12
+tags:
+  - glossary
+  - javascript
+  - npm
+---
+
+`npm install` may update `package-lock.json` to satisfy ranges. `npm ci` will **not**. It deletes `node_modules`, requires an existing lockfile, and installs that graph — or fails.
+
+```bash
+# local tinkering
+npm install
+
+# CI / production image
+npm ci
+```
+
+```bash
+# cousins
+yarn install --frozen-lockfile     # Yarn 1
+yarn install --immutable           # Yarn Berry
+pnpm install --frozen-lockfile     # pnpm
+```
+
+If `npm ci` fails, the lockfile is out of date with `package.json`. Fix it locally, commit the lockfile, push again.
+
+Related: [lockfile](/blog/lockfile), [CI](/blog/continuous-integration).

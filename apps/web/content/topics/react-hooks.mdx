@@ -1,0 +1,791 @@
+---
+title: React Hooks, by version
+description: Every built-in React hook from 19 down to 16 — when to use it, a small example, a lightweight polyfill when one exists, and interview questions with answers.
+slug: react-hooks
+date: 2026-08-14
+tags:
+  - react
+  - hooks
+  - javascript
+  - interview
+---
+
+A <Term id="react-hook">hook</Term> is a function whose name starts with `use`. It lets a function component remember things across renders, talk to the outside world, or tap into React features that used to live only on class components.
+
+React 16 shipped the first ten. Later major versions added a few more. This note lists **every built-in hook**, **newest major version first**, with a use case, a small example, and a **lightweight polyfill** when the idea can be faked from older hooks. A polyfill here is a teaching sketch — not a drop-in replacement for <Term id="concurrent-rendering">concurrent rendering</Term>, <Term id="server-components">Server Components</Term>, or the real scheduler.
+
+This site runs React 19. Dotted, sky-colored words open a short definition. Each one is also a **link** to a full glossary page with a code example.
+
+## Rules that never change
+
+1. Only call hooks at the **top level** of a component or custom hook — not in `if`, loops, or nested functions.
+2. Only call them from **React functions** (components and hooks), not from event handlers, class methods, or plain helpers.
+3. The call order must be the same every render. That is how React matches “this `useState` is the same box as last time.”
+
+A <Term id="custom-hook">custom hook</Term> is just a function that calls other hooks. It is not magic; it is the composition story.
+
+## Map (latest on top)
+
+| Version | When | Hooks |
+| --- | --- | --- |
+| **19** | 2024 | `use`, `useActionState`, `useOptimistic`, `useFormStatus` (from `react-dom`), `useEffectEvent` |
+| **18** | 2022 | `useId`, `useTransition`, `useDeferredValue`, `useSyncExternalStore`, `useInsertionEffect` |
+| **16** | 2019 | `useState`, `useEffect`, `useContext`, `useReducer`, `useCallback`, `useMemo`, `useRef`, `useImperativeHandle`, `useLayoutEffect`, `useDebugValue` |
+
+`useFormState` was a canary name. Stable React 19 calls it `useActionState`.
+
+---
+
+## React 19
+
+### `useEffectEvent`
+
+**Use when:** an Effect should *re-subscribe* when one value changes (room id), but an *event-like* callback inside that Effect should always see the latest props/state (theme) without becoming a dependency.
+
+```tsx
+function ChatRoom({ roomId, theme }: { roomId: string; theme: string }) {
+  const onConnected = useEffectEvent(() => {
+    showNotification("Connected", theme);
+  });
+
+  useEffect(() => {
+    const connection = createConnection(roomId);
+    connection.on("connected", () => onConnected());
+    connection.connect();
+    return () => connection.disconnect();
+  }, [roomId]);
+}
+```
+
+Do **not** put Effect Events in the dependency array. Do **not** wrap every function to silence the linter — only logic that is conceptually an event fired *from* an Effect. That split is how you avoid a <Term id="stale-closure">stale closure</Term> without reconnecting.
+
+**Polyfill (ref + layout effect):**
+
+```tsx
+function useEffectEvent<T extends (...args: never[]) => unknown>(handler: T): T {
+  const ref = useRef(handler);
+  useLayoutEffect(() => {
+    ref.current = handler;
+  });
+  return useCallback(((...args) => ref.current(...args)) as T, []);
+}
+```
+
+This copies the “always latest, stable identity” part. It does **not** enforce the real linter rules (only call from Effects, do not pass the function to children).
+
+---
+
+### `use`
+
+**Use when:** you need to read a <Term id="react-use">Promise</Term> or a Context in a way that can wait. Unlike other hooks, `use` **may** sit inside `if` / `switch` — as long as the condition is the same during a render, not after an await in the same function.
+
+```tsx
+const ThemeContext = createContext<"dark" | "light">("dark");
+
+function Greeting({ userPromise }: { userPromise: Promise<{ name: string }> }) {
+  const theme = use(ThemeContext);
+  const user = use(userPromise);
+  return <p className={theme}>Hello {user.name}</p>;
+}
+```
+
+Put a <Term id="react-suspense">`<Suspense>`</Term> above any component that `use`s a promise. Prefer loading data in a <Term id="server-components">Server Component</Term> or a cache when you can; `use(promise)` in a Client Component is for when the promise already exists.
+
+**Polyfill:** there is no honest client polyfill for promise unwrapping (it needs Suspense integration). Context is just `useContext`:
+
+```tsx
+function useContextPolyfill<T>(ctx: Context<T>) {
+  return useContext(ctx);
+}
+```
+
+---
+
+### `useActionState`
+
+**Use when:** a <Term id="react-form-action">form Action</Term> should return the next UI state (success message, field errors) and you want `isPending` without hand-rolled flags.
+
+```tsx
+async function saveName(_prev: string | null, formData: FormData) {
+  const name = String(formData.get("name") ?? "");
+  if (!name) return "Name is required.";
+  await api.save(name);
+  return null;
+}
+
+function NameForm() {
+  const [error, submit, isPending] = useActionState(saveName, null);
+  return (
+    <form action={submit}>
+      <input name="name" />
+      <button disabled={isPending}>{isPending ? "Saving…" : "Save"}</button>
+      {error ? <p>{error}</p> : null}
+    </form>
+  );
+}
+```
+
+**Polyfill (client form, no progressive enhancement):**
+
+```tsx
+function useActionState<S, P>(action: (prev: S, payload: P) => Promise<S>, initial: S) {
+  const [state, setState] = useState(initial);
+  const [isPending, startTransition] = useTransition();
+  const submit = (payload: P) => {
+    startTransition(async () => {
+      setState(await action(state, payload));
+    });
+  };
+  return [state, submit, isPending] as const;
+}
+```
+
+The real hook wires into `<form action={fn}>`, can run before JS hydrates, and has a different pending story on the server. This sketch only covers “call a function, keep last result, show pending.”
+
+---
+
+### `useOptimistic`
+
+**Use when:** the UI should jump to the *expected* result immediately (comment appears, like count +1) and snap back if the server disagrees.
+
+```tsx
+function LikeButton({ likes, save }: { likes: number; save: () => Promise<number> }) {
+  const [optimisticLikes, addOptimistic] = useOptimistic(likes);
+  return (
+    <button
+      onClick={async () => {
+        addOptimistic(likes + 1);
+        await save();
+      }}
+    >
+      {optimisticLikes}
+    </button>
+  );
+}
+```
+
+You can pass a reducer as the second argument: `(current, optimisticValue) => next`.
+
+**Polyfill:**
+
+```tsx
+const NONE = Symbol("none");
+
+function useOptimistic<T>(source: T): [T, (next: T) => void] {
+  const [override, setOverride] = useState<T | typeof NONE>(NONE);
+  const value = override === NONE ? source : override;
+  useEffect(() => {
+    setOverride(NONE);
+  }, [source]);
+  return [value, setOverride];
+}
+```
+
+When `source` updates from the server, the override clears. The real hook also coordinates with Actions and concurrent updates; this is the mental model.
+
+---
+
+### `useFormStatus` (`react-dom`)
+
+**Use when:** a nested button or spinner needs to know if **the parent form** is submitting, without prop-drilling `isPending`.
+
+```tsx
+import { useFormStatus } from "react-dom";
+
+function Submit() {
+  const { pending } = useFormStatus();
+  return <button disabled={pending}>{pending ? "Sending…" : "Send"}</button>;
+}
+
+function ContactForm() {
+  return (
+    <form action={sendMessage}>
+      <textarea name="body" />
+      <Submit />
+    </form>
+  );
+}
+```
+
+It only sees the **nearest parent** `<form>`. It does not take arguments.
+
+**Polyfill:** React DOM does not expose form pending to userland. Pass `isPending` as a prop, or lift `useActionState` / `useTransition` to the form and share context. That is the honest substitute.
+
+---
+
+## React 18
+
+### `useTransition`
+
+**Use when:** an update is **not urgent** (filtering a big list, navigating) and you do not want to freeze typing or clicks. React may show the old UI until the new one is ready.
+
+```tsx
+function Search({ items }: { items: string[] }) {
+  const [query, setQuery] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const [list, setList] = useState(items);
+
+  return (
+    <>
+      <input
+        value={query}
+        onChange={(e) => {
+          const q = e.target.value;
+          setQuery(q);
+          startTransition(() => setList(items.filter((item) => item.includes(q))));
+        }}
+      />
+      {isPending ? <p>Updating…</p> : null}
+      <ul>
+        {list.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </>
+  );
+}
+```
+
+Urgent: the input. Non-urgent: the list. That split is the whole point.
+
+**Polyfill (no concurrent scheduler):**
+
+```tsx
+function useTransition(): [boolean, (fn: () => void) => void] {
+  const [isPending, setPending] = useState(false);
+  const startTransition = (fn: () => void) => {
+    setPending(true);
+    setTimeout(() => {
+      fn();
+      setPending(false);
+    }, 0);
+  };
+  return [isPending, startTransition];
+}
+```
+
+This yields to the browser once. It cannot interrupt work the way React 18’s scheduler can.
+
+---
+
+### `useDeferredValue`
+
+**Use when:** you already have a value (search text) and want a *lagging copy* for expensive children, without wrapping the setter in `startTransition`.
+
+```tsx
+function Search({ items }: { items: string[] }) {
+  const [query, setQuery] = useState("");
+  const deferred = useDeferredValue(query);
+  const isStale = query !== deferred;
+  return (
+    <>
+      <input value={query} onChange={(e) => setQuery(e.target.value)} />
+      <div style={{ opacity: isStale ? 0.6 : 1 }}>
+        <ExpensiveList query={deferred} items={items} />
+      </div>
+    </>
+  );
+}
+```
+
+**Polyfill:**
+
+```tsx
+function useDeferredValue<T>(value: T): T {
+  const [deferred, setDeferred] = useState(value);
+  useEffect(() => {
+    const id = requestIdleCallback(() => setDeferred(value));
+    return () => cancelIdleCallback(id);
+  }, [value]);
+  return deferred;
+}
+```
+
+Idle callback is “later,” not “concurrent.” Fine for a demo; use the real hook in production.
+
+---
+
+### `useId`
+
+**Use when:** you need a unique id that matches on the server and in the browser after <Term id="hydration">hydration</Term> — labels, `aria-describedby`, SVG clip paths. This site’s glossary `<Term>` uses it.
+
+```tsx
+function Field({ label }: { label: string }) {
+  const id = useId();
+  return (
+    <>
+      <label htmlFor={id}>{label}</label>
+      <input id={id} />
+    </>
+  );
+}
+```
+
+Do **not** use it as a list `key`. Keys come from your data.
+
+**Polyfill (client-only; will mismatch SSR):**
+
+```tsx
+let n = 0;
+function useId() {
+  const [id] = useState(() => `id-${++n}`);
+  return id;
+}
+```
+
+A counter increments in a different order on the server vs a slow client. That is why React’s `useId` exists.
+
+---
+
+### `useSyncExternalStore`
+
+**Use when:** you subscribe to a store that lives **outside** React (browser APIs, a Zustand store without the React bindings, `window.matchMedia`). It avoids <Term id="react-tearing">tearing</Term> in <Term id="concurrent-rendering">concurrent rendering</Term>: every component sees the same snapshot for one render.
+
+```tsx
+function useOnline() {
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      window.addEventListener("online", onStoreChange);
+      window.addEventListener("offline", onStoreChange);
+      return () => {
+        window.removeEventListener("online", onStoreChange);
+        window.removeEventListener("offline", onStoreChange);
+      };
+    },
+    () => navigator.onLine,
+    () => true,
+  );
+}
+```
+
+The third argument is the **server snapshot** (here: assume online).
+
+**Polyfill:** on React 16/17, use the official `use-sync-external-store/shim` package. A naive `useEffect` + `useState` subscribe can tear under concurrent features. Prefer the shim over rolling your own if you are not on 18+.
+
+---
+
+### `useInsertionEffect`
+
+**Use when:** you are writing a **CSS-in-JS library** and must inject a `<style>` tag *before* `useLayoutEffect` reads layout. App code almost never needs this.
+
+```tsx
+useInsertionEffect(() => {
+  if (!document.getElementById(id)) {
+    const tag = document.createElement("style");
+    tag.id = id;
+    tag.textContent = css;
+    document.head.appendChild(tag);
+  }
+}, [id, css]);
+```
+
+**Polyfill:** `useLayoutEffect` (or `useEffect` if you only care about “run after paint”). Injection may flicker one frame later. Good enough for apps; libraries should use the real hook.
+
+---
+
+## React 16
+
+### `useState`
+
+**Use when:** this component owns a value that should survive re-renders and updating it should re-render.
+
+```tsx
+function Counter() {
+  const [count, setCount] = useState(0);
+  return <button onClick={() => setCount((c) => c + 1)}>{count}</button>;
+}
+```
+
+Pass a function to `useState` if the initial value is expensive (`useState(() => compute())`). Pass a function to the setter if the next value depends on the previous one.
+
+**Polyfill (on top of `useReducer`):**
+
+```tsx
+function useState<T>(initial: T | (() => T)) {
+  return useReducer(
+    (state: T, action: T | ((prev: T) => T)) =>
+      typeof action === "function" ? (action as (prev: T) => T)(state) : action,
+    initial as T,
+  );
+}
+```
+
+`useState` is usually implemented *with* `useReducer` inside React. This is the same idea, reversed.
+
+---
+
+### `useReducer`
+
+**Use when:** next state depends on a few event types, or several fields update together. Same mental model as Redux, local to the component.
+
+```tsx
+type State = { count: number };
+type Action = { type: "inc" } | { type: "add"; n: number };
+
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case "inc":
+      return { count: state.count + 1 };
+    case "add":
+      return { count: state.count + action.n };
+    default:
+      return state;
+  }
+}
+
+function Counter() {
+  const [state, dispatch] = useReducer(reducer, { count: 0 });
+  return <button onClick={() => dispatch({ type: "inc" })}>{state.count}</button>;
+}
+```
+
+**Polyfill:**
+
+```tsx
+function useReducer<S, A>(reducer: (s: S, a: A) => S, initial: S) {
+  const [state, setState] = useState(initial);
+  const dispatch = (action: A) => setState((s) => reducer(s, action));
+  return [state, dispatch] as const;
+}
+```
+
+---
+
+### `useRef`
+
+**Use when:** you need a box whose `.current` you can change **without** a re-render — a DOM node, a timer id, “latest callback,” previous value.
+
+```tsx
+function TextBox({ onChange }: { onChange: (value: string) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  return (
+    <>
+      <input
+        ref={inputRef}
+        onBlur={() => onChangeRef.current(inputRef.current?.value ?? "")}
+      />
+      <button onClick={() => inputRef.current?.focus()}>Focus</button>
+    </>
+  );
+}
+```
+
+`useRef(onChange)` stores that **function** as `.current`. It does **not** call it (unlike `useState(() => compute())`). Use that for “always the latest handler” without putting the function in an Effect’s deps.
+
+For an expensive object, skip a factory argument — React would run `new Player()` every render and only keep the first result. Lazy-init instead:
+
+```tsx
+const playerRef = useRef<Player | null>(null);
+if (playerRef.current === null) {
+  playerRef.current = new Player();
+}
+```
+
+**Polyfill:**
+
+```tsx
+function useRef<T>(initial: T) {
+  const [box] = useState({ current: initial });
+  return box;
+}
+```
+
+`useState` gives a stable object. Mutating `.current` does not call `setState`, so no re-render. That is the whole trick. If `initial` is a function, the box holds that function.
+
+---
+
+### `useEffect`
+
+**Use when:** after React has painted, you need to **synchronize** with something outside React: subscribe, fetch, set `document.title`, start a timer. Return a function to undo that work.
+
+```tsx
+function Title({ name }: { name: string }) {
+  useEffect(() => {
+    document.title = name;
+  }, [name]);
+}
+```
+
+If you are transforming data for the next render, you usually want `useMemo` or just a variable — not an Effect. If you are responding to a click, you want an event handler.
+
+**Polyfill:** you cannot rebuild Effects from `useState`. They are a React feature (schedule after commit). Skip a fake.
+
+---
+
+### `useLayoutEffect`
+
+**Use when:** you must read or write the DOM **before the browser paints**, or the user will see a flicker (measure a tooltip, scroll restoration).
+
+Same signature as `useEffect`. Prefer `useEffect` unless you have that flicker.
+
+On the server, `useLayoutEffect` warns and does not run. Gate it, or use `useEffect`, for SSR.
+
+**Polyfill:** `useEffect`. You lose “before paint.” That is the only difference that matters.
+
+---
+
+### `useContext`
+
+**Use when:** many nested components need the same value (theme, current user) and you do not want to pass props through every layer. That pass-through is <Term id="prop-drilling">prop drilling</Term>.
+
+```tsx
+const ThemeContext = createContext<"dark" | "light">("dark");
+
+function Label() {
+  const theme = useContext(ThemeContext);
+  return <span data-theme={theme}>Hi</span>;
+}
+
+function App() {
+  return (
+    <ThemeContext value="dark">
+      <Label />
+    </ThemeContext>
+  );
+}
+```
+
+In React 19 the provider is `<ThemeContext value={…}>`. Older code uses `<ThemeContext.Provider value={…}>`.
+
+**Polyfill:** none without the Context object React already gives you. `use(Context)` is the 19-era twin.
+
+---
+
+### `useMemo`
+
+**Use when:** an expensive calculation should only rerun when its inputs change. Also used to keep a **stable object/array identity** so a child wrapped in `memo` does not re-render for no reason.
+
+```tsx
+const total = useMemo(() => items.reduce((sum, item) => sum + item.price, 0), [items]);
+```
+
+Do not wrap every variable. In 2026, the <Term id="react-compiler">React Compiler</Term> can memoize for you. Still know `useMemo`: interviews and codebases without the compiler.
+
+**Polyfill:**
+
+```tsx
+function useMemo<T>(factory: () => T, deps: unknown[]) {
+  const ref = useRef<{ deps: unknown[]; value: T } | null>(null);
+  if (!ref.current || !depsEqual(ref.current.deps, deps)) {
+    ref.current = { deps, value: factory() };
+  }
+  return ref.current.value;
+}
+
+function depsEqual(a: unknown[], b: unknown[]) {
+  return a.length === b.length && a.every((item, i) => Object.is(item, b[i]));
+}
+```
+
+---
+
+### `useCallback`
+
+**Use when:** you pass a function to a memoized child, or into a dependency array, and you need the **same function instance** until its deps change.
+
+```tsx
+const onSave = useCallback((id: string) => save(id), [save]);
+```
+
+**Polyfill:**
+
+```tsx
+function useCallback<T extends (...args: never[]) => unknown>(fn: T, deps: unknown[]) {
+  return useMemo(() => fn, deps);
+}
+```
+
+`useCallback(fn, deps)` is `useMemo(() => fn, deps)`. That is the entire relationship.
+
+---
+
+### `useImperativeHandle`
+
+**Use when:** a parent has a ref to a child and you want to expose a **small API** (`focus()`, `reset()`) instead of the raw DOM node. Pair with `ref` (React 19) or `forwardRef` (older).
+
+```tsx
+type Handle = { focus: () => void };
+
+const FancyInput = ({ ref }: { ref: React.Ref<Handle> }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  useImperativeHandle(ref, () => ({
+    focus: () => inputRef.current?.focus(),
+  }));
+  return <input ref={inputRef} />;
+};
+```
+
+Prefer props (`open={true}`) when you can. This hook is for “call a method,” which is rare.
+
+**Polyfill:**
+
+```tsx
+function useImperativeHandle<T>(ref: React.Ref<T> | undefined, create: () => T, deps: unknown[]) {
+  useLayoutEffect(() => {
+    if (!ref) return;
+    const value = create();
+    if (typeof ref === "function") {
+      ref(value);
+      return () => ref(null);
+    }
+    ref.current = value;
+    return () => {
+      ref.current = null;
+    };
+  }, deps);
+}
+```
+
+---
+
+### `useDebugValue`
+
+**Use when:** you author a custom hook and want React DevTools to show a label (`Online`, `Offline`) next to it.
+
+```tsx
+function useOnline() {
+  const online = useSyncExternalStore(/* … */);
+  useDebugValue(online ? "Online" : "Offline");
+  return online;
+}
+```
+
+**Polyfill:** `function useDebugValue(_value: unknown) {}` — it is a no-op in production anyway.
+
+---
+
+## Which hook, in one glance
+
+| I need… | Reach for |
+| --- | --- |
+| A value that re-renders | `useState` / `useReducer` |
+| Sync with the world after paint | `useEffect` |
+| Sync before paint | `useLayoutEffect` |
+| A box that does not re-render | `useRef` |
+| Shared value, no drilling | `useContext` or `use(Context)` |
+| Skip extra work / stable identity | `useMemo` / `useCallback` (or the compiler) |
+| Unique SSR-safe id | `useId` |
+| Keep typing fast while a list updates | `useTransition` / `useDeferredValue` |
+| Subscribe to a non-React store | `useSyncExternalStore` |
+| Inject CSS from a library | `useInsertionEffect` |
+| Wait on a promise in render | `use` + `Suspense` |
+| Form result + pending | `useActionState` |
+| Nested submit button pending | `useFormStatus` |
+| Instant UI, then server truth | `useOptimistic` |
+| Latest props inside an Effect, without re-running it | `useEffectEvent` |
+| Parent calls child methods | `useImperativeHandle` |
+| DevTools label on a custom hook | `useDebugValue` |
+
+---
+
+## Interview questions
+
+Open a question to see a sample answer. Lead with the short version; add the extra sentence if they probe.
+
+<details>
+<summary>What are the Rules of Hooks, and why do they exist?</summary>
+
+Call hooks only at the top level of a React function, and only from components or custom hooks. React stores hook state in a list keyed by call order, not by name. An `if` that skips a `useState` on some renders makes every later hook line up with the wrong slot — swapped state, missing Effects, confusing bugs.
+
+</details>
+
+<details>
+<summary>useEffect vs useLayoutEffect vs useInsertionEffect?</summary>
+
+`useEffect` runs after paint — subscriptions, fetching, logging. `useLayoutEffect` runs after DOM updates but before paint — measurements and DOM writes that would flicker. `useInsertionEffect` runs even earlier, for CSS-in-JS libraries injecting tags. App code almost always wants `useEffect`; `useLayoutEffect` when you have a visible flash; `useInsertionEffect` if you are writing the styling library.
+
+</details>
+
+<details>
+<summary>useState vs useReducer?</summary>
+
+`useState` is one value and a setter. `useReducer` is “event in, next state out” — several fields, or updates that depend on previous state in a structured way. They are interchangeable: `useState` is a reducer that replaces the state. Pick the one that makes the transitions easier to read.
+
+</details>
+
+<details>
+<summary>useRef vs useState?</summary>
+
+Updating state re-renders. Mutating `ref.current` does not. Use state for anything the user should see. Use a ref for DOM nodes, timer ids, and “the latest callback” you will read later. A ref is a stable `{ current }` box; `useState({ current })` is a common way to picture it. `useRef(fn)` stores `fn` — it does not run it the way `useState(() => compute())` does.
+
+</details>
+
+<details>
+<summary>useMemo vs useCallback?</summary>
+
+`useMemo` remembers a *value*. `useCallback` remembers a *function*. `useCallback(fn, deps)` is `useMemo(() => fn, deps)`. Use them to skip expensive work or keep identity stable for `memo` children — not as default decoration. The <Term id="react-compiler">React Compiler</Term> can insert this for you; you should still be able to explain the deps array.
+
+</details>
+
+<details>
+<summary>What is a stale closure, and how do you fix it?</summary>
+
+A <Term id="stale-closure">stale closure</Term> is an Effect or callback that captured `count` from an old render, so it still sees `0` after the user clicked. Fixes: list the value in the Effect deps so the Effect re-subscribes; use the functional setter `setCount(c => c + 1)`; keep the latest function in a ref; or, for “event from an Effect,” use `useEffectEvent` so the callback is always fresh without re-running the Effect.
+
+</details>
+
+<details>
+<summary>What did React 18 add, in hooks terms?</summary>
+
+`useId` for SSR-safe ids. `useTransition` and `useDeferredValue` to mark non-urgent updates so typing stays responsive. `useSyncExternalStore` so external stores do not tear under <Term id="concurrent-rendering">concurrent rendering</Term>. `useInsertionEffect` for style injection. Concurrent rendering is the theme: React may start, pause, or throw away a render, so snapshots and ids have to be consistent.
+
+</details>
+
+<details>
+<summary>useTransition vs useDeferredValue?</summary>
+
+`useTransition` wraps the *update* (`startTransition(() => setList(next))`). `useDeferredValue` wraps an existing *value* and gives you a lagged copy for expensive children. Same goal — keep urgent UI snappy — different call site. If you control the setter, transition. If you only have the value, defer it.
+
+</details>
+
+<details>
+<summary>What is tearing, and why useSyncExternalStore?</summary>
+
+In concurrent React, one render can be interrupted. If two components read `Date.now()` or a store `getSnapshot()` at different times in that render, they can disagree — <Term id="react-tearing">tearing</Term>. `useSyncExternalStore` forces a consistent snapshot and subscribes so React re-renders when the store changes. For `window` APIs, pass a `getServerSnapshot` so SSR does not <Term id="hydration">hydrate</Term> with a different value.
+
+</details>
+
+<details>
+<summary>What did React 19 add for hooks?</summary>
+
+`use` to read a Context or a Promise (with <Term id="react-suspense">Suspense</Term>). `useActionState` to keep the last result of a <Term id="react-form-action">form Action</Term> plus pending. `useOptimistic` to show expected UI before the server confirms. `useFormStatus` (from `react-dom`) so nested controls can see if the parent form is submitting. `useEffectEvent` to split event-like logic out of Effects.
+
+</details>
+
+<details>
+<summary>How is <code>use</code> different from other hooks?</summary>
+
+It can be called behind `if` / `switch`. It can unwrap a Promise and suspend. `use(Context)` is like `useContext`. Do not `try/catch` around `use(promise)` — the linter forbids it; let an error boundary handle failures. You still cannot call it in loops with a changing number of iterations, or after a real `await` in the same component function.
+
+</details>
+
+<details>
+<summary>useActionState vs useFormStatus?</summary>
+
+`useActionState` lives in the component that *owns* the action: it returns `[state, formAction, isPending]`. `useFormStatus` lives in a *child* of `<form>` and only answers “is this form pending?” plus the last submitted data. A submit button typically uses `useFormStatus`. The page that handles the result uses `useActionState`.
+
+</details>
+
+<details>
+<summary>When would you use useEffectEvent instead of putting a value in the dependency array?</summary>
+
+When the Effect’s *subscription* should follow one reactive input (`roomId`) but a callback fired *by* that subscription should read latest props (`theme`) without reconnecting. If changing `theme` should reconnect, it belongs in the deps. Using `useEffectEvent` to hide a real dependency is how you get bugs. The ref-plus-layout-effect pattern is the older version of the same idea.
+
+</details>
+
+<details>
+<summary>Can you write a custom hook? When should you?</summary>
+
+Yes — any function that calls hooks and is named `useSomething`. Extract one when two components share the same stateful recipe (subscribe to online status, debounce a value), not when they merely share JSX. <Term id="custom-hook">Custom hooks</Term> can call other custom hooks. They do not create a new component in the tree unless you return one.
+
+</details>
+
+<details>
+<summary>Why do people still talk about useMemo if the React Compiler exists?</summary>
+
+The <Term id="react-compiler">compiler</Term> (stable around late 2025) auto-memoizes many components and values, so new code can skip manual `useMemo` / `useCallback`. Lots of production apps are not on it yet. Interviews still expect you to explain identity, dependency arrays, and when memoization is wasted work. Use the compiler where the build enables it; read existing hooks as if they were written by hand.
+
+</details>

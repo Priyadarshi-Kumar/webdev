@@ -1,0 +1,28 @@
+---
+title: What is the npm registry?
+description: The public warehouse at npmjs.com. npm, Yarn, and pnpm all download packages from here.
+slug: npm-registry
+date: 2026-08-12
+tags:
+  - glossary
+  - javascript
+  - tooling
+---
+
+The **npm registry** is a huge public catalog of JavaScript packages. The website is [npmjs.com](https://www.npmjs.com/). When you `pnpm add react`, the tarball still comes from this registry (unless you configured a private one).
+
+```bash
+# same package, three clients
+npm install react
+yarn add react
+pnpm add react
+```
+
+A **scope** is the `@org/` prefix (`@types/react`). Companies often run a private registry (GitHub Packages, npm org, Verdaccio) and point `.npmrc` at it:
+
+```ini
+# .npmrc
+@acme:registry=https://npm.pkg.github.com
+```
+
+Related: [package manager](/blog/package-manager), [package.json](/blog/package-json).

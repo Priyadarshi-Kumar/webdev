@@ -1,0 +1,31 @@
+---
+title: What is hydration?
+description: Attaching React to server-rendered HTML. Ids and markup must match or React warns.
+slug: hydration
+date: 2026-08-12
+tags:
+  - glossary
+  - react
+---
+
+**SSR** prints HTML on the server. **Hydration** is the browser walk where React attaches event handlers to that HTML. The first client render must match the server markup.
+
+`useId()` exists so labels and `aria-describedby` get the **same** id on both sides:
+
+```tsx
+import { useId } from "react";
+
+export function EmailField() {
+  const id = useId();
+  return (
+    <>
+      <label htmlFor={id}>Email</label>
+      <input id={id} type="email" />
+    </>
+  );
+}
+```
+
+Bad: `id={Math.random()}` or `Date.now()` during render — server and client disagree ([tearing](/blog/react-tearing) / hydration mismatch).
+
+Related: [tearing](/blog/react-tearing), [React hook](/blog/react-hook).

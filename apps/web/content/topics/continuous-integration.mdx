@@ -1,0 +1,29 @@
+---
+title: What is CI (continuous integration)?
+description: A clean machine that installs and builds on every push. Freeze the lockfile there.
+slug: continuous-integration
+date: 2026-08-12
+tags:
+  - glossary
+  - tooling
+---
+
+**CI** is an automated job (GitHub Actions, Netlify, GitLab CI) that clones your repo on a **fresh** VM, installs dependencies, and runs tests or a build. It has no leftover `node_modules` from yesterday.
+
+That is why the lockfile matters: the robot should install **exactly** what you committed.
+
+```yaml
+# GitHub Actions sketch
+- uses: actions/setup-node@v4
+  with:
+    node-version: 22
+    cache: pnpm
+- run: corepack enable
+- run: pnpm install --frozen-lockfile
+- run: pnpm test
+- run: pnpm build
+```
+
+Never run a command in CI that **rewrites** the lockfile (`npm install` can). Use `npm ci` / frozen / immutable installs.
+
+Related: [npm ci](/blog/npm-ci), [lockfile](/blog/lockfile), [Corepack](/blog/corepack).

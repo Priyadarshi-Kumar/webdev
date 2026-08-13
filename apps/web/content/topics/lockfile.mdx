@@ -1,0 +1,31 @@
+---
+title: What is a lockfile?
+description: The exact install graph. Commit one lockfile per repo, from one package manager.
+slug: lockfile
+date: 2026-08-12
+tags:
+  - glossary
+  - javascript
+  - tooling
+---
+
+`package.json` says “React 19-something.” The **lockfile** says “React 19.2.8, plus scheduler 0.26.0, plus these integrity hashes.”
+
+```bash
+package-lock.json   # npm
+yarn.lock           # Yarn
+pnpm-lock.yaml      # pnpm
+```
+
+Commit it. Do not keep two. If Alice installs with npm and Bob with pnpm, they will not share a graph.
+
+```bash
+# CI: install exactly the lockfile, do not rewrite it
+npm ci
+yarn install --frozen-lockfile
+pnpm install --frozen-lockfile
+```
+
+If you migrate managers, delete the old lockfile, install with the new tool, commit the new file.
+
+Related: [npm ci](/blog/npm-ci), [package.json](/blog/package-json), [pnpm vs npm vs Yarn](/blog/pnpm-vs-npm-vs-yarn).

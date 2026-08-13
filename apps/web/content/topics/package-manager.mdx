@@ -1,0 +1,30 @@
+---
+title: What is a package manager?
+description: npm, Yarn, and pnpm all install libraries. Here is what the tool actually does, with commands you can run.
+slug: package-manager
+date: 2026-08-12
+tags:
+  - glossary
+  - javascript
+  - tooling
+---
+
+A **package manager** is the program that turns a shopping list (`package.json`) into files on disk (`node_modules`) plus a receipt (the lockfile).
+
+JavaScript’s public warehouse is the npm registry. **npm**, **Yarn**, and **pnpm** are three installers for that same warehouse — not three different stores.
+
+```bash
+# install everything listed in package.json / the lockfile
+npm install
+yarn
+pnpm install
+
+# add one library to the shopping list and install it
+npm install lodash
+yarn add lodash
+pnpm add lodash
+```
+
+Without a package manager you would download zip files by hand and hope versions match. The manager also runs scripts (`dev`, `build`) defined in `package.json`.
+
+Related: [lockfile](/blog/lockfile), [npm registry](/blog/npm-registry), [pnpm vs npm vs Yarn](/blog/pnpm-vs-npm-vs-yarn).

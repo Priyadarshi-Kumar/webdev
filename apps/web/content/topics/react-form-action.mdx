@@ -1,0 +1,33 @@
+---
+title: What is a React form Action?
+description: An async function you pass to a form’s action prop. React tracks pending state for you.
+slug: react-form-action
+date: 2026-08-12
+tags:
+  - glossary
+  - react
+---
+
+A React **Action** is a function meant to run from a form (or `useTransition`). It can be `async`. Hooks like `useActionState` give you the last result and `isPending`.
+
+```tsx
+import { useActionState } from "react";
+
+async function saveName(_prev: string, formData: FormData) {
+  const name = String(formData.get("name") ?? "");
+  await fetch("/api/name", { method: "POST", body: name });
+  return name;
+}
+
+export function NameForm() {
+  const [name, action, pending] = useActionState(saveName, "");
+  return (
+    <form action={action}>
+      <input name="name" defaultValue={name} />
+      <button disabled={pending}>{pending ? "Saving…" : "Save"}</button>
+    </form>
+  );
+}
+```
+
+Related: [React Hooks by version](/blog/react-hooks).

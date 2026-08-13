@@ -1,0 +1,28 @@
+---
+title: What is concurrent rendering?
+description: React can start, pause, or abandon a render so urgent work (typing, clicks) stays responsive.
+slug: concurrent-rendering
+date: 2026-08-14
+tags:
+  - glossary
+  - react
+---
+
+**Concurrent rendering** (React 18+) means a render is not a single uninterruptible burst. React may prepare the next screen in the background, show the old UI until the new one is ready, or throw work away if the user typed again.
+
+You opt in with `startTransition` / `useTransition` / `useDeferredValue`:
+
+```tsx
+const [isPending, startTransition] = useTransition();
+
+function onChange(value: string) {
+  setQuery(value); // urgent: the input
+  startTransition(() => {
+    setList(filter(items, value)); // can wait: the big list
+  });
+}
+```
+
+Because a render can pause, reading `Date.now()` or `window.innerWidth` during render can [tear](/blog/react-tearing). Subscribe with `useSyncExternalStore` instead.
+
+Related: [tearing](/blog/react-tearing), [React Hooks by version](/blog/react-hooks).

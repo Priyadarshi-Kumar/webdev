@@ -1,0 +1,31 @@
+---
+title: What is node_modules?
+description: The folder where installed packages live so Node and your bundler can import them.
+slug: node-modules
+date: 2026-08-12
+tags:
+  - glossary
+  - javascript
+  - nodejs
+---
+
+`node_modules` is the folder of groceries. After install, `import "react"` resolves to a directory in here (or, with Yarn PnP, to a zip that plays the same role).
+
+```txt
+my-app/
+  package.json
+  node_modules/
+    react/
+    lodash/
+```
+
+You almost never commit this folder. `.gitignore` should list `node_modules`. CI and teammates recreate it from the lockfile.
+
+npm and Yarn Classic **hoist** (flatten) the tree. pnpm uses a nested layout plus a global store. Yarn Berry can skip the folder entirely (Plug’n’Play).
+
+```js
+// Node walks node_modules looking for "lodash"
+import { debounce } from "lodash";
+```
+
+Related: [hoisting](/blog/hoisting), [lockfile](/blog/lockfile), [Yarn Plug’n’Play](/blog/yarn-plug-n-play).

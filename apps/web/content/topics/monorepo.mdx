@@ -1,0 +1,36 @@
+---
+title: What is a monorepo?
+description: Several packages in one git repo, sharing one install at the root.
+slug: monorepo
+date: 2026-08-12
+tags:
+  - glossary
+  - javascript
+  - tooling
+---
+
+A **monorepo** is one repository with more than one package — for example `apps/web` and `libs/utils`. You install **once at the root**. Apps depend on local libraries with `workspace:*` instead of publishing to npm first.
+
+```txt
+repo/
+  package.json              # private: true, packageManager
+  pnpm-workspace.yaml
+  apps/web/package.json
+  libs/utils/package.json
+```
+
+```yaml
+# pnpm-workspace.yaml
+packages:
+  - "apps/*"
+  - "libs/*"
+```
+
+```bash
+pnpm install                 # root only
+pnpm --filter web dev        # run one package’s script
+```
+
+npm/Yarn put the same globs in `"workspaces"` inside root `package.json`. Nx, Turborepo, and pnpm filters all assume this shape.
+
+Related: [workspace protocol](/blog/workspace-protocol), [pnpm vs npm vs Yarn](/blog/pnpm-vs-npm-vs-yarn).

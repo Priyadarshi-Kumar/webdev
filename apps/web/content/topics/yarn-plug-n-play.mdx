@@ -1,0 +1,27 @@
+---
+title: What is Yarn Plug’n’Play (PnP)?
+description: "Yarn Berry’s default: Node resolves packages through .pnp.cjs instead of walking node_modules."
+slug: yarn-plug-n-play
+date: 2026-08-12
+tags:
+  - glossary
+  - javascript
+  - yarn
+---
+
+**Plug’n’Play** is Yarn Berry’s default linker. There is often **no** `node_modules`. Node asks `.pnp.cjs` (and `.pnp.data.json`) where each package lives — usually inside `.yarn/cache` zips.
+
+```yml
+# .yarnrc.yml — opt out of PnP, get a classic folder
+nodeLinker: node-modules
+```
+
+```js
+// tools that do this break under PnP
+import fs from "node:fs";
+fs.readdirSync("node_modules"); // folder may not exist
+```
+
+Editors need the Yarn SDK / PnP plugin so “Go to definition” works. Many teams keep Berry but set `nodeLinker: node-modules` for compatibility.
+
+Related: [Yarn Berry](/blog/yarn-berry), [node_modules](/blog/node-modules).

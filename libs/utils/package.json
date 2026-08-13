@@ -1,0 +1,19 @@
+{
+  "name": "@webdev/utils",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@webdev/types": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4",
+    "typescript": "^6.0.3"
+  }
+}

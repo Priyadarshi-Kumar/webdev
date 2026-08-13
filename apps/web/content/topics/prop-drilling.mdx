@@ -1,0 +1,42 @@
+---
+title: What is prop drilling?
+description: Passing props through components that do not use them, only to reach a nested child. Context skips the middle.
+slug: prop-drilling
+date: 2026-08-12
+tags:
+  - glossary
+  - react
+---
+
+**Prop drilling** is threading a value through layers that only exist to forward it.
+
+```tsx
+function App() {
+  const user = { name: "Priya" };
+  return <Page user={user} />;
+}
+function Page({ user }) {
+  return <Layout user={user} />;
+}
+function Layout({ user }) {
+  return <Header user={user} />;
+}
+function Header({ user }) {
+  return <p>{user.name}</p>;
+}
+```
+
+Context (or a store) lets `Header` subscribe without `Page` / `Layout` knowing:
+
+```tsx
+const UserContext = createContext(null);
+
+function Header() {
+  const user = use(UserContext);
+  return <p>{user.name}</p>;
+}
+```
+
+Do not put **everything** in context — it still re-renders consumers. Drill one or two levels if that is clearer.
+
+Related: [React use()](/blog/react-use), [React Hooks by version](/blog/react-hooks).

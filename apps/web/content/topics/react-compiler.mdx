@@ -1,0 +1,27 @@
+---
+title: What is the React Compiler?
+description: A build step that auto-memoizes so you write fewer useMemo and useCallback calls.
+slug: react-compiler
+date: 2026-08-12
+tags:
+  - glossary
+  - react
+---
+
+The **React Compiler** (formerly React Forget) is an optional Babel plugin. It analyzes your components and inserts memoization so child components do not re-render for no reason.
+
+You still write hooks. You write **fewer** `useMemo` / `useCallback` wrappers:
+
+```tsx
+// without a compiler, people often write this by hand
+const onSave = useCallback(() => save(draft), [draft]);
+const visible = useMemo(() => items.filter((i) => i.ok), [items]);
+
+// with the compiler, plain functions and vars are often enough
+const onSave = () => save(draft);
+const visible = items.filter((i) => i.ok);
+```
+
+Interviews and older codebases still expect you to know `useMemo`. This site does not require the compiler.
+
+Related: [React Hooks by version](/blog/react-hooks), [React hook](/blog/react-hook).
