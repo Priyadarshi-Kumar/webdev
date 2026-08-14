@@ -1,0 +1,29 @@
+---
+title: What is an MCP prompt?
+description: A named message template the server offers; the user (or host UI) fills it in.
+slug: mcp-prompt
+date: 2026-08-14
+tags:
+  - glossary
+  - mcp
+  - ai
+---
+
+A **prompt** in MCP is a *template*, not the chat box. `prompts/list` / `prompts/get` return messages the host can send to the model — often a slash command: `/pr-review 1842`.
+
+```json
+{
+  "name": "pr_review",
+  "arguments": [{ "name": "pr", "required": true }],
+  "messages": [
+    {
+      "role": "user",
+      "content": { "type": "text", "text": "Review pull request {{pr}}" }
+    }
+  ]
+}
+```
+
+Use prompts for **repeatable workflows**. Use tools for **live actions**. Use resources for **blobs**.
+
+Related: [MCP](/blog/mcp), [MCP in depth](/blog/model-context-protocol).

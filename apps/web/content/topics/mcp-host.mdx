@@ -1,0 +1,27 @@
+---
+title: What is an MCP host?
+description: The AI application that owns the model, the UI, and which MCP servers may run.
+slug: mcp-host
+date: 2026-08-14
+tags:
+  - glossary
+  - mcp
+  - ai
+---
+
+The **host** is the app you sit in — Cursor, Claude Desktop, VS Code Copilot Chat, a custom agent. It starts [MCP clients](/blog/mcp-client), shows tool-call approvals, and decides what the model is allowed to see.
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "./"]
+    }
+  }
+}
+```
+
+That config lives on the **host**. The model never launches processes by itself.
+
+Related: [MCP](/blog/mcp), [MCP in depth](/blog/model-context-protocol).

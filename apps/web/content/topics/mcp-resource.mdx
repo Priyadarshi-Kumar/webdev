@@ -1,0 +1,24 @@
+---
+title: What is an MCP resource?
+description: Read-only context with a URI — a file, ticket, or schema the host can attach.
+slug: mcp-resource
+date: 2026-08-14
+tags:
+  - glossary
+  - mcp
+  - ai
+---
+
+A **resource** is data, not a verb. The server lists URIs (`resources/list`); the host reads one (`resources/read`) and may attach it as context. Typical URIs: `file:///…`, `postgres://…/schema`, `ticket://42`.
+
+```json
+{
+  "uri": "file:///Users/you/notes.md",
+  "name": "notes.md",
+  "mimeType": "text/markdown"
+}
+```
+
+The model does not “call” a resource the way it calls a [tool](/blog/mcp-tool). The host or user chooses to include it.
+
+Related: [MCP prompt](/blog/mcp-prompt), [MCP in depth](/blog/model-context-protocol).

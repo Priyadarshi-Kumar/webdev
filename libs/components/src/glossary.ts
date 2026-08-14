@@ -182,6 +182,46 @@ export const glossary = {
     explain:
       "Run a target only on projects whose files changed in git, plus any project that depends on those. Saves CI from rebuilding the whole monorepo.",
   },
+  mcp: {
+    slug: "mcp",
+    explain:
+      "Model Context Protocol: an open JSON-RPC standard so AI apps can discover and use tools, files, and prompt templates from outside programs, instead of a custom plugin for each app.",
+  },
+  "mcp-host": {
+    slug: "mcp-host",
+    explain:
+      "The AI application the human is using — Cursor, Claude Desktop, a chat product. It owns the model, the UI, and which MCP servers are allowed to run.",
+  },
+  "mcp-client": {
+    slug: "mcp-client",
+    explain:
+      "The connector inside the host that speaks MCP to one server: initialize, list tools, call them, stream results. One host often runs several clients at once.",
+  },
+  "mcp-server": {
+    slug: "mcp-server",
+    explain:
+      "A program that exposes tools, resources, and/or prompts over MCP. Local (stdio) or remote (HTTP). It does not run the LLM; it answers structured requests.",
+  },
+  "mcp-tool": {
+    slug: "mcp-tool",
+    explain:
+      "A named function the model can call, with a JSON Schema for arguments. Side effects live here: search, write a file, query an API.",
+  },
+  "mcp-resource": {
+    slug: "mcp-resource",
+    explain:
+      "Read-only context identified by a URI (file, ticket, schema dump). The host or user attaches it; it is not an action the model executes.",
+  },
+  "mcp-prompt": {
+    slug: "mcp-prompt",
+    explain:
+      "A named message template the server offers (slash-command style). The user picks it; the host fills arguments and sends the resulting messages to the model.",
+  },
+  "json-rpc": {
+    slug: "json-rpc",
+    explain:
+      "A simple request/response format in JSON: method name, params, and an id. MCP messages are JSON-RPC 2.0 (plus notifications with no id).",
+  },
 } as const;
 
 export type GlossaryId = keyof typeof glossary;

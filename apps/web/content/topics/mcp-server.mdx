@@ -1,0 +1,22 @@
+---
+title: What is an MCP server?
+description: A program that exposes tools, resources, and prompts over MCP. It does not run the LLM.
+slug: mcp-server
+date: 2026-08-14
+tags:
+  - glossary
+  - mcp
+  - ai
+---
+
+An **MCP server** is a small process or HTTP service. The [host](/blog/mcp-host) starts it (stdio) or POSTs to it (Streamable HTTP). The server answers structured requests. The **model stays in the host**.
+
+```ts
+server.tool("search_docs", { query: z.string() }, async ({ query }) => ({
+  content: [{ type: "text", text: await search(query) }],
+}));
+```
+
+Official TypeScript today often lives in `@modelcontextprotocol/server` (2026 spec). Older samples use `@modelcontextprotocol/sdk`.
+
+Related: [MCP tool](/blog/mcp-tool), [MCP in depth](/blog/model-context-protocol).

@@ -1,0 +1,30 @@
+---
+title: What is an MCP tool?
+description: A named function the model can call, with a JSON Schema for its arguments.
+slug: mcp-tool
+date: 2026-08-14
+tags:
+  - glossary
+  - mcp
+  - ai
+---
+
+A **tool** is an action: `tools/list` advertises it; `tools/call` runs it. Arguments follow JSON Schema. The result is content the host stuffs back into the model’s context (text, images, or an error).
+
+```json
+{
+  "name": "get_issue",
+  "description": "Fetch a GitHub issue by number",
+  "inputSchema": {
+    "type": "object",
+    "required": ["number"],
+    "properties": {
+      "number": { "type": "integer" }
+    }
+  }
+}
+```
+
+Tools can have **side effects**. Resources are for read-only blobs. Do not hide a delete behind a “resource.”
+
+Related: [MCP resource](/blog/mcp-resource), [MCP in depth](/blog/model-context-protocol).

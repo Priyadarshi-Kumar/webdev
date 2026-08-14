@@ -1,0 +1,35 @@
+---
+title: What is JSON-RPC?
+description: Request/response JSON with a method name, params, and an id. MCP is JSON-RPC 2.0.
+slug: json-rpc
+date: 2026-08-14
+tags:
+  - glossary
+  - mcp
+  - javascript
+---
+
+**JSON-RPC 2.0** is a tiny convention: call `method` with `params`, match the reply by `id`. A **notification** is the same shape with **no** `id` — fire and forget.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": { "name": "get_time", "arguments": {} }
+}
+```
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [{ "type": "text", "text": "2026-08-14T04:30:00Z" }]
+  }
+}
+```
+
+MCP adds capability negotiation and (on HTTP) extra headers. The body is still JSON-RPC.
+
+Related: [MCP](/blog/mcp), [MCP in depth](/blog/model-context-protocol).

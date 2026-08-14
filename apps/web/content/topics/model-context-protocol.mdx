@@ -1,0 +1,338 @@
+---
+title: Model Context Protocol (MCP)
+description: How MCP works — hosts, clients, servers, JSON-RPC, tools vs resources vs prompts, transports, a walkthrough with example messages, and what to watch for. Interview questions with answers.
+slug: model-context-protocol
+date: 2026-08-14
+tags:
+  - mcp
+  - ai
+  - javascript
+  - tooling
+  - interview
+---
+
+<Term id="mcp">MCP</Term> (Model Context Protocol) is an open standard so an AI app can **discover** and **use** capabilities that live in *other* programs — files, APIs, databases, your company’s CLI — without a one-off plugin for Cursor, another for Claude Desktop, another for a custom agent.
+
+The analogy that stuck is USB-C: the **cable** is the protocol. The **laptop** is the host. The **drive** is the server. Swap the drive; the laptop still speaks the same language.
+
+Dotted, sky-colored words are glossary terms. Each one is also a **link** to a short page with an example.
+
+## What MCP is (and is not)
+
+**MCP is a conversation format.** Messages are <Term id="json-rpc">JSON-RPC 2.0</Term>: a `method`, `params`, and an `id` to match the reply. On top of that, the spec names *who* talks, *what* a server may offer, and *how* bytes move (stdio or HTTP).
+
+**MCP is not:**
+
+- A language model. The model stays in the <Term id="mcp-host">host</Term>.
+- A replacement for REST in your product’s own UI. Humans still hit HTTP. Agents hit MCP (which may *call* HTTP internally).
+- Automatic trust. A server that can write files or send email is as dangerous as giving the model a shell. The host should ask before side effects.
+
+If you only needed “the model can call `fetch`,” you would not need MCP. You need it when **many hosts** should plug into **many servers** without each pair inventing a schema.
+
+## Three roles
+
+| Role | What it is | Example |
+| --- | --- | --- |
+| **Host** | The app the human uses. Owns the model, UI, secrets policy, which servers start. | Cursor, Claude Desktop |
+| **Client** | One connector *inside* the host, talking to **one** server. | “the filesystem session” |
+| **Server** | A process or HTTP service that exposes tools / resources / prompts. Does **not** run the LLM. | `@modelcontextprotocol/server-filesystem` |
+
+```txt
+Human
+  └─ Host (Cursor)
+        ├─ Model
+        ├─ MCP client ──stdio──► filesystem server
+        └─ MCP client ──HTTP──► GitHub MCP server
+```
+
+A host often runs **several** <Term id="mcp-client">clients</Term> at once. Isolation is the point: a crash or a bad tool in one server should not take down the others.
+
+## The three primitives
+
+A <Term id="mcp-server">server</Term> may implement any mix of these. Most “useful” servers start with tools.
+
+### Tools (actions)
+
+A <Term id="mcp-tool">tool</Term> is a named function plus a JSON Schema for arguments. The model *chooses* to call it. Results come back as content (usually text) in the next model turn.
+
+| Method | Job |
+| --- | --- |
+| `tools/list` | Names, descriptions, `inputSchema` |
+| `tools/call` | Run one tool with `arguments` |
+
+Use tools for **anything with a verb**: search, create issue, run tests, query SQL.
+
+### Resources (read-only blobs)
+
+A <Term id="mcp-resource">resource</Term> has a URI. The host or user *attaches* it. The model does not “execute” it.
+
+| Method | Job |
+| --- | --- |
+| `resources/list` | Catalog |
+| `resources/read` | Bytes / text for one URI |
+
+Use resources for **context that should not have side effects**: a schema dump, a design doc, a log file.
+
+### Prompts (templates)
+
+A <Term id="mcp-prompt">prompt</Term> is a slash-command-shaped template. The **user** (or a host menu) picks it; the server returns messages to send to the model.
+
+| Method | Job |
+| --- | --- |
+| `prompts/list` | Catalog |
+| `prompts/get` | Fill arguments, return messages |
+
+Use prompts for **repeatable workflows** (“review this PR”, “explain this error”). Do not fake a prompt that secretly mutates production — that is a tool, and it needs approval.
+
+## How a call actually happens
+
+Ignore transports for a moment. The loop is always:
+
+1. Host starts or connects to the server.
+2. Client and server **negotiate** (`initialize`): protocol version + capabilities (“I have tools”, “I can subscribe to resource changes”, …).
+3. Client calls `tools/list` (and maybe `resources/list`).
+4. Host turns that list into **model-facing tool definitions**.
+5. The model emits a tool call: `{ name: "get_issue", arguments: { number: 42 } }`.
+6. Host may **ask the user** (especially for writes).
+7. Client sends `tools/call`. Server returns `content` (and `isError` if it failed).
+8. Host appends that to the conversation; the model continues.
+
+The model never speaks JSON-RPC. It speaks whatever tool format the host uses (OpenAI tools, Anthropic tools, …). **The client is the adapter.**
+
+## JSON-RPC on the wire
+
+A request:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "get_time",
+    "arguments": { "timezone": "UTC" }
+  }
+}
+```
+
+A success:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [
+      { "type": "text", "text": "2026-08-14T04:30:00Z" }
+    ]
+  }
+}
+```
+
+A **notification** has no `id` (the other side must not reply). Servers use notifications such as `notifications/tools/list_changed` so the host re-lists tools after a config change.
+
+Errors use JSON-RPC `error` objects (`code`, `message`). Tool *business* failures are often still a `result` with `isError: true` so the model can read the message and retry.
+
+## Transports
+
+Same JSON-RPC, different pipes.
+
+### stdio (local)
+
+The host **spawns** a process and writes JSON messages on stdin, reads them on stdout. Stderr is for logs, not protocol.
+
+Typical Cursor / Claude config:
+
+```json
+{
+  "mcpServers": {
+    "time": {
+      "command": "node",
+      "args": ["./mcp/time-server.mjs"]
+    }
+  }
+}
+```
+
+**Use when:** the server needs the user’s machine (filesystem, local Docker, a CLI already logged in). One user, one process.
+
+### Streamable HTTP (remote)
+
+The client POSTs JSON-RPC to an HTTPS endpoint. The server may respond with a single JSON body or a stream (SSE) for long work. Specs in 2025 used an explicit session (`Mcp-Session-Id`) after `initialize`. The **2026-07-28** spec pushes **stateless** requests: each POST can stand alone, with headers such as `Mcp-Protocol-Version`, `Mcp-Method`, and `Mcp-Name` so gateways can route without parsing the body.
+
+**Use when:** many users share one server (SaaS, company API). Put OAuth or a gateway in front. Do not hang a privileged stdio server on the public internet.
+
+Older docs mention a dedicated **SSE** transport. Treat Streamable HTTP as the remote default unless you are maintaining a 2024-era server.
+
+## Tiny server example
+
+A stdio server with one tool. Sketch, not a full SDK dump — official packages move (`@modelcontextprotocol/sdk` vs `@modelcontextprotocol/server` 2.x for 2026).
+
+```js
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
+
+const server = new McpServer({ name: "time", version: "1.0.0" });
+
+server.tool(
+  "get_time",
+  "Current time in a timezone (IANA name, e.g. UTC or Asia/Kolkata)",
+  { timezone: z.string() },
+  async ({ timezone }) => {
+    const text = new Intl.DateTimeFormat("en-GB", {
+      timeZone: timezone,
+      dateStyle: "full",
+      timeStyle: "long",
+    }).format(new Date());
+    return { content: [{ type: "text", text }] };
+  },
+);
+
+const transport = new StdioServerTransport();
+await server.connect(transport);
+```
+
+What the model sees after `tools/list` is roughly: *name `get_time`, argument `timezone` string.* It does not see your `Intl` code.
+
+A `tools/call` the host might send after the model picks IST:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 7,
+  "method": "tools/call",
+  "params": {
+    "name": "get_time",
+    "arguments": { "timezone": "Asia/Kolkata" }
+  }
+}
+```
+
+## Host config example (Cursor)
+
+Cursor reads MCP servers from project or user config (often `.cursor/mcp.json` or Cursor Settings → MCP). Shape:
+
+```json
+{
+  "mcpServers": {
+    "time": {
+      "command": "node",
+      "args": ["./mcp/time-server.mjs"]
+    },
+    "docs": {
+      "url": "https://mcp.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:DOCS_MCP_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+- **command / args / env** — stdio. The host spawns it when the workspace opens.
+- **url** — remote HTTP. The host does not spawn a process.
+- Put **secrets in env**, not in the JSON you commit. This repo does not ship MCP servers; this is the pattern, not a file you must add here.
+
+After connect, open the host’s MCP panel: you should see `get_time` (or whatever `tools/list` returned). If the server is missing, the process crashed — logs are on **stderr**, which is easy to accidentally write JSON to. **Never `console.log` protocol on stdout** in a stdio server.
+
+## Capabilities and notifications
+
+`initialize` is not small talk. Each side sends a `capabilities` object. If the server does not advertise `tools`, the client must not call `tools/list`. If it advertises `tools.listChanged`, the client should listen for `notifications/tools/list_changed` instead of polling.
+
+Other capability families you will see in docs:
+
+- **Sampling** — the *server* asks the *host* to run the model (rare; needs a careful host).
+- **Roots** — the host tells the server which directories are in play (`file://` roots).
+- **Elicitation** — the server asks the host to collect structured input from the user mid-call.
+- **Tasks / MCP Apps** — 2026 **extensions**: long-running work with a handle; optional HTML UI in a sandbox. Opt-in on both sides.
+
+Read the date on the spec (`2024-11-05`, `2025-03-26`, `2025-11-25`, `2026-07-28`). SDKs and hosts lag. Interoperability is “we both speak a version,” not “I copied a blog from last year.”
+
+## Security, in practice
+
+MCP makes it **easy** to give a model a powerful API. Treat a new server like a new dependency with network and disk.
+
+1. **Least privilege.** A filesystem server should see one project folder, not `$HOME`.
+2. **Approval on writes.** Hosts should confirm `tools/call` that mutate. Users should not click through blindly.
+3. **Confused deputy.** A malicious prompt can ask the model to call `send_email` or `run_sql`. Tool *descriptions* are also prompt injection surface — they go into the model context.
+4. **Supply chain.** `npx -y some-mcp-server` is executing arbitrary code as you. Pin versions; prefer packages you read.
+5. **Remote auth.** HTTP servers need real auth (OAuth, gateway). A public URL with no auth is a public tool for anyone who finds it.
+6. **Logging.** Do not log secrets from `arguments`. Do not print JSON-RPC to stdout on stdio.
+
+## What readers should remember
+
+- **Host / client / server** — three nouns. The model lives in the host.
+- **Tools vs resources vs prompts** — verb / blob / template.
+- **JSON-RPC** — `method` + `id`; notifications have no `id`.
+- **stdio vs HTTP** — laptop vs shared service.
+- **List, then call** — discovery is part of the protocol, not a README.
+- **Stdout is sacred** on stdio. Logs go to stderr.
+- **Version the spec** when you debug “it works in Claude but not in Cursor.”
+
+## Interview questions
+
+Open a question to see a sample answer. Short version first.
+
+<details>
+<summary>What is MCP, in one paragraph?</summary>
+
+Model Context Protocol is an open JSON-RPC standard that lets AI applications (hosts) talk to external programs (servers) in a uniform way. Servers advertise tools, resources, and prompts; the host’s MCP client lists them, the model chooses a tool, the client calls it, and the result is fed back as context. It replaces per-app plugins with one protocol.
+
+</details>
+
+<details>
+<summary>Host vs client vs server?</summary>
+
+The host is the product (Cursor). A client is the host’s connection to <em>one</em> server. The server exposes capabilities and never runs the LLM. One host, many clients, many servers.
+
+</details>
+
+<details>
+<summary>Tools vs resources vs prompts?</summary>
+
+Tools are functions the model can invoke (side effects allowed). Resources are read-only URIs the host attaches as context. Prompts are named templates the user (or UI) fills to start a conversation. Mixing them up is the usual design smell: a “resource” that deletes rows should have been a tool.
+
+</details>
+
+<details>
+<summary>Why JSON-RPC instead of REST?</summary>
+
+MCP needs request/response, notifications, and a small set of well-known methods (`initialize`, `tools/call`) that every host implements. JSON-RPC maps onto stdio <em>and</em> HTTP without inventing a new verb per capability. REST is fine <em>inside</em> a server that wraps your API; the host still speaks MCP to that server.
+
+</details>
+
+<details>
+<summary>stdio vs Streamable HTTP?</summary>
+
+stdio: the host spawns a local process; one user; good for files and CLIs. Streamable HTTP: a remote URL; many users; needs TLS and auth. 2025 HTTP often kept a session id; 2026-07-28 prefers self-contained requests plus routing headers (`Mcp-Method`, `Mcp-Name`). Same JSON-RPC body either way.
+
+</details>
+
+<details>
+<summary>Walk through a tool call from the model’s point of view.</summary>
+
+After connect, the host puts tool schemas in the model’s tool list. The model outputs a structured call (name + arguments). The host may prompt the user. The MCP client sends <code>tools/call</code>. The server returns <code>content</code>. The host adds that as a tool result message. The model’s next tokens can quote it or call another tool. The model never sees stdin/stdout.
+
+</details>
+
+<details>
+<summary>What goes wrong with stdio servers in real life?</summary>
+
+Logging on stdout corrupts the stream. The process exits because of a missing env var and the host shows “disconnected.” Unbounded tools (`rm`, shell) with auto-approve. <code>npx</code> pulling a different major. Windows path / quoting in <code>args</code>. Fix: stderr logs, pinned versions, tight roots, approvals.
+
+</details>
+
+<details>
+<summary>How do you keep MCP servers from becoming a security hole?</summary>
+
+Scope filesystem roots; require confirmation on mutating tools; treat tool descriptions as untrusted text; pin server packages; authenticate HTTP; never commit tokens in mcp.json. Prompt injection can request a dangerous tool — the protocol will happily call it if the host allows it.
+
+</details>
+
+<details>
+<summary>Does every AI app need MCP?</summary>
+
+No. A single product with one internal tool API can stay on function calling. MCP pays off when you want the <em>same</em> server in several hosts, or you want users to bring their own servers. It is an interoperability layer, not a requirement to use an LLM.
+
+</details>

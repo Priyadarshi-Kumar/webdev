@@ -1,0 +1,23 @@
+---
+title: What is an MCP client?
+description: The connector inside a host that speaks MCP to one server.
+slug: mcp-client
+date: 2026-08-14
+tags:
+  - glossary
+  - mcp
+  - ai
+---
+
+An **MCP client** is a session (or, on newer HTTP transports, a request pipeline) from the [host](/blog/mcp-host) to **one** [server](/blog/mcp-server). The host usually runs **one client per server**.
+
+It sends JSON-RPC methods such as `initialize`, `tools/list`, and `tools/call`, and turns the replies into something the model can use (tool definitions, file text, errors).
+
+```txt
+Host
+ ├─ client → filesystem server (stdio)
+ ├─ client → GitHub server (HTTP)
+ └─ client → your company’s API server (HTTP)
+```
+
+Related: [JSON-RPC](/blog/json-rpc), [MCP in depth](/blog/model-context-protocol).
