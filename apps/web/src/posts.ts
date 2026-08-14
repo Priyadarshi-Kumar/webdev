@@ -23,8 +23,14 @@ export function getPost(slug: string): Post | undefined {
   return getAllPosts().find((post) => post.slug === slug);
 }
 
+export function getNotePosts(): Post[] {
+  return getAllPosts().filter((post) => !post.tags?.includes("glossary"));
+}
+
+export function getNotesCount(): number {
+  return getNotePosts().length;
+}
+
 export function getLatestPosts(count = 3): Post[] {
-  return getAllPosts()
-    .filter((post) => !post.tags?.includes("glossary"))
-    .slice(0, count);
+  return getNotePosts().slice(0, count);
 }

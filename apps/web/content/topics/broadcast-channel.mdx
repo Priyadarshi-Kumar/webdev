@@ -1,0 +1,271 @@
+---
+title: Broadcast Channel API
+description: How same-origin tabs, windows, and workers talk to each other with a named channel — API surface, when to use it, React patterns, and interview questions with answers.
+slug: broadcast-channel
+date: 2026-08-14
+tags:
+  - javascript
+  - browser
+  - web-apis
+  - interview
+---
+
+The **Broadcast Channel API** lets browsing contexts on the **same origin** send each other messages through a **named channel**. Open two tabs on `https://example.com`, join `"cart-updates"`, and either side can `postMessage` — every other listener on that channel gets the event.
+
+No `window.opener`. No `postMessage` target window. No polling `localStorage`. One string name, one event handler.
+
+## What it is (and is not)
+
+**Broadcast Channel is a pub/sub bus scoped to one origin and one channel name.** Any `Window`, `Worker`, or `SharedWorker` on `https://mysite.com` can:
+
+1. `new BroadcastChannel("theme")`
+2. `channel.postMessage({ type: "SET", value: "dark" })`
+3. `channel.onmessage = (event) => { … }`
+4. `channel.close()` when done
+
+Every other context that opened the **same name** on the **same origin** receives the message. Different channel names are isolated. `https://a.com` and `https://b.com` never see each other’s traffic.
+
+**Broadcast Channel is not:**
+
+- Cross-origin messaging. Use `postMessage` with an explicit `targetOrigin`, or a server.
+- Guaranteed delivery to a *specific* tab. It is broadcast — all subscribers get it. Pick a tab with `postMessage` if you need a point-to-point reply.
+- Persistent storage. Close every tab and the channel is gone. Use `localStorage`, IndexedDB, or a server for durability.
+- A replacement for WebSockets when the server must push data. This API is **browser-to-browser** on one machine.
+
+If you only need one tab to tell an iframe it opened, `postMessage` is simpler. If every open tab should hear “user logged out” or “cart changed,” Broadcast Channel is the clean fit.
+
+## API surface
+
+| Member | What it does |
+| --- | --- |
+| `new BroadcastChannel(name)` | Join (or create) a channel. `name` is a string; same origin + same name = same bus. |
+| `postMessage(data)` | Send `data` to every other listener on this channel. Uses the [structured clone algorithm](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm). |
+| `onmessage` / `addEventListener("message", …)` | Receive messages. `event.data` is the cloned payload. |
+| `onmessageerror` | Fires when deserialization fails (rare with structured clone). |
+| `close()` | Leave the channel. No more sends or receives. Call this on unmount. |
+
+There is no `broadcast` static method — you always instantiate with `new`.
+
+### Minimal two-tab example
+
+**Tab A** (or a `<script>` in the page):
+
+```js
+const channel = new BroadcastChannel("demo");
+
+channel.onmessage = (event) => {
+  console.log("Tab A received:", event.data);
+};
+
+channel.postMessage({ hello: "from tab A" });
+```
+
+**Tab B** (same origin, same channel name):
+
+```js
+const channel = new BroadcastChannel("demo");
+
+channel.onmessage = (event) => {
+  console.log("Tab B received:", event.data);
+};
+
+channel.postMessage({ hello: "from tab B" });
+```
+
+Open both tabs. Each `postMessage` logs in the **other** tab (and in any additional tabs on that channel). The sender does not receive its own message unless you also handle it locally.
+
+## What you can send
+
+`postMessage` accepts anything **structured-cloneable**:
+
+- Primitives, plain objects, arrays, `Date`, `Map`, `Set`, `ArrayBuffer`, typed arrays
+- `Error` (in modern browsers)
+
+You **cannot** send functions, DOM nodes, or symbols. Clone large objects carefully — every listener gets a full copy.
+
+```js
+const channel = new BroadcastChannel("inventory");
+
+channel.postMessage({
+  type: "STOCK_UPDATE",
+  sku: "widget-42",
+  qty: 7,
+  at: new Date().toISOString(),
+});
+```
+
+Use a `type` field (or a small discriminated union in TypeScript) so receivers can switch on intent.
+
+## Common patterns
+
+### Log out everywhere
+
+When the user signs out in one tab, every other tab should clear session state and redirect to `/login`.
+
+```js
+const auth = new BroadcastChannel("auth");
+
+function logout() {
+  clearSessionStorage();
+  auth.postMessage({ type: "LOGOUT" });
+  window.location.href = "/login";
+}
+
+auth.onmessage = (event) => {
+  if (event.data?.type === "LOGOUT") {
+    clearSessionStorage();
+    window.location.href = "/login";
+  }
+};
+```
+
+### Keep UI in sync (theme, cart, draft text)
+
+Theme is a good fit: one tab toggles dark mode, others follow without reloading.
+
+```js
+const theme = new BroadcastChannel("theme");
+
+export function setTheme(mode) {
+  document.documentElement.dataset.theme = mode;
+  localStorage.setItem("theme", mode);
+  theme.postMessage({ type: "SET", mode });
+}
+
+theme.onmessage = (event) => {
+  if (event.data?.type === "SET") {
+    document.documentElement.dataset.theme = event.data.mode;
+    localStorage.setItem("theme", event.data.mode);
+  }
+};
+```
+
+Write to `localStorage` **and** broadcast so a tab opened later still reads storage, while open tabs update instantly.
+
+### Workers join the same channel
+
+A dedicated worker can participate — useful when heavy work runs off the main thread but tabs still need the result.
+
+```js
+// main.js
+const channel = new BroadcastChannel("jobs");
+channel.onmessage = (e) => renderProgress(e.data);
+
+// worker.js
+const channel = new BroadcastChannel("jobs");
+self.onmessage = (e) => {
+  channel.postMessage({ step: "done", id: e.data.id });
+};
+```
+
+Same API in both places. The worker does not need to know which tab exists.
+
+## React hook
+
+Wrap the channel in a hook so components subscribe and clean up on unmount.
+
+```tsx
+import { useEffect, useRef, useCallback } from "react";
+
+type Message = { type: "SET_THEME"; mode: "light" | "dark" };
+
+export function useBroadcastChannel(
+  name: string,
+  onMessage: (data: Message) => void,
+) {
+  const handler = useRef(onMessage);
+  handler.current = onMessage;
+
+  useEffect(() => {
+    const channel = new BroadcastChannel(name);
+    channel.onmessage = (event) => handler.current(event.data);
+    return () => channel.close();
+  }, [name]);
+
+  const post = useCallback(
+    (data: Message) => {
+      const channel = new BroadcastChannel(name);
+      channel.postMessage(data);
+      channel.close();
+    },
+    [name],
+  );
+
+  return post;
+}
+```
+
+```tsx
+function ThemeToggle() {
+  const broadcast = useBroadcastChannel("theme", (msg) => {
+    if (msg.type === "SET_THEME") applyTheme(msg.mode);
+  });
+
+  return (
+    <button
+      onClick={() => {
+        const mode = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+        applyTheme(mode);
+        broadcast({ type: "SET_THEME", mode });
+      }}
+    >
+      Toggle theme
+    </button>
+  );
+}
+```
+
+For a long-lived sender, keep one `BroadcastChannel` in a ref instead of opening and closing per `postMessage`. The pattern above avoids leaking channels when many components might send occasionally.
+
+## Compared to other options
+
+| Approach | Same-origin tabs | Cross-origin | Server needed | Notes |
+| --- | --- | --- | --- | --- |
+| **Broadcast Channel** | Yes | No | No | Named bus; all subscribers hear every message |
+| **`window.postMessage`** | Yes (with a `Window` reference) | Yes (with `targetOrigin`) | No | Point-to-point; you must hold the other window |
+| **`storage` event** | Yes | No | No | Only fires when `localStorage` / `sessionStorage` **changes** in *another* tab; awkward API |
+| **SharedWorker** | Yes | No | No | One shared JS context; heavier setup |
+| **WebSocket / SSE** | Yes | Yes | Yes | Server pushes to all clients, including other devices |
+
+Reach for Broadcast Channel when the message is **ephemeral** and **every tab on the site** should hear it. Reach for `postMessage` when you opened a popup and need a direct reply. Reach for the server when devices or origins differ.
+
+## Pitfalls
+
+1. **Forget `close()`** — Leaks listeners in SPAs that mount/unmount often. Always close in a `useEffect` cleanup (or `beforeunload` if you opened globally).
+2. **Same name, different meanings** — `"updates"` in one feature and another will collide. Prefix channel names: `"app:auth"`, `"app:cart"`.
+3. **No acknowledgment** — Broadcast is fire-and-forget. If tab B must confirm, send a second message on another channel or use `postMessage` back to `event.source` (not available on Broadcast Channel — use a request/response channel pair).
+4. **SSR** — `BroadcastChannel` exists only in the browser. Guard with `typeof BroadcastChannel !== "undefined"` or run inside `useEffect`.
+5. **Safari & older browsers** — Widely available in current Chrome, Firefox, Edge, and Safari (15+). Feature-detect and fall back to `storage` events or `localStorage` polling if you must support very old engines.
+
+```js
+function createChannel(name) {
+  if (typeof BroadcastChannel === "undefined") return null;
+  return new BroadcastChannel(name);
+}
+```
+
+## Interview questions
+
+### What problem does Broadcast Channel solve?
+
+It gives same-origin tabs, windows, iframes, and workers a **simple named message bus** without holding `Window` references or abusing `localStorage` events.
+
+### Does the sender receive its own message?
+
+**No.** Only *other* contexts on the channel get `message` events. Apply local state yourself if the sender’s UI should update.
+
+### How is it different from `postMessage`?
+
+`postMessage` targets one `Window` (or worker) you already have a handle to, and can be cross-origin with a strict `targetOrigin`. Broadcast Channel targets **every listener** on a channel name within one origin — no window reference required.
+
+### What happens when all tabs close?
+
+The channel ceases to exist. There is no server-side queue. New tabs start fresh unless you also persist to storage or fetch from an API.
+
+### Can two channel names on the same page talk to each other?
+
+Only if **your code** forwards messages. `"cart"` and `"auth"` are separate buses. That isolation is a feature — use explicit names and optional bridge logic if needed.
+
+---
+
+**Related:** [React Hooks, by version](/blog/react-hooks) (effects and cleanup), [custom hook](/blog/custom-hook) (extracting `useBroadcastChannel`).

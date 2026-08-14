@@ -4,7 +4,15 @@ import type { PostFrontmatter, ToolMeta } from "@webdev/types";
 import { projects } from "../portfolio/data";
 import { SITE, getSiteUrl } from "./config";
 
-export function HomePage({ posts, tools }: { posts: PostFrontmatter[]; tools: ToolMeta[] }) {
+export function HomePage({
+  posts,
+  notesCount,
+  tools,
+}: {
+  posts: PostFrontmatter[];
+  notesCount: number;
+  tools: ToolMeta[];
+}) {
   const selectedWork = projects.slice(0, 2);
 
   return (
@@ -57,7 +65,7 @@ export function HomePage({ posts, tools }: { posts: PostFrontmatter[]; tools: To
 
       <section className="grid gap-3 border-t border-zinc-200 py-10 sm:grid-cols-3 dark:border-white/10">
         {[
-          { label: "Notes", value: String(posts.length) },
+          { label: "Notes", value: String(notesCount) },
           { label: "Focus", value: "React & TS" },
           { label: "Tools", value: String(tools.length) },
         ].map((item) => (
