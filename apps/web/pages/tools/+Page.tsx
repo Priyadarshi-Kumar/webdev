@@ -5,9 +5,10 @@ export default function Page() {
   return (
     <section>
       <Eyebrow>Tools</Eyebrow>
-      <h1 className="page-title">Browser utilities</h1>
+      <h1 className="page-title">Free developer tools</h1>
       <p className="page-lead">
-        Small converters that run on your machine. Paste data, get a result — nothing is sent to a server.
+        Small converters that run on your machine — JSON, Base64, JWT, UUID, regex, timestamps, and more.
+        Paste data, get a result. Nothing is sent to a server.
       </p>
       <div className="mt-10 grid gap-4 sm:grid-cols-2">
         {tools.map((tool) => (

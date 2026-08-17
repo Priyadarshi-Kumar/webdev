@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,6 +15,15 @@ function postSlugs() {
     });
 }
 
+function toolSlugs() {
+  const toolsDir = path.join(root, "dist/client/tools");
+  if (!existsSync(toolsDir)) return ["json"];
+  return readdirSync(toolsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+}
+
 const paths = [
   "/",
   "/portfolio",
@@ -24,7 +33,7 @@ const paths = [
   "/blog",
   ...postSlugs().map((slug) => `/blog/${slug}`),
   "/tools",
-  "/tools/json",
+  ...toolSlugs().map((slug) => `/tools/${slug}`),
 ];
 
 const xml = `<?xml version="1.0" encoding="UTF-8"?>
