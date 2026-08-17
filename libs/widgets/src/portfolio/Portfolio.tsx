@@ -74,7 +74,7 @@ export function ProjectListPage() {
     <section>
       <Eyebrow>Portfolio</Eyebrow>
       <h1 className="page-title">Projects</h1>
-      <p className="page-lead">Selected work. Edit the data file to replace these placeholders.</p>
+      <p className="page-lead">Selected work — shipped apps, experiments, and the platform you are browsing now.</p>
       <div className="mt-8 grid gap-4 md:grid-cols-2">
         {projects.map((project) => (
           <Card key={project.slug} href={`/portfolio/projects/${project.slug}`}>

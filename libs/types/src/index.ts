@@ -23,10 +23,19 @@ export type Experience = {
   detail: string;
 };
 
+export type SkillGroup = {
+  label: string;
+  skills: string[];
+};
+
 export type Profile = {
   name: string;
   location: string;
+  headline: string;
+  availability: string;
   bio: string[];
+  highlights: string[];
+  skillGroups: SkillGroup[];
   stack: string[];
   experience: Experience[];
 };

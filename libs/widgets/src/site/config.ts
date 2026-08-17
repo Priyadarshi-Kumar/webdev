@@ -3,14 +3,15 @@ import type { Site } from "@webdev/types";
 export const SITE: Site = {
   name: "Priyadarshi Kumar",
   shortName: "PK",
-  role: "Software engineer",
-  tagline: "I write down the web-platform things I keep re-learning — and ship the small tools I wish existed.",
+  role: "Full-stack React & TypeScript engineer",
+  tagline:
+    "I ship React products end to end — typed UI, solid state, clean architecture — and I write down how so your team can move faster.",
   description:
-    "Engineer writing practical notes on React, TypeScript, and tooling. Portfolio, tech blog, and browser utilities.",
+    "Priyadarshi Kumar — full-stack React & TypeScript engineer in India, open to remote. Portfolio, technical writing, and proof-of-work projects.",
   email: "hello@priyadarshikumar.dev",
   url: "http://localhost:3000",
   socials: {
-    github: "https://github.com/priyadarshi-kumar",
+    github: "https://github.com/Priyadarshi-Kumar",
     linkedin: "https://www.linkedin.com/in/priyadarshikumar",
   },
 };
