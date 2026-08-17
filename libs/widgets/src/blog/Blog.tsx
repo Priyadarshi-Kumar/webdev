@@ -39,9 +39,14 @@ function SubjectGroups({
   return (
     <>
       {groups.map((group) => (
-        <section key={group.id} className="mt-10 first:mt-0">
-          <Eyebrow>{group.label}</Eyebrow>
-          <ul className={listClassName ?? "mt-4 space-y-4"}>{group.posts.map((post) => renderPost(post))}</ul>
+        <section
+          key={group.id}
+          className="mt-10 grid grid-cols-1 gap-x-8 gap-y-4 first:mt-0 sm:grid-cols-[minmax(6.5rem,9.5rem)_1fr]"
+        >
+          <div className="sm:pt-0.5">
+            <Eyebrow>{group.label}</Eyebrow>
+          </div>
+          <ul className={listClassName ?? "space-y-4"}>{group.posts.map((post) => renderPost(post))}</ul>
         </section>
       ))}
     </>
@@ -201,7 +206,7 @@ export function BlogIndex({ posts }: { posts: PostFrontmatter[] }) {
           <div className="mt-8 space-y-10">
             <SubjectGroups
               groups={glossaryGroups}
-              listClassName="mt-4 grid gap-3 sm:grid-cols-2"
+              listClassName="grid gap-3 sm:grid-cols-2"
               renderPost={(post) => (
                 <li key={post.slug}>
                   <Card href={`/blog/${post.slug}`}>

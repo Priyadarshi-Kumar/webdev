@@ -10,8 +10,12 @@ describe("resolveSubject", () => {
     expect(resolveSubject(["browser", "web-apis", "javascript"])).toBe("browser");
   });
 
-  it("maps mcp tags to mcp", () => {
-    expect(resolveSubject(["mcp", "ai", "javascript"])).toBe("mcp");
+  it("maps llm tags to llm", () => {
+    expect(resolveSubject(["llm", "mcp", "ai", "javascript"])).toBe("llm");
+  });
+
+  it("maps mcp tags to llm", () => {
+    expect(resolveSubject(["mcp", "ai", "javascript"])).toBe("llm");
   });
 
   it("maps nx tags to nx", () => {
@@ -35,7 +39,7 @@ describe("groupPostsBySubject", () => {
       { slug: "c", tags: ["mcp", "ai"], title: "", description: "", date: "" },
     ]);
 
-    expect(groups.map((group) => group.id)).toEqual(["react", "mcp", "nx"]);
+    expect(groups.map((group) => group.id)).toEqual(["react", "llm", "nx"]);
     expect(groups[0]?.posts.map((post) => post.slug)).toEqual(["b"]);
   });
 });
