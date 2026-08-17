@@ -1,3 +1,4 @@
 import { SITE } from "@webdev/widgets/config";
+import { toolsIndexTitle } from "./seo";
 
-export default `Tools · ${SITE.name}`;
+export default toolsIndexTitle(SITE.name);

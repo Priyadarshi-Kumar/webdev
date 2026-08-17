@@ -8,13 +8,17 @@ export default function Page() {
   const ToolUi = toolUi[tool.slug];
 
   return (
-    <section>
+    <article itemScope itemType="https://schema.org/WebApplication">
       <Eyebrow>Tools</Eyebrow>
-      <h1 className="page-title">{tool.title}</h1>
-      <p className="page-lead">{tool.description}</p>
+      <h1 className="page-title" itemProp="name">
+        {tool.title}
+      </h1>
+      <p className="page-lead" itemProp="description">
+        {tool.description}
+      </p>
       <div className="mt-8">
         {ToolUi ? <ToolUi /> : <p className="text-zinc-500">This tool is not wired up yet.</p>}
       </div>
-    </section>
+    </article>
   );
 }
