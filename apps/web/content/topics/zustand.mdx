@@ -1,0 +1,494 @@
+---
+title: Zustand — state that scales with slices
+description: How Zustand works, when to pick it over Context or Redux, and a slice-based store layout that stays easy to extend as your app grows. Examples, TypeScript, middleware, and interview Q&A.
+slug: zustand
+date: 2026-08-17
+tags:
+  - react
+  - zustand
+  - state-management
+  - javascript
+  - interview
+---
+
+**Zustand** is a small state library for React (and vanilla JS). You create a store with `create`, read slices of it with hooks, and update it with `set`. No providers, no reducers, no action types — unless you want them.
+
+This site uses Zustand for theme (`libs/store/src/theme.ts`). Today that is one tiny store. The pattern below is how you grow to cart, auth, UI chrome, and feature flags without one 2,000-line file.
+
+## What Zustand is (and is not)
+
+**Zustand is an external store with a React hook.** State lives outside the component tree. Components subscribe to the pieces they need. When that piece changes, only those components re-render.
+
+```tsx
+import { create } from "zustand";
+
+type CounterState = {
+  count: number;
+  inc: () => void;
+};
+
+export const useCounterStore = create<CounterState>((set) => ({
+  count: 0,
+  inc: () => set((state) => ({ count: state.count + 1 })),
+}));
+```
+
+```tsx
+function Counter() {
+  const count = useCounterStore((state) => state.count);
+  const inc = useCounterStore((state) => state.inc);
+  return <button onClick={inc}>{count}</button>;
+}
+```
+
+**Zustand is not:**
+
+- A server cache. Use TanStack Query, SWR, or your framework’s data layer for fetched data.
+- A replacement for every `useState`. Local UI state (open/closed, hover) can stay in the component.
+- Redux. There is no single global reducer unless you build one. Slices are plain objects merged together.
+- Magic persistence. You opt in with the `persist` middleware.
+
+Reach for Zustand when **several unrelated components** need the same client state, or when state must be read **outside React** (router guards, imperative helpers, tests).
+
+## Core API
+
+| API | Job |
+| --- | --- |
+| `create(initializer)` | Build a store. Returns a hook (`useStore`) and the raw store API. |
+| `useStore(selector)` | Subscribe to `selector(state)`. Re-renders when the selected value changes (reference equality). |
+| `set(partial)` | Merge a partial update, or pass a function `(state) => partial`. |
+| `get()` | Read the current snapshot inside actions (no subscription). |
+| `subscribe(listener)` | Vanilla listener for non-React code. |
+
+### Selectors matter
+
+```tsx
+// Re-renders when ANY field on the store changes
+const state = useCounterStore();
+
+// Re-renders only when count changes
+const count = useCounterStore((s) => s.count);
+```
+
+If a selector returns a new object every time, you get extra renders:
+
+```tsx
+// Bad — new object every call
+const { count, inc } = useCounterStore((s) => ({ count: s.count, inc: s.inc }));
+
+// Better — two narrow subscriptions, or useShallow (see below)
+const count = useCounterStore((s) => s.count);
+const inc = useCounterStore((s) => s.inc);
+```
+
+```tsx
+import { useShallow } from "zustand/react/shallow";
+
+const { count, inc } = useCounterStore(
+  useShallow((s) => ({ count: s.count, inc: s.inc })),
+);
+```
+
+### Actions and `get`
+
+Actions are just functions on the store. Use `get()` when the next state depends on the current one and you are not inside a functional `set`:
+
+```tsx
+toggle: () => {
+  const next = get().theme === "dark" ? "light" : "dark";
+  set({ theme: next });
+},
+```
+
+This is exactly how `useThemeStore` works in `libs/store`.
+
+## Zustand vs Context vs Redux
+
+| | Zustand | React Context | Redux Toolkit |
+| --- | --- | --- | --- |
+| Boilerplate | Low | Medium (provider + value memoization) | Higher |
+| Re-renders | Only selector subscribers | Often whole subtree | Selector + middleware |
+| DevTools | Optional middleware | React DevTools only | First-class |
+| Outside React | `getState`, `subscribe` | Awkward | `store.getState()` |
+| Learning curve | Small | Built-in | Steeper |
+
+**Context** is fine for theme, locale, or auth that changes rarely — if you memoize the value. It becomes painful when one context holds fast-changing data and dozens of components only need one field.
+
+**Redux** still wins when you want strict action logs, time-travel, large teams standardizing on one pattern, or complex middleware chains.
+
+**Zustand** sits in the middle: minimal API, scales with slices, easy to test.
+
+Under the hood, Zustand’s React bindings use <Term id="react-hook">hooks</Term> built on `useSyncExternalStore` — the same primitive React documents for subscribing to external stores without tearing.
+
+## The problem with one big store
+
+A single `create` call works until it does not:
+
+```tsx
+// Do not grow this file forever
+export const useAppStore = create((set, get) => ({
+  theme: "dark",
+  setTheme: (t) => set({ theme: t }),
+  cart: [],
+  addToCart: (item) => set({ cart: [...get().cart, item] }),
+  user: null,
+  login: async (email) => { /* ... */ },
+  sidebarOpen: false,
+  toggleSidebar: () => set({ sidebarOpen: !get().sidebarOpen }),
+  // 40 more fields...
+}));
+```
+
+Problems:
+
+1. **Merge conflicts** — every feature touches the same file.
+2. **Unclear ownership** — who maintains cart vs auth?
+3. **Testing** — hard to mount an isolated slice.
+4. **Bundle size** — importing the hook pulls the whole shape into TypeScript’s graph (runtime is still one store if you merge).
+
+The fix is **slices**: one module per domain, combined into one store (or a few stores).
+
+## Slice architecture
+
+A **slice** is a function that returns a piece of state + actions. TypeScript types each slice. A root file merges them.
+
+### Folder layout
+
+```txt
+libs/store/src/
+  index.ts              # public exports
+  create-app-store.ts   # merge + middleware
+  slices/
+    theme-slice.ts
+    cart-slice.ts
+    auth-slice.ts
+    ui-slice.ts
+  selectors/
+    cart-selectors.ts   # optional derived selectors
+```
+
+Rules that keep this maintainable:
+
+- **One slice = one domain** (theme, cart, session). Not “everything for the checkout page.”
+- **Slices do not import each other.** Cross-slice work happens in the root store or thin orchestration helpers.
+- **Export hooks from `index.ts`**, not every slice file — so app code has one front door.
+- **Colocate types** with the slice (`CartSlice`, `AuthSlice`).
+
+### Define a slice
+
+```ts
+// slices/theme-slice.ts
+import type { StateCreator } from "zustand";
+import type { Theme } from "@webdev/types";
+
+export type ThemeSlice = {
+  theme: Theme;
+  setTheme: (theme: Theme) => void;
+  toggleTheme: () => void;
+};
+
+export const createThemeSlice: StateCreator<ThemeSlice, [], [], ThemeSlice> = (set, get) => ({
+  theme: "dark",
+  setTheme: (theme) => set({ theme }),
+  toggleTheme: () => {
+    const theme = get().theme === "dark" ? "light" : "dark";
+    set({ theme });
+  },
+});
+```
+
+```ts
+// slices/cart-slice.ts
+import type { StateCreator } from "zustand";
+
+export type CartItem = { id: string; qty: number };
+
+export type CartSlice = {
+  items: CartItem[];
+  addItem: (id: string) => void;
+  removeItem: (id: string) => void;
+  clearCart: () => void;
+};
+
+export const createCartSlice: StateCreator<CartSlice, [], [], CartSlice> = (set) => ({
+  items: [],
+  addItem: (id) =>
+    set((state) => {
+      const existing = state.items.find((item) => item.id === id);
+      if (existing) {
+        return {
+          items: state.items.map((item) =>
+            item.id === id ? { ...item, qty: item.qty + 1 } : item,
+          ),
+        };
+      }
+      return { items: [...state.items, { id, qty: 1 }] };
+    }),
+  removeItem: (id) => set((state) => ({ items: state.items.filter((item) => item.id !== id) })),
+  clearCart: () => set({ items: [] }),
+});
+```
+
+### Merge slices into one store
+
+```ts
+// create-app-store.ts
+import { create } from "zustand";
+import { createCartSlice, type CartSlice } from "./slices/cart-slice";
+import { createThemeSlice, type ThemeSlice } from "./slices/theme-slice";
+
+export type AppStore = ThemeSlice & CartSlice;
+
+export const useAppStore = create<AppStore>()((...args) => ({
+  ...createThemeSlice(...args),
+  ...createCartSlice(...args),
+}));
+```
+
+```ts
+// index.ts
+export { useAppStore, type AppStore } from "./create-app-store";
+export type { CartItem } from "./slices/cart-slice";
+```
+
+Components import one hook:
+
+```tsx
+const theme = useAppStore((s) => s.theme);
+const addItem = useAppStore((s) => s.addItem);
+```
+
+### Typed slice factories (full store in the type)
+
+When slices need to call each other, type the full store once:
+
+```ts
+import type { StateCreator } from "zustand";
+
+export type AppStore = ThemeSlice & CartSlice & AuthSlice;
+
+type Slice<T> = StateCreator<AppStore, [], [], T>;
+
+export const createAuthSlice: Slice<AuthSlice> = (set, get) => ({
+  user: null,
+  logout: () => {
+    get().clearCart(); // cart action visible because AuthSlice is on AppStore
+    set({ user: null });
+  },
+});
+```
+
+Use cross-slice calls sparingly. Prefer **orchestration in the component** or a dedicated `session-actions.ts` that calls `useAppStore.getState()` so slices stay independent.
+
+```ts
+// session-actions.ts
+import { useAppStore } from "./create-app-store";
+
+export function logout() {
+  const { clearCart, setUser } = useAppStore.getState();
+  clearCart();
+  setUser(null);
+}
+```
+
+## Middleware at the root only
+
+Add `persist`, `devtools`, and `immer` once when you create the store — not inside each slice.
+
+```ts
+import { create } from "zustand";
+import { devtools, persist } from "zustand/middleware";
+import { createCartSlice, type CartSlice } from "./slices/cart-slice";
+import { createThemeSlice, type ThemeSlice } from "./slices/theme-slice";
+
+export type AppStore = ThemeSlice & CartSlice;
+
+export const useAppStore = create<AppStore>()(
+  devtools(
+    persist(
+      (...args) => ({
+        ...createThemeSlice(...args),
+        ...createCartSlice(...args),
+      }),
+      {
+        name: "app-store",
+        partialize: (state) => ({ theme: state.theme, items: state.items }),
+      },
+    ),
+    { name: "AppStore" },
+  ),
+);
+```
+
+`partialize` is important: do not persist volatile UI flags (`sidebarOpen`, `modalOpen`) or secrets.
+
+### Immer for nested updates
+
+```ts
+import { immer } from "zustand/middleware/immer";
+
+export const useAppStore = create<AppStore>()(
+  immer((...args) => ({
+    ...createCartSlice(...args),
+  })),
+);
+```
+
+```ts
+// inside a slice with Immer middleware enabled on the store
+updateQty: (id, qty) =>
+  set((state) => {
+    const item = state.items.find((i) => i.id === id);
+    if (item) item.qty = qty;
+  }),
+```
+
+## Growing the store without pain
+
+### 1. Add a slice file, wire it once
+
+New feature “notifications”:
+
+1. Create `slices/notifications-slice.ts`
+2. Add `NotificationsSlice` to `AppStore` intersection
+3. Spread `...createNotificationsSlice(...args)` in `create-app-store.ts`
+4. Export any public types from `index.ts`
+
+No changes to cart or theme slices.
+
+### 2. Optional: feature stores
+
+One giant `AppStore` is not mandatory. Split when domains are unrelated:
+
+```ts
+export const useCartStore = create<CartSlice>()(...);
+export const useAuthStore = create<AuthSlice>()(...);
+```
+
+Use multiple stores when:
+
+- Persistence keys differ
+- A feature is lazy-loaded and should not load cart code
+- Teams own separate packages in a <Term id="monorepo">monorepo</Term>
+
+Use one merged store when:
+
+- Actions routinely span domains (logout clears cart + UI)
+- You want one DevTools timeline
+
+This repo keeps `@webdev/store` as a library — widgets import it, pages do not configure it. That boundary matches Nx’s `libs/store` project.
+
+### 3. Selectors file for derived data
+
+Keep components dumb:
+
+```ts
+// selectors/cart-selectors.ts
+import type { AppStore } from "../create-app-store";
+
+export const selectCartCount = (s: AppStore) =>
+  s.items.reduce((sum, item) => sum + item.qty, 0);
+
+export const selectCartTotal = (s: AppStore, prices: Record<string, number>) =>
+  s.items.reduce((sum, item) => sum + (prices[item.id] ?? 0) * item.qty, 0);
+```
+
+```tsx
+const count = useAppStore(selectCartCount);
+```
+
+### 4. Vanilla access for non-React code
+
+```ts
+const theme = useAppStore.getState().theme;
+
+const unsub = useAppStore.subscribe(
+  (state) => state.theme,
+  (theme) => applyTheme(theme),
+);
+```
+
+Useful for Vike client hooks, router guards, or syncing to `document.documentElement` without a React effect in every layout.
+
+## This site today
+
+`libs/store/src/theme.ts` is a single-slice store in one file — appropriate for one concern:
+
+```ts
+export const useThemeStore = create<ThemeState>((set, get) => ({
+  theme: "dark",
+  setTheme: (theme) => {
+    applyTheme(theme);
+    set({ theme });
+  },
+  toggleTheme: () => {
+    const theme = get().theme === "dark" ? "light" : "dark";
+    applyTheme(theme);
+    set({ theme });
+  },
+}));
+```
+
+`ThemeToggle` selects narrow fields and hydrates from `localStorage` on mount. When a second concern appears (e.g. reader preferences, draft posts), extract `createThemeSlice`, add `create-app-store.ts`, and keep `useThemeStore` as a re-export alias so imports do not break:
+
+```ts
+export const useThemeStore = useAppStore;
+export const useTheme = () => useAppStore((s) => s.theme);
+```
+
+## Testing slices
+
+Slices are plain functions — test without React:
+
+```ts
+import { createStore } from "zustand/vanilla";
+import { createCartSlice } from "./cart-slice";
+
+it("adds items", () => {
+  const store = createStore(createCartSlice);
+  store.getState().addItem("sku-1");
+  expect(store.getState().items).toEqual([{ id: "sku-1", qty: 1 }]);
+});
+```
+
+For the merged store, reset between tests:
+
+```ts
+beforeEach(() => {
+  useAppStore.setState({ items: [], theme: "dark", user: null }, true);
+});
+```
+
+## Pitfalls
+
+1. **Storing server data** — Zustand will not refetch when the tab refocuses. Pair with a data library; use Zustand for UI and session client state.
+2. **Wide selectors** — `useStore((s) => s)` subscribes to everything. Narrow or use `useShallow`.
+3. **Mutating state without Immer** — `set({ items: state.items.push(x) })` mutates in place. Return new arrays/objects.
+4. **Persisting too much** — stale cart badges, open modals, and tokens in `localStorage` cause bugs. Use `partialize`.
+5. **Slice circular imports** — if `auth-slice` imports `cart-slice`, step back and use orchestration helpers.
+
+## Interview questions
+
+### Why Zustand over Context?
+
+Context re-renders consumers when the value identity changes. Zustand lets each component subscribe to a **slice** of external state, so unrelated updates do not re-render the tree.
+
+### What is a slice?
+
+A colocated bundle of state + actions for one domain, created by a `StateCreator` function and merged into a root store. It keeps large apps modular.
+
+### How do you persist only part of the store?
+
+Wrap the root `create` with `persist` and use `partialize: (state) => ({ ... })` to pick fields.
+
+### Can you use Zustand outside React?
+
+Yes. `store.getState()`, `store.setState()`, and `store.subscribe()` work in plain TS. The `useStore` hook is a thin subscriber.
+
+### Does Zustand replace Redux?
+
+Not always. Zustand is lighter and faster to adopt. Redux still fits teams that want enforced action/reducer patterns and a large ecosystem of plugins.
+
+---
+
+**Related:** [React Hooks, by version](/blog/react-hooks) (`useSyncExternalStore`), [custom hook](/blog/custom-hook), [Nx monorepo layout](/blog/nx-monorepo) (`libs/store`).

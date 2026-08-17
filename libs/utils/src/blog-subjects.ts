@@ -1,7 +1,7 @@
 import type { PostFrontmatter } from "@webdev/types";
 
 export const BLOG_SUBJECTS = [
-  { id: "react", label: "React", tags: ["react", "hooks"] },
+  { id: "react", label: "React", tags: ["react", "hooks", "zustand", "state-management"] },
   { id: "browser", label: "Browser APIs", tags: ["browser", "web-apis"] },
   { id: "mcp", label: "MCP & AI", tags: ["mcp", "ai"] },
   { id: "nx", label: "Nx & monorepos", tags: ["nx", "monorepo"] },
