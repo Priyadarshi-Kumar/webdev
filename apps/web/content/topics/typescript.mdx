@@ -1,0 +1,464 @@
+---
+title: TypeScript a JS / React dev actually needs
+description: The TypeScript that shows up every day in React apps — types vs interfaces, unions, generics, props, hooks, events, and the utility types worth memorizing. Examples and a bit of why, not a language spec.
+slug: typescript
+date: 2026-08-18
+tags:
+  - typescript
+  - javascript
+  - react
+  - interview
+---
+
+JavaScript already runs in the browser. TypeScript is a **type checker that erases itself at build time**. The `.tsx` you write becomes the same JS you already know. What you get is: catch “this prop is a string, not a user” before click, autocomplete that is not a guess, and refactors that do not silently break a child three files away.
+
+You do not need the whole handbook. You need the pieces that show up in React: **props**, **state**, **events**, **API JSON**, and **shared helpers**. This note is that subset.
+
+## Mental model
+
+### Types are comments the compiler reads
+
+```ts
+function greet(name: string) {
+  return `hi ${name}`;
+}
+
+greet("Ada");
+// greet(42); // error: number is not string
+```
+
+After compile, `name: string` is gone. Types never change runtime behavior. `typeof` in TypeScript (the type-query) is not `typeof` in JavaScript (the operator) — same word, two worlds. Context tells them apart.
+
+### Inference first, annotations when the boundary is public
+
+TypeScript already knows most locals. Annotate **function inputs**, **exported APIs**, and **empty starting state**. Let the rest infer.
+
+```ts
+const n = 3; // number
+const title = "ok"; // string
+
+const [count, setCount] = useState(0); // number — inferred from 0
+const [user, setUser] = useState<User | null>(null); // need help: null is not a User
+```
+
+If you write `useState({})` you get `{}` forever. Give the generic, or pass a typed initial value.
+
+## Everyday types
+
+### Primitives, unions, and `null`
+
+```ts
+type Status = "idle" | "loading" | "error";
+type Id = string | number;
+
+function label(id: Id) {
+  return String(id);
+}
+```
+
+A **union** means “one of these.” Narrow it with `===`, `typeof`, `in`, or a discriminant field (below). `null` and `undefined` are not assigned to other types unless you allow them (`strictNullChecks` is on in any sane React setup).
+
+```ts
+function length(s: string | null) {
+  // s.length; // error
+  return s?.length ?? 0;
+}
+```
+
+Prefer `string | null` (or `| undefined`) over `any`. `unknown` is the safe “I do not know yet” — you must narrow before use. `any` turns the checker off for that value.
+
+### Objects: `type` vs `interface`
+
+Both describe object shapes. In app code they are interchangeable for props.
+
+```ts
+type User = {
+  id: string;
+  name: string;
+  email?: string; // optional — may be missing
+};
+
+interface Props {
+  user: User;
+  onSelect: (id: string) => void;
+}
+```
+
+Practical split many teams use:
+
+- **`type`** — unions, intersections, mapped types, `typeof` results.
+- **`interface`** — object shapes you might extend (`interface Admin extends User`).
+
+You can also intersect types: `type Admin = User & { role: "admin" }`.
+
+`readonly` and `as const` stop accidental mutation and keep literal unions:
+
+```ts
+const ROLES = ["viewer", "editor", "admin"] as const;
+type Role = (typeof ROLES)[number]; // "viewer" | "editor" | "admin"
+```
+
+### Arrays, tuples, records
+
+```ts
+const tags: string[] = ["react", "ts"];
+const pair: [string, number] = ["age", 30];
+
+type Scores = Record<string, number>; // { [key: string]: number }
+```
+
+`Record<K, V>` is the typed dictionary. Prefer a union of keys when the set is closed: `Record<Role, boolean>`.
+
+## Narrowing (this is the real skill)
+
+TypeScript follows your control flow. If you prove a value is a member of the union, later lines see the narrower type.
+
+```ts
+function print(x: string | number) {
+  if (typeof x === "string") {
+    console.log(x.toUpperCase());
+  } else {
+    console.log(x.toFixed(1));
+  }
+}
+```
+
+### Discriminated unions
+
+Give every variant a shared field with a **literal** type. Switch on that field. React state machines and API results look like this.
+
+```ts
+type FetchState<T> =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "success"; data: T }
+  | { status: "error"; message: string };
+
+function View({ state }: { state: FetchState<User> }) {
+  switch (state.status) {
+    case "idle":
+      return <p>Pick a user</p>;
+    case "loading":
+      return <p>Loading…</p>;
+    case "success":
+      return <p>{state.data.name}</p>;
+    case "error":
+      return <p>{state.message}</p>;
+  }
+}
+```
+
+Inside `success`, `data` exists. Inside `error`, `message` exists. No optional chaining soup.
+
+### Exhaustiveness
+
+If you add a new status and forget a `case`, `never` catches it:
+
+```ts
+function assertNever(x: never): never {
+  throw new Error(`unexpected: ${String(x)}`);
+}
+
+// default: return assertNever(state);
+```
+
+## Generics (functions that keep the type)
+
+A generic is a **placeholder filled in at the call site**. You already use them: `useState<T>`, `Array<T>`, `Promise<T>`.
+
+```ts
+function first<T>(items: T[]): T | undefined {
+  return items[0];
+}
+
+first(["a", "b"]); // string | undefined
+first([1, 2]); // number | undefined
+```
+
+Constraints say “T must have these fields”:
+
+```ts
+function byId<T extends { id: string }>(items: T[], id: string): T | undefined {
+  return items.find((item) => item.id === id);
+}
+```
+
+Do not generic-ize everything. If there is only one type, write that type.
+
+## Utility types worth memorizing
+
+These are built in. You will read them in React libraries.
+
+| Utility | Meaning |
+| --- | --- |
+| `Partial<T>` | All fields optional |
+| `Required<T>` | All fields required |
+| `Pick<T, K>` | Keep keys `K` |
+| `Omit<T, K>` | Drop keys `K` |
+| `Readonly<T>` | Cannot assign to fields |
+| `Record<K, V>` | Map of keys to values |
+| `ReturnType<F>` | What function `F` returns |
+| `Parameters<F>` | Tuple of `F`’s arguments |
+| `NonNullable<T>` | Drop `null` and `undefined` |
+
+```ts
+type UserDraft = Partial<User>;
+type UserName = Pick<User, "id" | "name">;
+type UserWithoutEmail = Omit<User, "email">;
+
+async function load() {
+  return { ok: true as const, user: { id: "1", name: "Ada" } };
+}
+type LoadResult = Awaited<ReturnType<typeof load>>;
+```
+
+`keyof T` is the union of keys. `T[K]` is the value type for that key.
+
+```ts
+function get<T, K extends keyof T>(obj: T, key: K): T[K] {
+  return obj[key];
+}
+
+get({ id: "1", name: "Ada" }, "name"); // string
+```
+
+## React: props and children
+
+### Props as a type (or interface)
+
+```tsx
+type ButtonProps = {
+  label: string;
+  disabled?: boolean;
+  onClick: () => void;
+};
+
+export function Button({ label, disabled = false, onClick }: ButtonProps) {
+  return (
+    <button type="button" disabled={disabled} onClick={onClick}>
+      {label}
+    </button>
+  );
+}
+```
+
+Optional props get defaults in the destructure. Do not type the component as `React.FC` unless you have a reason — it used to imply `children`, and it hides the props generic. A function that takes a typed props object is enough.
+
+### Children
+
+```tsx
+type PanelProps = {
+  title: string;
+  children: React.ReactNode;
+};
+
+export function Panel({ title, children }: PanelProps) {
+  return (
+    <section>
+      <h2>{title}</h2>
+      {children}
+    </section>
+  );
+}
+```
+
+`ReactNode` is “anything React can render” (`string`, `number`, elements, arrays, `null`). `ReactElement` is a single element. For “only one component of this type,” use `React.ReactElement` or a tighter custom type.
+
+### Extending native elements
+
+Wrap a real `button` and keep the rest of the HTML attributes:
+
+```tsx
+type IconButtonProps = React.ComponentProps<"button"> & {
+  icon: React.ReactNode;
+};
+
+export function IconButton({ icon, children, ...rest }: IconButtonProps) {
+  return (
+    <button type="button" {...rest}>
+      {icon}
+      {children}
+    </button>
+  );
+}
+```
+
+`ComponentProps<"a">`, `ComponentProps<typeof Link>` — same idea for DOM tags and your own components. `ComponentPropsWithoutRef<"button">` if you do not want `ref` in the props object (pair with `forwardRef` / `useImperativeHandle` when you do).
+
+## React: events, refs, hooks
+
+### Events
+
+```tsx
+function Search() {
+  function onChange(e: React.ChangeEvent<HTMLInputElement>) {
+    console.log(e.target.value);
+  }
+
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+  }
+
+  return (
+    <form onSubmit={onSubmit}>
+      <input onChange={onChange} />
+    </form>
+  );
+}
+```
+
+Common ones: `MouseEvent<HTMLButtonElement>`, `ChangeEvent<HTMLInputElement>`, `KeyboardEvent<HTMLInputElement>`, `FormEvent<HTMLFormElement>`. If you inline `onClick={() => ...}` you often need no annotation.
+
+### `useState` and `useReducer`
+
+```tsx
+type User = { id: string; name: string };
+
+const [user, setUser] = useState<User | null>(null);
+
+type Action =
+  | { type: "inc" }
+  | { type: "set"; value: number };
+
+function reducer(state: number, action: Action): number {
+  switch (action.type) {
+    case "inc":
+      return state + 1;
+    case "set":
+      return action.value;
+  }
+}
+
+const [n, dispatch] = useReducer(reducer, 0);
+```
+
+The reducer return type plus the action union is the whole contract. `dispatch` infers from that.
+
+### `useRef`
+
+```tsx
+const inputRef = useRef<HTMLInputElement>(null);
+
+useEffect(() => {
+  inputRef.current?.focus();
+}, []);
+
+return <input ref={inputRef} />;
+```
+
+DOM refs start as `null`. A mutable box for a timer id is `useRef<number | null>(null)` (or `ReturnType<typeof setTimeout>`). `useRef(0)` infers `number` and `.current` is always defined.
+
+### `useContext`
+
+```tsx
+type Auth = { user: User | null; logout: () => void };
+
+const AuthContext = createContext<Auth | null>(null);
+
+function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be inside AuthProvider");
+  return ctx;
+}
+```
+
+Throwing when missing is a type narrowing trick: after the `if`, `ctx` is `Auth`, not `null`.
+
+## Typing JSON from an API
+
+The compiler does not trust `fetch`. `response.json()` is `any` in older DOM types, or a generic you must supply. Validate at the boundary (Zod, Valibot, or a type guard). A type assertion (`as User`) is a promise to the compiler, not a check.
+
+```ts
+function isUser(value: unknown): value is User {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.id === "string" && typeof v.name === "string";
+}
+
+async function loadUser(id: string): Promise<User> {
+  const res = await fetch(`/api/users/${id}`);
+  const data: unknown = await res.json();
+  if (!isUser(data)) throw new Error("unexpected user payload");
+  return data;
+}
+```
+
+`value is User` is a **type predicate**. After `if (isUser(data))`, `data` is `User`.
+
+`satisfies` checks a value against a type **without widening** it:
+
+```ts
+const routes = {
+  home: "/",
+  post: "/blog/:slug",
+} as const satisfies Record<string, string>;
+```
+
+You still get `"/" | "/blog/:slug"` on values, but you also get an error if you add a non-string.
+
+## Escapes (use sparingly)
+
+| Syntax | What it does |
+| --- | --- |
+| `as T` | Trust me, this is `T` |
+| `as unknown as T` | Double assertion when TS disagrees |
+| `!` (non-null) | This is not `null` / `undefined` |
+| `@ts-expect-error` | Next line is a known error (better than `@ts-ignore`) |
+
+```tsx
+inputRef.current!.focus(); // fine after you know the node is mounted; `?.` is safer
+```
+
+If you need `as` at an API boundary, put it in one function. Do not sprinkle it through components.
+
+## `tsconfig` that matters for React
+
+You do not need to memorize every flag. These change how you write code:
+
+- **`strict`** — on. Includes null checks and more.
+- **`jsx`** — `react-jsx` for modern React.
+- **`noUncheckedIndexedAccess`** — `arr[0]` is `T | undefined`. Honest, slightly noisier.
+- **`paths`** — `@webdev/widgets` style aliases in a monorepo.
+
+`skipLibCheck` skips checking `.d.ts` in `node_modules`. Almost everyone leaves it on so library types do not fail your build.
+
+## Interview-style questions
+
+### Why not `any`?
+
+`any` disables checking for that value and anything you pass it into. Bugs hide. Prefer `unknown` and narrow, or a real type. Temporary `any` during a migration should live behind a `FIXME`, not in props.
+
+### Interface or type for props?
+
+Either. Teams pick one for objects and stick to it. You **must** use `type` for unions (`A | B`). You **must** use `interface` if you rely on declaration merging (rare in app code, common in `.d.ts`).
+
+### What does `keyof` plus `T[K]` give you?
+
+A typed property accessor: the key is a real key of `T`, and the return type matches that property. That is how typed `get` / form field helpers work.
+
+### Why is `useState<User | null>(null)` needed?
+
+`null` infers as `null`. Without the generic, `setUser(someUser)` is an error. The union is the “empty then loaded” pattern.
+
+### `React.FC` or a function with typed props?
+
+Typed props on a function. `FC` adds `children` implicitly in older types, and the return type can fight `undefined`. Explicit `children?: React.ReactNode` on the props type is clearer.
+
+### How do you type a list item callback?
+
+```tsx
+type RowProps = {
+  user: User;
+  onSelect: (id: string) => void;
+};
+```
+
+Type the **argument you need**, not `MouseEvent`, unless you actually use the event. Keep the child dumb; the parent closes over extra data.
+
+### What is a discriminated union good for in UI?
+
+One `status` (or `kind`, `type`) field. The rest of the fields depend on it. Loading / error / success screens, modal kinds, reducer actions — one switch, no illegal combinations like `{ status: "error", data: user }`.
+
+---
+
+Related on this site: [React hooks by version](/blog/react-hooks), [Zustand](/blog/zustand). Types on this repo live in `@webdev/types`; widgets stay in `@webdev/widgets`.

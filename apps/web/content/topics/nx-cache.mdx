@@ -10,19 +10,41 @@ tags:
 
 The **Nx cache** skips work you already did. For `nx build web`, Nx hashes the files that `build` listed as inputs (and often the inputs of projects it depends on). Same hash → restore `dist` from cache instead of running Vite again.
 
+## Declaring what counts as an input
+
 ```json
 {
   "targetDefaults": {
     "build": {
       "cache": true,
-      "inputs": ["production", "^production"]
+      "inputs": ["production", "^production"],
+      "outputs": ["{projectRoot}/dist"]
     }
   }
 }
 ```
 
-`^production` means “also hash production files of **dependencies**.” Change `libs/utils` → `web`’s build cache misses on purpose.
+`^production` means “also hash production files of **dependencies**.” Change `libs/utils` → `web`’s build cache **misses** on purpose.
 
-Cache lives under `.nx` locally (gitignored). Nx Cloud can share it across laptops and CI.
+`outputs` is what gets restored. If you forget it, Nx may say “cache hit” and leave you without a `dist/` folder.
+
+## Seeing a hit vs a miss
+
+```bash
+pnpm nx build web
+# second time, no source change:
+pnpm nx build web
+# Nx: retrieved from cache
+```
+
+```bash
+pnpm nx reset    # wipe local cache when it looks wrong
+```
+
+Cache lives under `.nx` locally (gitignored). Nx Cloud can share it across laptops and <Term id="ci">CI</Term> so the second agent does not rebuild what the first already built.
+
+## What must not be cached blindly
+
+`dev` servers and anything that watches files should stay `cache: false`. Caching `nx test` is fine if outputs (coverage) are declared; flaky tests plus a cache hit will hide failures until inputs change.
 
 Related: [Nx](/blog/nx), [Nx affected](/blog/nx-affected).

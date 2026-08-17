@@ -10,6 +10,10 @@ tags:
 
 **SSR** prints HTML on the server. **Hydration** is the browser walk where React attaches event handlers to that HTML. The first client render must match the server markup.
 
+If it does not, React warns about a hydration mismatch and may throw away the server HTML — you paid for SSR and then flashed a client re-render.
+
+## Stable ids with `useId`
+
 `useId()` exists so labels and `aria-describedby` get the **same** id on both sides:
 
 ```tsx
@@ -26,6 +30,36 @@ export function EmailField() {
 }
 ```
 
-Bad: `id={Math.random()}` or `Date.now()` during render — server and client disagree ([tearing](/blog/react-tearing) / hydration mismatch).
+Bad: `id={Math.random()}` or `Date.now()` during render — server and client disagree (<Term id="react-tearing">tearing</Term> / hydration mismatch).
+
+## Browser-only values
+
+```tsx
+function Clock() {
+  return <time>{new Date().toLocaleTimeString()}</time>;
+}
+```
+
+The server rendered `10:01:00`. The client’s first paint is `10:01:01`. Mismatch. Render a placeholder on both sides, then update in an effect:
+
+```tsx
+import { useEffect, useState } from "react";
+
+function Clock() {
+  const [now, setNow] = useState<string | null>(null);
+  useEffect(() => {
+    setNow(new Date().toLocaleTimeString());
+  }, []);
+  return <time>{now ?? "—"}</time>;
+}
+```
+
+Or subscribe with `useSyncExternalStore` and a server snapshot.
+
+## Checklist
+
+- Same component tree on server and client for the first render
+- No `window` / `document` during render (guard or move to an effect)
+- Theme/class that depends on `localStorage` should not change markup until after hydrate (this site’s dark default avoids a flash)
 
 Related: [tearing](/blog/react-tearing), [React hook](/blog/react-hook).

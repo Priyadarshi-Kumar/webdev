@@ -11,8 +11,10 @@
   },
   "dependencies": {
     "@webdev/components": "workspace:*",
+    "@webdev/store": "workspace:*",
     "@webdev/types": "workspace:*",
-    "@webdev/utils": "workspace:*"
+    "@webdev/utils": "workspace:*",
+    "jspdf": "^3.0.4"
   },
   "peerDependencies": {
     "lucide-react": "^0.525.0",

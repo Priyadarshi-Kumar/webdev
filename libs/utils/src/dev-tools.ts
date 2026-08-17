@@ -275,3 +275,220 @@ export function testRegex(pattern: string, flags: string, sample: string): ToolR
     return err(error instanceof Error ? error.message : "Invalid regular expression");
   }
 }
+
+export type NumberBase = 2 | 8 | 10 | 16;
+
+export function convertNumberBase(input: string, from: NumberBase): ToolResult {
+  let value = input.trim().replace(/[\s_]/g, "");
+  if (!value) return err("Enter a number.");
+  const negative = value.startsWith("-");
+  if (negative) value = value.slice(1);
+  if (from === 2 && /^0b/i.test(value)) value = value.slice(2);
+  if (from === 8 && /^0o/i.test(value)) value = value.slice(2);
+  if (from === 16 && /^0x/i.test(value)) value = value.slice(2);
+  const digits = from === 2 ? /^[01]+$/ : from === 8 ? /^[0-7]+$/ : from === 16 ? /^[0-9a-f]+$/i : /^\d+$/;
+  if (!digits.test(value)) return err(`Digits must be valid for base ${from}.`);
+  try {
+    const prefix = from === 2 ? "0b" : from === 8 ? "0o" : from === 16 ? "0x" : "";
+    const n = from === 10 ? BigInt(value) : BigInt(`${prefix}${value}`);
+    const signed = negative ? -n : n;
+    return ok(
+      [
+        `Decimal: ${signed.toString(10)}`,
+        `Hex: 0x${signed.toString(16)}`,
+        `Octal: 0o${signed.toString(8)}`,
+        `Binary: 0b${signed.toString(2)}`,
+      ].join("\n"),
+    );
+  } catch {
+    return err("Could not parse that number.");
+  }
+}
+
+export function inspectUrl(input: string): ToolResult {
+  const trimmed = input.trim();
+  if (!trimmed) return err("Enter a URL.");
+  try {
+    const url = new URL(trimmed);
+    const params = [...url.searchParams.entries()];
+    const query = params.length ? params.map(([key, value]) => `${key}=${value}`).join("\n") : "(none)";
+    return ok(
+      [
+        `Protocol: ${url.protocol.replace(/:$/, "")}`,
+        `Username: ${url.username || "(none)"}`,
+        `Host: ${url.host}`,
+        `Hostname: ${url.hostname}`,
+        `Port: ${url.port || "(default)"}`,
+        `Path: ${url.pathname}`,
+        `Hash: ${url.hash || "(none)"}`,
+        `Origin: ${url.origin}`,
+        "",
+        "Query params:",
+        query,
+      ].join("\n"),
+    );
+  } catch {
+    return err("Enter a valid absolute URL, including https://.");
+  }
+}
+
+export type LineMode = "sort" | "unique" | "reverse" | "trim" | "stats";
+
+export function transformLines(text: string, mode: LineMode): ToolResult {
+  const raw = text.split(/\r?\n/);
+  if (mode === "stats") {
+    const nonEmpty = raw.filter((line) => line.trim().length > 0);
+    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    return ok(
+      [`Lines: ${raw.length}`, `Non-empty: ${nonEmpty.length}`, `Words: ${words}`, `Characters: ${text.length}`].join(
+        "\n",
+      ),
+    );
+  }
+  let lines = [...raw];
+  if (mode === "trim") lines = lines.map((line) => line.trim()).filter((line) => line.length > 0);
+  if (mode === "sort") lines = [...lines].sort((a, b) => a.localeCompare(b));
+  if (mode === "unique") {
+    const seen = new Set<string>();
+    lines = lines.filter((line) => {
+      if (seen.has(line)) return false;
+      seen.add(line);
+      return true;
+    });
+  }
+  if (mode === "reverse") lines = [...lines].reverse();
+  return ok(lines.join("\n"));
+}
+
+const PERM_LETTERS = ["r", "w", "x"] as const;
+
+function octalDigitToRwx(digit: number): string {
+  return PERM_LETTERS.map((letter, index) => (digit & (1 << (2 - index)) ? letter : "-")).join("");
+}
+
+function rwxToOctalDigit(rwx: string): number | null {
+  if (!/^[r-][w-][x-]$/.test(rwx)) return null;
+  return (rwx[0] === "r" ? 4 : 0) + (rwx[1] === "w" ? 2 : 0) + (rwx[2] === "x" ? 1 : 0);
+}
+
+export function parseChmod(input: string): ToolResult {
+  const trimmed = input.trim().replace(/^0/, "");
+  if (!trimmed) return err("Enter octal like 755 or symbolic like rwxr-xr-x.");
+
+  if (/^[0-7]{3}$/.test(trimmed) || /^[0-7]{4}$/.test(input.trim())) {
+    const octal = input.trim().replace(/^0(?=[0-7]{3}$)/, "").slice(-3);
+    const digits = octal.split("").map(Number);
+    const symbolic = digits.map(octalDigitToRwx).join("");
+    return ok(
+      [
+        `Octal: ${octal}`,
+        `Symbolic: ${symbolic}`,
+        `Owner: ${octalDigitToRwx(digits[0]!)}`,
+        `Group: ${octalDigitToRwx(digits[1]!)}`,
+        `Others: ${octalDigitToRwx(digits[2]!)}`,
+      ].join("\n"),
+    );
+  }
+
+  const symbolic = trimmed.replace(/\s+/g, "");
+  if (/^[rwx-]{9}$/.test(symbolic)) {
+    const parts = [symbolic.slice(0, 3), symbolic.slice(3, 6), symbolic.slice(6, 9)];
+    const digits = parts.map(rwxToOctalDigit);
+    if (digits.some((d) => d === null)) return err("Symbolic mode must use r, w, x, or -.");
+    const octal = digits.join("");
+    return ok(`Octal: ${octal}\nSymbolic: ${symbolic}`);
+  }
+
+  return err("Use 3-digit octal (755) or 9-character symbolic (rwxr-xr-x).");
+}
+
+const MONTH_NAMES = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+const WEEKDAY_NAMES = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+
+function cronTokenToNumber(token: string, names: string[]): number | null {
+  const upper = token.toUpperCase();
+  const named = names.indexOf(upper);
+  if (named >= 0) return named + (names === MONTH_NAMES ? 1 : 0);
+  const n = Number(token);
+  return Number.isInteger(n) ? n : null;
+}
+
+function describeCronField(value: string, label: string, min: number, max: number, names: string[] = []): string {
+  if (value === "*") return `${label}: every value (${min}–${max})`;
+  const describePart = (part: string): string => {
+    const [range, step] = part.split("/");
+    const stepN = step ? Number(step) : undefined;
+    if (range === "*") return stepN ? `every ${stepN}` : "every";
+    if (range?.includes("-")) {
+      const [startRaw, endRaw] = range.split("-");
+      const start = cronTokenToNumber(startRaw ?? "", names);
+      const end = cronTokenToNumber(endRaw ?? "", names);
+      if (start === null || end === null) return part;
+      return stepN ? `${start}–${end} every ${stepN}` : `${start}–${end}`;
+    }
+    const n = cronTokenToNumber(range ?? "", names);
+    return n === null ? part : String(n);
+  };
+  const parts = value.split(",").map(describePart);
+  return `${label}: ${parts.join(", ")}`;
+}
+
+export function describeCron(expr: string): ToolResult {
+  const parts = expr.trim().split(/\s+/).filter(Boolean);
+  if (parts.length !== 5 && parts.length !== 6) {
+    return err("Use 5 fields (minute hour day month weekday) or 6 with seconds first.");
+  }
+  const hasSeconds = parts.length === 6;
+  const [seconds, minute, hour, day, month, weekday] = hasSeconds
+    ? parts
+    : [undefined, parts[0], parts[1], parts[2], parts[3], parts[4]];
+  const lines = [
+    hasSeconds && seconds ? describeCronField(seconds, "Seconds", 0, 59) : null,
+    describeCronField(minute!, "Minute", 0, 59),
+    describeCronField(hour!, "Hour", 0, 23),
+    describeCronField(day!, "Day of month", 1, 31),
+    describeCronField(month!, "Month", 1, 12, MONTH_NAMES),
+    describeCronField(weekday!, "Day of week", 0, 6, WEEKDAY_NAMES),
+  ].filter(Boolean) as string[];
+  return ok(lines.join("\n"));
+}
+
+export const HTTP_STATUS: { code: number; name: string; group: string }[] = [
+  { code: 100, name: "Continue", group: "Informational" },
+  { code: 101, name: "Switching Protocols", group: "Informational" },
+  { code: 200, name: "OK", group: "Success" },
+  { code: 201, name: "Created", group: "Success" },
+  { code: 202, name: "Accepted", group: "Success" },
+  { code: 204, name: "No Content", group: "Success" },
+  { code: 206, name: "Partial Content", group: "Success" },
+  { code: 301, name: "Moved Permanently", group: "Redirection" },
+  { code: 302, name: "Found", group: "Redirection" },
+  { code: 304, name: "Not Modified", group: "Redirection" },
+  { code: 307, name: "Temporary Redirect", group: "Redirection" },
+  { code: 308, name: "Permanent Redirect", group: "Redirection" },
+  { code: 400, name: "Bad Request", group: "Client error" },
+  { code: 401, name: "Unauthorized", group: "Client error" },
+  { code: 403, name: "Forbidden", group: "Client error" },
+  { code: 404, name: "Not Found", group: "Client error" },
+  { code: 405, name: "Method Not Allowed", group: "Client error" },
+  { code: 409, name: "Conflict", group: "Client error" },
+  { code: 410, name: "Gone", group: "Client error" },
+  { code: 415, name: "Unsupported Media Type", group: "Client error" },
+  { code: 422, name: "Unprocessable Entity", group: "Client error" },
+  { code: 429, name: "Too Many Requests", group: "Client error" },
+  { code: 500, name: "Internal Server Error", group: "Server error" },
+  { code: 502, name: "Bad Gateway", group: "Server error" },
+  { code: 503, name: "Service Unavailable", group: "Server error" },
+  { code: 504, name: "Gateway Timeout", group: "Server error" },
+];
+
+export function lookupHttpStatus(query: string): { code: number; name: string; group: string }[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return HTTP_STATUS;
+  return HTTP_STATUS.filter(
+    (item) =>
+      String(item.code).includes(needle) ||
+      item.name.toLowerCase().includes(needle) ||
+      item.group.toLowerCase().includes(needle),
+  );
+}

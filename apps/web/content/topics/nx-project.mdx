@@ -8,7 +8,9 @@ tags:
   - nx
 ---
 
-An **Nx project** is a package in the [monorepo](/blog/monorepo) that Nx can address by name. This repo puts a `project.json` next to each one.
+An **Nx project** is a package in the <Term id="monorepo">monorepo</Term> that Nx can address by name. This repo puts a `project.json` next to each one.
+
+## A project.json
 
 ```json
 {
@@ -21,11 +23,30 @@ An **Nx project** is a package in the [monorepo](/blog/monorepo) that Nx can add
       "executor": "nx:run-commands",
       "options": { "command": "pnpm build", "cwd": "apps/web" },
       "outputs": ["{projectRoot}/dist"]
+    },
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm dev", "cwd": "apps/web" }
     }
   }
 }
 ```
 
-`nx build web` means “run the `build` target on the project named `web`.” Libraries (`utils`, `widgets`) are projects too.
+`nx build web` means “run the `build` target on the project named `web`.” Libraries (`utils`, `widgets`) are projects too — often with `test` and no `dev` server.
+
+## Application vs library
+
+```txt
+apps/web        → application (has a deployable `dist`)
+libs/components → library (imported, not shipped alone)
+```
+
+`projectType` is documentation for humans and for Nx generators. What actually matters is **targets** and **who imports whom** on the <Term id="project-graph">graph</Term>.
+
+`implicitDependencies` lists projects that are not always visible from `import` statements (CSS, MDX, a config file). If `web`’s build reads `libs/widgets` through a bundler plugin, say so here so <Term id="nx-affected">affected</Term> still rebuilds `web`.
+
+```bash
+pnpm nx show project web --json
+```
 
 Related: [Nx](/blog/nx), [Nx monorepo](/blog/nx-monorepo).

@@ -9,7 +9,9 @@ tags:
   - javascript
 ---
 
-In a [monorepo](/blog/monorepo), an app should depend on a sibling library **by workspace**, not by a published version you might forget to bump.
+In a <Term id="monorepo">monorepo</Term>, an app should depend on a sibling library **by workspace**, not by a published version you might forget to bump.
+
+## The `workspace:` specifier
 
 ```json
 {
@@ -21,12 +23,34 @@ In a [monorepo](/blog/monorepo), an app should depend on a sibling library **by 
 }
 ```
 
-`workspace:*` = whatever version is in this repo’s `libs/widgets/package.json`. pnpm links it. `workspace:^` is stricter about the sibling’s version field.
+`workspace:*` = whatever version is in this repo’s `libs/widgets/package.json`. pnpm **links** it. You import it like a normal package:
+
+```ts
+import { HomePage } from "@webdev/widgets";
+```
+
+`workspace:^` still means “local copy,” but it also checks that the sibling’s `version` field satisfies `^`. Useful if you publish those packages later.
+
+## Adding a workspace dependency
 
 ```bash
 pnpm --filter web add @webdev/utils --workspace
 ```
 
-npm/Yarn workspaces also link local packages when the name matches a workspace; pnpm makes the protocol explicit in `package.json`.
+That writes `workspace:*` instead of downloading `@webdev/utils` from the public <Term id="npm-registry">registry</Term> (which probably does not exist).
+
+npm/Yarn workspaces also link local packages when the **name** matches a workspace; pnpm makes the protocol **explicit** in `package.json` so you cannot accidentally depend on a stale published copy.
+
+## What goes wrong without it
+
+```json
+{
+  "dependencies": {
+    "@webdev/widgets": "1.0.0"
+  }
+}
+```
+
+If `1.0.0` is not on the registry, install fails. If it *is* on the registry from last year, you ship last year’s widgets while editing this year’s source. `workspace:*` cannot make that mistake.
 
 Related: [monorepo](/blog/monorepo), [package.json](/blog/package-json).

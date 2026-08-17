@@ -10,17 +10,46 @@ tags:
 
 `shamefully-hoist=true` tells pnpm to lift packages to the root of `node_modules`, npm-style. Phantom imports start working again — which is why the name includes **shamefully**.
 
+## The nuclear switch
+
 ```ini
 # .npmrc  (project root)
 shamefully-hoist=true
 ```
 
-```ini
-# slightly less nuclear: hoist only what a tool needs
-public-hoist-pattern[]=*eslint*
-public-hoist-pattern[]=*prettier*
+After `pnpm install`, `lodash` might appear at `node_modules/lodash` even if only ESLint declared it. Your app can `import "lodash"` again. You have re-created <Term id="hoisting">hoisting</Term> and <Term id="phantom-dependency">phantom dependencies</Term>.
+
+Prefer declaring the real dependency:
+
+```bash
+pnpm add lodash
 ```
 
-Prefer declaring the real dependency (`pnpm add lodash`). Use hoist when a generator or old bundler **requires** a flat tree and you cannot fix it today.
+## Slightly less nuclear
+
+Some tools (old ESLint configs, Create React App-era plugins) look for packages **only** at the repo root. Hoist just those patterns:
+
+```ini
+# .npmrc
+public-hoist-pattern[]=*eslint*
+public-hoist-pattern[]=*prettier*
+public-hoist-pattern[]=*@types*
+```
+
+```ini
+# or hoist one package by name
+public-hoist-pattern[]=ts-node
+```
+
+Use full `shamefully-hoist` when a generator or old bundler **requires** a flat tree and you cannot fix it today. Leave a comment in `.npmrc` so the next person knows it is a workaround.
+
+## Check what you actually flattened
+
+```bash
+ls node_modules | head
+pnpm why lodash
+```
+
+If `web` does not list `lodash` and `why` only shows a nested tool, you are still on a phantom. Add it, then try turning hoist off.
 
 Related: [hoisting](/blog/hoisting), [phantom dependency](/blog/phantom-dependency).

@@ -26,7 +26,10 @@ function toolSlugs() {
 
 const paths = [
   "/",
-  "/portfolio",
+  "/portfolio/about",
+  "/portfolio/experience",
+  "/portfolio/skills",
+  "/portfolio/education",
   "/portfolio/projects",
   "/portfolio/projects/this-site",
   "/portfolio/projects/add-your-work",

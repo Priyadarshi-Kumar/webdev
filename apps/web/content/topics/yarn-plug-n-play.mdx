@@ -11,10 +11,15 @@ tags:
 
 **Plug’n’Play** is Yarn Berry’s default linker. There is often **no** `node_modules`. Node asks `.pnp.cjs` (and `.pnp.data.json`) where each package lives — usually inside `.yarn/cache` zips.
 
-```yml
-# .yarnrc.yml — opt out of PnP, get a classic folder
-nodeLinker: node-modules
+## How resolution works
+
+Classic Node: walk folders named `node_modules`. PnP: a generated map says “`react` from this package is this zip path.” Yarn patches Node (via `--require .pnp.cjs`) so `import "react"` still looks normal in your source.
+
+```js
+import React from "react"; // Yarn intercepts this
 ```
+
+You **cannot** assume a folder exists:
 
 ```js
 // tools that do this break under PnP
@@ -22,6 +27,23 @@ import fs from "node:fs";
 fs.readdirSync("node_modules"); // folder may not exist
 ```
 
-Editors need the Yarn SDK / PnP plugin so “Go to definition” works. Many teams keep Berry but set `nodeLinker: node-modules` for compatibility.
+## Opt out when a tool needs folders
+
+```yml
+# .yarnrc.yml — opt out of PnP, get a classic folder
+nodeLinker: node-modules
+```
+
+Many teams keep Berry (immutable installs, `packageManager`, workspaces) but set `nodeLinker: node-modules` so ESLint plugins, native addons, and “open `node_modules/foo`” scripts keep working.
+
+## Editor and TypeScript
+
+“Go to definition” needs the Yarn SDK / PnP editor plugin so the language service can see packages inside zips.
+
+```bash
+yarn dlx @yarnpkg/sdks vscode
+```
+
+If VS Code cannot resolve types after a Yarn 4 install, you are usually missing this step — not missing `npm install`.
 
 Related: [Yarn Berry](/blog/yarn-berry), [node_modules](/blog/node-modules).

@@ -1,7 +1,6 @@
+import { APPEARANCE_BOOTSTRAP } from "@webdev/store";
 import { usePageContext } from "vike-react/usePageContext";
 import { SITE, getSiteUrl } from "@webdev/widgets/config";
-
-const THEME_BOOTSTRAP = `(function(){try{var t=localStorage.getItem('color-theme');if(t==='light')document.documentElement.classList.remove('dark');else document.documentElement.classList.add('dark')}catch(e){document.documentElement.classList.add('dark')}})();`;
 
 export function Head() {
   const pageContext = usePageContext();
@@ -26,10 +25,10 @@ export function Head() {
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
       <link
-        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
         rel="stylesheet"
       />
-      <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
+      <script dangerouslySetInnerHTML={{ __html: APPEARANCE_BOOTSTRAP }} />
     </>
   );
 }

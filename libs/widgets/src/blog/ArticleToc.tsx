@@ -1,3 +1,4 @@
+import { ScrollHints } from "@webdev/components";
 import type { TocEntry } from "@webdev/utils";
 import { useEffect, useState, type MouseEvent } from "react";
 
@@ -5,28 +6,37 @@ function headingIds(items: TocEntry[]): string[] {
   return items.flatMap((item) => [item.id, ...item.children.map((child) => child.id)]);
 }
 
+function pageScroller() {
+  return document.getElementById("page-content");
+}
+
 function jumpToHeading(event: MouseEvent<HTMLAnchorElement>, id: string, onActive: (id: string) => void) {
   event.preventDefault();
   onActive(id);
-  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const scroller = pageScroller();
+  const heading = document.getElementById(id);
+  if (scroller && heading) {
+    const top = heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 16;
+    scroller.scrollTo({ top, behavior: "smooth" });
+  }
   const url = new URL(window.location.href);
   url.hash = id;
   window.history.replaceState(window.history.state, "", url);
 }
 
 function linkClass(active: boolean, nested: boolean) {
-  const base = "block border-l-2 py-1 pl-3 leading-snug no-underline transition";
+  const base = "block border-l py-1 leading-snug no-underline transition";
   if (nested) {
-    return `${base} text-xs ${
+    return `${base} pl-3.5 text-[11px] ${
       active
-        ? "border-sky-400 text-sky-700 dark:text-sky-300"
-        : "border-transparent text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-200"
+        ? "border-sky-400/70 text-zinc-700 dark:text-zinc-200"
+        : "border-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300"
     }`;
   }
-  return `${base} text-[13px] font-medium ${
+  return `${base} pl-2.5 text-[12px] ${
     active
-      ? "border-sky-400 text-zinc-950 dark:text-white"
-      : "border-transparent text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-white"
+      ? "border-sky-400/80 text-zinc-800 dark:text-zinc-100"
+      : "border-transparent text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
   }`;
 }
 
@@ -40,7 +50,7 @@ function TocLinks({
   onActive: (id: string) => void;
 }) {
   return (
-    <ol className="m-0 list-none space-y-2.5 border-l border-zinc-200 p-0 dark:border-white/10">
+    <ol className="m-0 list-none space-y-0.5 border-l border-zinc-200/80 p-0 dark:border-white/12">
       {items.map((item) => (
         <li key={item.id} className="m-0">
           <a
@@ -51,7 +61,7 @@ function TocLinks({
             {item.text}
           </a>
           {item.children.length > 0 ? (
-            <ol className="m-0 mt-0.5 list-none p-0">
+            <ol className="m-0 list-none p-0">
               {item.children.map((child) => (
                 <li key={child.id} className="m-0">
                   <a
@@ -80,6 +90,7 @@ export function ArticleToc({ items }: { items: TocEntry[] }) {
       .filter((node): node is HTMLElement => node !== null);
     if (nodes.length === 0) return;
 
+    const scroller = pageScroller();
     const observer = new IntersectionObserver(
       (entries) => {
         const visible = entries
@@ -87,7 +98,7 @@ export function ArticleToc({ items }: { items: TocEntry[] }) {
           .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
         if (visible[0]?.target.id) setActiveId(visible[0].target.id);
       },
-      { rootMargin: "-96px 0px -55% 0px", threshold: [0, 1] },
+      { root: scroller, rootMargin: "0px 0px -55% 0px", threshold: [0, 1] },
     );
 
     for (const node of nodes) observer.observe(node);
@@ -99,10 +110,17 @@ export function ArticleToc({ items }: { items: TocEntry[] }) {
   return (
     <nav
       aria-label="On this page"
-      className="fixed top-24 right-6 z-10 hidden max-h-[calc(100dvh-7rem)] w-56 overflow-y-auto overscroll-contain lg:block"
+      className="article-toc pointer-events-none fixed top-28 right-16 z-30 hidden w-52 lg:block"
     >
-      <p className="eyebrow mb-4">On this page</p>
-      <TocLinks items={items} activeId={activeId} onActive={setActiveId} />
+      <p className="pointer-events-auto mb-2.5 text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400 dark:text-zinc-500">
+        On this page
+      </p>
+      <ScrollHints
+        frameClassName="pointer-events-auto max-h-[calc(100dvh-16rem)]"
+        className="max-h-[calc(100dvh-16rem)] overflow-y-auto"
+      >
+        <TocLinks items={items} activeId={activeId} onActive={setActiveId} />
+      </ScrollHints>
     </nav>
   );
 }

@@ -20,3 +20,7 @@ export function getPostIndex(
 export function getPostMeta(slug: string, topicsDir?: string): PostIndexEntry | undefined {
   return getPostIndex(topicsDir).find((post) => post.slug === slug);
 }
+
+export function getFirstNote(topicsDir?: string): PostIndexEntry | undefined {
+  return getPostIndex(topicsDir).find((post) => !post.tags?.includes("glossary"));
+}

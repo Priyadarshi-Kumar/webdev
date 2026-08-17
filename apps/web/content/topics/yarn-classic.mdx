@@ -9,7 +9,9 @@ tags:
   - yarn
 ---
 
-**Yarn Classic** is Yarn **1.x**. It was built as a faster, lockfile-first npm. Layout is a hoisted `node_modules`, same idea as npm.
+**Yarn Classic** is Yarn **1.x**. It was built as a faster, lockfile-first npm. Layout is a <Term id="hoisting">hoisted</Term> `node_modules`, same idea as npm.
+
+## Commands you will see
 
 ```bash
 yarn              # install
@@ -22,6 +24,27 @@ yarn dlx create-vite@latest
 
 Lockfile: `yarn.lock`. Workspaces: `"workspaces"` in root `package.json`. Frozen CI: `yarn install --frozen-lockfile`.
 
-If a teammate says “we use Yarn,” ask **1 or Berry**. The debugging story is different.
+```json
+{
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "yarn workspace web dev"
+  }
+}
+```
+
+## How to tell you are on v1
+
+```bash
+yarn --version    # 1.22.x → Classic
+which yarn        # often /usr/local/bin from Homebrew or npm -g
+```
+
+Berry (2+) prints `3.x` / `4.x` and wants `.yarnrc.yml` plus `"packageManager": "yarn@4.…"`. If a teammate says “we use Yarn,” ask **1 or Berry**. Classic still hoists, still creates <Term id="phantom-dependency">phantom dependencies</Term>, and still uses the old `yarn.lock` format.
+
+## Migrating off v1
+
+Do not run Berry in a Classic repo without a plan. Typical path: enable <Term id="corepack">Corepack</Term>, set `packageManager` to Yarn 4, set `nodeLinker: node-modules` first so disk layout stays familiar, then consider PnP later.
 
 Related: [Yarn Berry](/blog/yarn-berry), [hoisting](/blog/hoisting), [lockfile](/blog/lockfile).

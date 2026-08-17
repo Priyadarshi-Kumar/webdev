@@ -8,7 +8,9 @@ tags:
   - react
 ---
 
-**Suspense** lets a parent declare “show this spinner until the child is ready.” Children can wait on `lazy()` code-splitting or on `use(promise)`.
+**Suspense** lets a parent declare “show this spinner until the child is ready.” Children can wait on `lazy()` code-splitting or on <Term id="react-use">`use(promise)`</Term>.
+
+## Code-splitting a heavy child
 
 ```tsx
 import { lazy, Suspense } from "react";
@@ -24,6 +26,47 @@ export function Notes() {
 }
 ```
 
+The browser downloads `Editor` only when `Notes` renders. Until the chunk arrives, users see the fallback — not a blank hole.
+
+## Nested boundaries
+
+Each boundary catches “wait” from **its** descendants. A slow widget should not block the whole page:
+
+```tsx
+export function Dashboard() {
+  return (
+    <>
+      <h1>Dashboard</h1>
+      <Suspense fallback={<p>Loading chart…</p>}>
+        <Chart />
+      </Suspense>
+      <Suspense fallback={<p>Loading table…</p>}>
+        <Table />
+      </Suspense>
+    </>
+  );
+}
+```
+
+## Errors are a different boundary
+
 You still need an **error** boundary for failures. Suspense is for “not ready yet,” not for “it threw.”
+
+```tsx
+import { Component, type ReactNode } from "react";
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { err: Error | null }> {
+  state = { err: null as Error | null };
+  static getDerivedStateFromError(err: Error) {
+    return { err };
+  }
+  render() {
+    if (this.state.err) return <p>Could not load.</p>;
+    return this.props.children;
+  }
+}
+```
+
+Wrap `Suspense` *inside* an error boundary if a rejected promise should show a message instead of crashing the tree.
 
 Related: [React use()](/blog/react-use), [React Hooks by version](/blog/react-hooks).

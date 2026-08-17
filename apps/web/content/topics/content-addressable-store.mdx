@@ -11,7 +11,9 @@ tags:
 
 pnpm keeps a **store** (often `~/.local/share/pnpm/store`). Packages are filed by a hash of their contents. React 19.2.8 exists **once** on your laptop even if twelve repos use it.
 
-Each project’s `node_modules` [hard-links](/blog/hard-links) (or ref-links) into that store.
+Each project’s `node_modules` <Term id="hard-links">hard-links</Term> (or ref-links) into that store.
+
+## One store, many projects
 
 ```txt
 ~/.local/share/pnpm/store/v3/     ← real tarball contents
@@ -19,6 +21,27 @@ apps/web/node_modules/react  →  .pnpm/react@19.2.8/...
 apps/admin/node_modules/react →  same store entry
 ```
 
-A **cold** CI machine still downloads. A **warm** laptop mostly links. `pnpm store path` prints the location; `pnpm store prune` drops unused entries.
+npm copies React into every project. Ten clones of the same tutorial can cost ten copies of the same bytes. pnpm pays the download **once**.
+
+```bash
+pnpm store path     # where the store lives
+pnpm store status   # optional: check integrity
+pnpm store prune    # drop versions no project links to anymore
+```
+
+## Cold vs warm machines
+
+A **cold** <Term id="ci">CI</Term> machine still downloads from the <Term id="npm-registry">registry</Term> (unless you cache the store between jobs). A **warm** laptop mostly links. GitHub Actions `cache: pnpm` is caching this store, not your git repo.
+
+```yaml
+- uses: actions/setup-node@v4
+  with:
+    node-version: 22
+    cache: pnpm
+```
+
+## Content-addressable means hash = identity
+
+If two tarballs have the same contents, they share a store key. If a package republishes the same version with different bytes (registry incident), the hash will not match the <Term id="lockfile">lockfile</Term> `integrity` field and install should fail.
 
 Related: [hard links](/blog/hard-links), [node_modules](/blog/node-modules).

@@ -1,7 +1,6 @@
-import { useMemo } from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { lineDiff } from "@webdev/utils";
-import { CopyButton, ToolShell, ToolTextarea, useCopy } from "./components/tool-shell";
+import { CopyButton, ToolPanel, ToolShell, ToolTextarea, useCopy } from "./components/tool-shell";
 
 const LEFT = `function greet(name) {
   return "hi " + name;
@@ -23,7 +22,24 @@ export function DiffTool() {
         <ToolTextarea value={left} onChange={setLeft} label="Original" />
         <ToolTextarea value={right} onChange={setRight} label="Changed" />
       </div>
-      <ToolTextarea value={output} onChange={() => {}} label="Line diff" rows={12} />
+      <ToolPanel label="Line diff">
+        <pre className="code-panel max-h-[28rem] overflow-auto whitespace-pre">
+          {output.split("\n").map((line, index) => (
+            <div
+              key={`${index}-${line}`}
+              className={
+                line.startsWith("+ ")
+                  ? "bg-emerald-400/10 text-emerald-200"
+                  : line.startsWith("- ")
+                    ? "bg-rose-400/10 text-rose-200"
+                    : "text-zinc-300"
+              }
+            >
+              {line || " "}
+            </div>
+          ))}
+        </pre>
+      </ToolPanel>
     </ToolShell>
   );
 }

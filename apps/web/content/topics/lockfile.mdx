@@ -11,21 +11,52 @@ tags:
 
 `package.json` says “React 19-something.” The **lockfile** says “React 19.2.8, plus scheduler 0.26.0, plus these integrity hashes.”
 
+## One file, one manager
+
 ```bash
 package-lock.json   # npm
 yarn.lock           # Yarn
 pnpm-lock.yaml      # pnpm
 ```
 
-Commit it. Do not keep two. If Alice installs with npm and Bob with pnpm, they will not share a graph.
+Commit it. Do not keep two. If Alice installs with npm and Bob with pnpm, they will not share a graph — even with the same `package.json`.
+
+A snippet of what pnpm records (simplified):
+
+```yaml
+importers:
+  apps/web:
+    dependencies:
+      react:
+        specifier: ^19.2.8
+        version: 19.2.8
+packages:
+  react@19.2.8:
+    resolution: {integrity: sha512-…}
+```
+
+The `integrity` field is a hash of the tarball. If the <Term id="npm-registry">registry</Term> served a different file, install fails instead of silently running unknown code.
+
+## Freeze it in CI
 
 ```bash
 # CI: install exactly the lockfile, do not rewrite it
 npm ci
 yarn install --frozen-lockfile
+yarn install --immutable          # Yarn Berry
 pnpm install --frozen-lockfile
 ```
 
-If you migrate managers, delete the old lockfile, install with the new tool, commit the new file.
+Local `npm install` / `pnpm add` **should** update the lockfile — that is how you record a new library. The robot must not.
+
+## Migrating managers
+
+If you switch tools, delete the old lockfile, install with the new one, run tests, commit the new file in the same PR. Leaving both in git is how you get “works on my machine” for years.
+
+```bash
+rm package-lock.json
+pnpm install
+git add pnpm-lock.yaml package.json
+```
 
 Related: [npm ci](/blog/npm-ci), [package.json](/blog/package-json), [pnpm vs npm vs Yarn](/blog/pnpm-vs-npm-vs-yarn).

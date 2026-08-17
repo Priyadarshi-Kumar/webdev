@@ -1,19 +1,25 @@
 import { describe, expect, it } from "vitest";
 import {
   compareSemver,
+  convertNumberBase,
   csvToJson,
   decodeBase64,
+  describeCron,
   encodeBase64,
   encodeHtmlEntities,
   formatBytes,
   generatePassword,
   hexToRgb,
+  inspectUrl,
   jsonToCsv,
   lineDiff,
+  lookupHttpStatus,
   parseByteInput,
+  parseChmod,
   rgbToHex,
   slugify,
   toSnakeCase,
+  transformLines,
   unixToDate,
 } from "./dev-tools";
 
@@ -81,5 +87,54 @@ describe("dev-tools", () => {
   it("generates passwords", () => {
     const password = generatePassword(20, true);
     expect(password).toHaveLength(20);
+  });
+
+  it("converts number bases", () => {
+    const result = convertNumberBase("ff", 16);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.output).toContain("Decimal: 255");
+      expect(result.output).toContain("0b11111111");
+    }
+  });
+
+  it("inspects urls", () => {
+    const result = inspectUrl("https://example.com:8443/path?q=1#top");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.output).toContain("Hostname: example.com");
+      expect(result.output).toContain("q=1");
+    }
+  });
+
+  it("transforms lines", () => {
+    expect(transformLines("b\na\nb", "sort")).toEqual({ ok: true, output: "a\nb\nb" });
+    expect(transformLines("b\na\nb", "unique")).toEqual({ ok: true, output: "b\na" });
+    const stats = transformLines("hello world", "stats");
+    expect(stats.ok).toBe(true);
+    if (stats.ok) expect(stats.output).toContain("Words: 2");
+  });
+
+  it("parses chmod", () => {
+    const octal = parseChmod("755");
+    expect(octal.ok).toBe(true);
+    if (octal.ok) expect(octal.output).toContain("rwxr-xr-x");
+    const symbolic = parseChmod("rw-r--r--");
+    expect(symbolic.ok).toBe(true);
+    if (symbolic.ok) expect(symbolic.output).toContain("Octal: 644");
+  });
+
+  it("describes cron", () => {
+    const result = describeCron("*/15 9-17 * * 1-5");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.output).toContain("Minute: every 15");
+      expect(result.output).toContain("Hour: 9–17");
+    }
+  });
+
+  it("looks up http status", () => {
+    expect(lookupHttpStatus("404")[0]).toMatchObject({ code: 404, name: "Not Found" });
+    expect(lookupHttpStatus("unauth").some((item) => item.code === 401)).toBe(true);
   });
 });

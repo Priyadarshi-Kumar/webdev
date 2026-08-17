@@ -10,11 +10,15 @@ tags:
 
 A **custom hook** is not a special React feature. It is a function that calls hooks. Extract it when two components share the same state + effect pattern.
 
+## Extract shared state + effect
+
 ```tsx
 import { useEffect, useState } from "react";
 
 export function useWindowWidth() {
-  const [width, setWidth] = useState(() => window.innerWidth);
+  const [width, setWidth] = useState(() =>
+    typeof window === "undefined" ? 0 : window.innerWidth,
+  );
 
   useEffect(() => {
     const onResize = () => setWidth(window.innerWidth);
@@ -31,8 +35,26 @@ function Sidebar() {
   const width = useWindowWidth();
   return width < 768 ? <MobileNav /> : <DesktopNav />;
 }
+
+function Footer() {
+  const width = useWindowWidth();
+  return <p>{width}px</p>;
+}
 ```
 
-Name it `useSomething` so lint can enforce the rules of hooks.
+Each component that calls `useWindowWidth` gets **its own** `width` state. Hooks do not share memory just because they share a name. To share one value, lift state or use context.
+
+The `typeof window` guard avoids crashing during <Term id="hydration">SSR</Term>. For a value that must stay in sync with the browser, prefer `useSyncExternalStore` (see [tearing](/blog/react-tearing)).
+
+## Naming is the lint contract
+
+Name it `useSomething` so `eslint-plugin-react-hooks` can enforce the rules. `getWindowWidth()` that calls `useState` inside will slip past the linter and then break when you put it in a condition.
+
+```tsx
+// not a hook — linter will not protect callers
+function loadUser() {
+  return useState(null); // illegal if called from a click handler
+}
+```
 
 Related: [React hook](/blog/react-hook), [React Hooks by version](/blog/react-hooks).

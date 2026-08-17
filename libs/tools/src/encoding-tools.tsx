@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ArrowLeftRight } from "lucide-react";
 import {
   decodeBase64,
   decodeHtmlEntities,
@@ -37,15 +38,24 @@ function TwoWayTool({
     }
   }
 
+  function swap() {
+    setInput(output);
+    setOutput(input);
+  }
+
   return (
     <ToolShell
       actions={
         <>
-          <button type="button" className="btn-primary" onClick={() => run("encode")}>
+          <button type="button" className="btn-primary min-h-10 px-4 py-2 text-sm" onClick={() => run("encode")}>
             {encodeLabel}
           </button>
-          <button type="button" className="btn-ghost" onClick={() => run("decode")}>
+          <button type="button" className="btn-ghost min-h-10 px-4 py-2 text-sm" onClick={() => run("decode")}>
             {decodeLabel}
+          </button>
+          <button type="button" className="btn-ghost min-h-10 gap-1.5 px-4 py-2 text-sm" onClick={swap}>
+            <ArrowLeftRight size={14} aria-hidden />
+            Swap
           </button>
           {output ? <CopyButton text={output} copied={copied} onCopy={() => void copy(output)} /> : null}
         </>
@@ -91,15 +101,24 @@ export function HtmlEntitiesTool() {
     else setOutput(result.error);
   }
 
+  function swap() {
+    setInput(output);
+    setOutput(input);
+  }
+
   return (
     <ToolShell
       actions={
         <>
-          <button type="button" className="btn-primary" onClick={encode}>
+          <button type="button" className="btn-primary min-h-10 px-4 py-2 text-sm" onClick={encode}>
             Encode entities
           </button>
-          <button type="button" className="btn-ghost" onClick={decode}>
+          <button type="button" className="btn-ghost min-h-10 px-4 py-2 text-sm" onClick={decode}>
             Decode entities
+          </button>
+          <button type="button" className="btn-ghost min-h-10 gap-1.5 px-4 py-2 text-sm" onClick={swap}>
+            <ArrowLeftRight size={14} aria-hidden />
+            Swap
           </button>
           {output ? <CopyButton text={output} copied={copied} onCopy={() => void copy(output)} /> : null}
         </>

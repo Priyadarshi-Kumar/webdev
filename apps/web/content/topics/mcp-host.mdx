@@ -10,7 +10,9 @@ tags:
   - ai
 ---
 
-The **host** is the app you sit in — Cursor, Claude Desktop, VS Code Copilot Chat, a custom agent. It starts [MCP clients](/blog/mcp-client), shows tool-call approvals, and decides what the model is allowed to see.
+The **host** is the app you sit in — Cursor, Claude Desktop, VS Code Copilot Chat, a custom agent. It starts <Term id="mcp-client">MCP clients</Term>, shows tool-call approvals, and decides what the model is allowed to see.
+
+## Config lives on the host
 
 ```json
 {
@@ -23,6 +25,32 @@ The **host** is the app you sit in — Cursor, Claude Desktop, VS Code Copilot C
 }
 ```
 
-That config lives on the **host**. The model never launches processes by itself.
+That JSON is **not** sent to OpenAI as a plugin. The host spawns `npx … filesystem` (stdio) or opens an HTTP URL. The model never launches processes by itself.
+
+A second server is a second client:
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/you/notes"]
+    },
+    "github": {
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": { "Authorization": "Bearer ${GITHUB_TOKEN}" }
+    }
+  }
+}
+```
+
+## What the host is responsible for
+
+- Which servers may start (allowlist)
+- Whether a `tools/call` needs a click (“delete this file?”)
+- How tool results appear in the transcript
+- Shutting servers down when the window closes
+
+If a tool misbehaves, you disable it in the **host** settings. The server cannot override that.
 
 Related: [MCP](/blog/mcp), [MCP in depth](/blog/model-context-protocol).

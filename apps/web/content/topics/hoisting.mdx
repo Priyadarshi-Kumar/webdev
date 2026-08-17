@@ -11,6 +11,10 @@ tags:
 
 **Hoisting** means nested dependencies get lifted toward the root `node_modules` so one copy of React is reused.
 
+## Nested vs flat
+
+Without hoisting, React’s helper `scheduler` would live only under `node_modules/react/node_modules/scheduler`. npm and Yarn Classic lift it:
+
 ```txt
 # hoisted (npm / Yarn Classic)
 node_modules/
@@ -19,13 +23,33 @@ node_modules/
   lodash/
 ```
 
-Because `scheduler` is at the top, **your** app can `import "scheduler"` even if you never listed it. That accidental import is a [phantom dependency](/blog/phantom-dependency).
-
-pnpm does **not** hoist by default. Yarn PnP does not use this folder layout. `shamefully-hoist=true` turns pnpm back into a flat tree.
+Node’s resolver finds `scheduler` from *your* app files because it walks up to the root. You never listed it. That accidental import is a <Term id="phantom-dependency">phantom dependency</Term>.
 
 ```js
 // works on hoisted npm if scheduler was lifted — brittle
 import { unstable_now } from "scheduler";
 ```
+
+Upgrade React, or switch to pnpm, and the import vanishes.
+
+## Who hoists?
+
+| Tool | Default |
+| --- | --- |
+| npm | Hoist (flat-ish `node_modules`) |
+| Yarn Classic | Hoist |
+| Yarn Berry PnP | No `node_modules` walk — no hoist in this sense |
+| pnpm | Nested / isolated. No hoist unless you ask |
+
+pnpm’s isolation is the feature. `shamefully-hoist=true` turns it back into a flat tree.
+
+```bash
+# see the real tree (npm)
+npm ls scheduler
+```
+
+## When sharing a copy is good
+
+One React for the whole app **is** what you want. That is also why <Term id="peer-dependency">peer dependencies</Term> exist. Hoisting just does sharing *implicitly*, including packages you should not import.
 
 Related: [phantom dependency](/blog/phantom-dependency), [shamefully-hoist](/blog/shamefully-hoist), [node_modules](/blog/node-modules).

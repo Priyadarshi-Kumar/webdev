@@ -1,0 +1,369 @@
+---
+title: Microfrontends in detail — composition, Module Federation, Vite
+description: When a UI is several independently built apps, how the host and remotes talk, and a complete Vite + React Module Federation example — shared React, lazy load, types, CORS, and when not to bother.
+slug: microfrontends
+date: 2026-08-18
+tags:
+  - javascript
+  - vite
+  - react
+  - architecture
+  - interview
+---
+
+A <Term id="microfrontend">microfrontend</Term> is a **slice of the product UI** that a team can **build, version, and often deploy** without waiting on the rest of the frontend. The cart team ships `cart.example`. The shell team ships `shop.example`. The browser composes them into one page the user thinks of as “the shop.”
+
+That is the whole pitch. The rest is **how you compose**, **how you share React**, and **what breaks** when two apps disagree on versions, cookies, or CSS.
+
+This site is **not** a microfrontend. It is one Vite app plus libraries in a <Term id="monorepo">monorepo</Term>. That split is compile-time. Microfrontends are usually **runtime**: the host does not have the remote’s source in its bundle until the browser fetches it.
+
+Dotted, sky-colored words are glossary terms — hover for a short note; each is also a **link** to a full page with an example.
+
+## The problem it is for
+
+### One frontend, many clocks
+
+A company with one `apps/web` and fifty people in it hits the same walls:
+
+- A checkout change waits behind a design-system refactor in the same pipeline.
+- “Just bump React” means coordinating every feature.
+- A bad deploy takes down **nav, search, and billing** together.
+
+Microfrontends buy **independent release trains**. The cost is a **composition contract**: names of remotes, shared libraries, CSS isolation, and a plan for when the remote is down.
+
+If you have **one team** and **one deploy**, you do not have that problem. Use packages in a monorepo. Federation will only add CORS, two Vite configs, and “Invalid hook call” when `shared` is wrong.
+
+### Host and remote
+
+| Role | Owns | Ships |
+| --- | --- | --- |
+| **Host** (shell) | Layout, auth, top-level routes, which remotes exist | `shop.example` |
+| **Remote** | A widget or a route subtree | `cart.example` + `remoteEntry.js` |
+
+The host is still “the app” in the URL bar. Remotes are **not** required to be full pages. A remote can expose one component (`MiniCart`) or a whole router (`./CartApp`).
+
+A remote can also **be a host** of other remotes. That nesting is possible and usually a mistake on day one.
+
+## Ways to compose (pick one on purpose)
+
+### Build-time: it is just a library
+
+The “cart” is `libs/cart`. The shell imports `@shop/cart`. You version with git. You deploy **one** artifact.
+
+```ts
+import { MiniCart } from "@shop/cart";
+```
+
+This is **not** a microfrontend. It is the correct default. Independent *code ownership* does not require independent *bundles*.
+
+### iframe: strongest isolation, weakest UX
+
+The host does:
+
+```tsx
+<iframe title="Cart" src="https://cart.example/embed" />
+```
+
+Separate origin → separate JS heap, CSS, and cookies (unless you punch holes). You talk with `postMessage`. You fight height, focus, and SEO. Use this when the remote is **untrusted** or a **legacy** app you will not rewrite.
+
+### Web components: a DOM contract
+
+The remote registers `<shop-mini-cart>`. The host puts that tag in React. Isolation is the Shadow DOM. Passing rich React trees through custom elements is clumsy. Fine for a widget; painful for a whole checkout flow.
+
+### Runtime modules: Module Federation
+
+<Term id="module-federation">Module Federation</Term> is the usual “SPA microfrontend” answer. The remote’s bundler emits `remoteEntry.js`. The host `import("cart/MiniCart")` at runtime. Shared deps (`react`, `react-dom`) load **once**.
+
+On Vite, the plugin to use is **`@module-federation/vite`**. Vite and VoidZero point at it. Older posts use `@originjs/vite-plugin-federation`; the ideas match, the `remotes` object is more explicit in the new plugin.
+
+The rest of this note is that path, with React 19 and Vite.
+
+## Mental model: a remote is a URL plus a map
+
+At build time the remote writes a **manifest of exposes**:
+
+```txt
+cart (name)
+  remoteEntry.js          ← host fetches this first
+  ./MiniCart  → chunk     ← import("cart/MiniCart")
+  ./CartPage  → chunk
+```
+
+The host does **not** compile `MiniCart.tsx`. It compiles a **placeholder import**. The browser resolves it after `remoteEntry.js` is loaded from the remote origin.
+
+That is why:
+
+- The remote must be **up** (or cached) when the user opens the host.
+- The remote origin must send **CORS** headers the host origin is allowed to read.
+- `shared` versions must be a **range both sides accept**, or you get two Reacts.
+
+## Vite + React: a host and a cart remote
+
+Two apps. Two ports. One React copy.
+
+```txt
+shop/
+  host/          Vite, port 5173
+  cart/          Vite, port 5174
+```
+
+They can live in one git repo (pnpm workspaces) or two. Workspaces help you **pin the same React**. They do not make federation automatic.
+
+### Cart remote — the widget
+
+`cart/src/MiniCart.tsx`:
+
+```tsx
+import { useState } from "react";
+
+export default function MiniCart({ userId }: { userId: string }) {
+  const [n, setN] = useState(2);
+
+  return (
+    <button type="button" onClick={() => setN((x) => x + 1)}>
+      {userId}’s cart ({n})
+    </button>
+  );
+}
+```
+
+`cart/vite.config.ts`:
+
+```ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { federation } from "@module-federation/vite";
+
+export default defineConfig({
+  plugins: [
+    react(),
+    federation({
+      name: "cart",
+      filename: "remoteEntry.js",
+      exposes: {
+        "./MiniCart": "./src/MiniCart.tsx",
+      },
+      shared: {
+        react: { singleton: true },
+        "react-dom": { singleton: true },
+      },
+    }),
+  ],
+  server: {
+    port: 5174,
+    origin: "http://localhost:5174",
+    cors: true,
+  },
+  preview: {
+    port: 5174,
+    cors: true,
+  },
+  build: {
+    target: "esnext",
+  },
+});
+```
+
+`singleton: true` means: **one instance in the page**. If the host already loaded React 19.2, the remote **must not** ship a second copy. That is the same idea as a <Term id="peer-dependency">peer dependency</Term> — the host provides React; the remote consumes it.
+
+`server.origin` matters in Vite: asset URLs inside the remote entry need an absolute origin so the host on `:5173` can fetch chunks from `:5174`, not from itself.
+
+`cors: true` on the remote **dev server** lets the host origin read `remoteEntry.js`. In production you set the same idea on the CDN: `Access-Control-Allow-Origin` for the host origin (or a tight list), not `*` if you also send credentials.
+
+### Host shell — load the widget
+
+`host/vite.config.ts`:
+
+```ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { federation } from "@module-federation/vite";
+
+const cartEntry =
+  process.env.CART_REMOTE ?? "http://localhost:5174/remoteEntry.js";
+
+export default defineConfig({
+  plugins: [
+    react(),
+    federation({
+      name: "host",
+      remotes: {
+        cart: {
+          type: "module",
+          name: "cart",
+          entry: cartEntry,
+        },
+      },
+      shared: {
+        react: { singleton: true },
+        "react-dom": { singleton: true },
+      },
+    }),
+  ],
+  server: {
+    port: 5173,
+    origin: "http://localhost:5173",
+  },
+  build: {
+    target: "esnext",
+  },
+});
+```
+
+`type: "module"` means the remote entry is an **ESM** file (what Vite emits). Webpack remotes sometimes used a global `var` format; Vite hosts that talk to those need the remote’s `varFilename` option. Stay on `module` if both sides are Vite.
+
+Production: bake `CART_REMOTE` at **host build** time, or use a **manifest URL** (`mf-manifest.json`) so you can retarget a remote without rebuilding the host. The plugin can emit that manifest; the host `entry` then points at it instead of a hard-coded `remoteEntry.js`.
+
+### React.lazy, Suspense, and a wall when the remote is dead
+
+`host/src/remote-modules.d.ts` — TypeScript has no idea `cart/MiniCart` exists until you say so:
+
+```ts
+declare module "cart/MiniCart" {
+  import type { ComponentType } from "react";
+
+  const MiniCart: ComponentType<{ userId: string }>;
+  export default MiniCart;
+}
+```
+
+`host/src/MiniCartSlot.tsx`:
+
+```tsx
+import { Component, lazy, Suspense, type ReactNode } from "react";
+
+const MiniCart = lazy(() => import("cart/MiniCart"));
+
+class RemoteError extends Component<
+  { children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  render() {
+    if (this.state.failed) {
+      return <a href="https://cart.example">Open cart</a>;
+    }
+    return this.props.children;
+  }
+}
+
+export function MiniCartSlot({ userId }: { userId: string }) {
+  return (
+    <RemoteError>
+      <Suspense fallback={<span>Cart…</span>}>
+        <MiniCart userId={userId} />
+      </Suspense>
+    </RemoteError>
+  );
+}
+```
+
+Without the error boundary, a 404 on `remoteEntry.js` is a **white screen**. Treat remotes like a network call: loading, success, failure.
+
+`lazy(() => import("cart/MiniCart"))` is the host-side import. The string `"cart"` is the **key in `remotes`**, not a folder on disk. `MiniCart` is the **expose name** without `./`.
+
+### Same React version on both sides
+
+In both `package.json` files, pin the same range (and the same <Term id="lockfile">lockfile</Term> if they share a workspace):
+
+```json
+{
+  "dependencies": {
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  }
+}
+```
+
+Federation `shared` can take a **semver range**. If the remote requires `^18` and the host has `19`, the runtime may load **two** Reacts. Hooks then throw `Invalid hook call`. Fix versions first; do not “share” mismatched majors.
+
+`react-router`, `@emotion/react`, and other **singletons with internal state** belong in `shared` too if both trees use them. Over-sharing (lodash as singleton) is optional; under-sharing React is fatal.
+
+## Routing, CSS, and auth
+
+### Who owns the URL
+
+Two sane contracts:
+
+1. **Widget remotes** — host router only. Cart is a component. No `/cart` on the remote origin except for its own standalone demo.
+2. **Route remotes** — host has `/cart/*` and renders `<CartApp />`. The remote’s inner router uses a **basename** (`/cart`) so links stay under the host origin.
+
+Do not give the user two origins for “the same app” unless you like split sessions.
+
+### CSS collisions
+
+Two teams both ship `.button { padding: 8px }`. Last stylesheet wins. Mitigations:
+
+- CSS Modules or a **prefix** (`cart-`) per remote
+- Shadow DOM (web component wrapper)
+- A **design-system package** both sides import — versions still need a policy
+
+Federation does not namespace CSS for you. `bundleAllCSS` on the Vite plugin, if you turn it on, stuffs CSS into exposes; it does not isolate it.
+
+### Auth
+
+The host logged the user in. The remote’s API still needs the session.
+
+- **Same site, cookies:** `HttpOnly` cookie on `.example` + `SameSite`. The remote’s `fetch` to `api.example` works if CORS and cookie flags allow it. Cross-origin remotes **do not** magically see the host’s `localStorage`.
+- **Tokens in JS:** the host passes a short-lived token as a **prop** or via a tiny `postMessage` bridge. Do not put long-lived secrets in `localStorage` for a third-party remote.
+
+A remote on another team’s origin is a **third party** to the browser. Treat it like one.
+
+## Deploy and versioning
+
+### Independent deploys
+
+The cart team ships a new `remoteEntry.js` to `https://cart.example/remoteEntry.js`. The host still points at that URL. **No host rebuild** if the expose names and props stay compatible.
+
+That is the win. The failure mode is **breaking the contract**: rename `./MiniCart`, change `userId` to `user`, bump React major. The host does not type-check the remote at host-build time unless you add a **types package** or consume generated `d.ts` from the remote build.
+
+### Contract tests
+
+Minimum:
+
+- Host e2e: open shell, wait for cart button, click.
+- Remote **standalone** page for local UI work (`cart` still has `index.html` + `MiniCart`).
+- A written list of exposes and props. Treat it like a public API.
+
+### Caching
+
+`remoteEntry.js` should be **short-lived** or hashed. If you cache it for a week, hosts keep loading an entry that points at deleted chunks. Hash the chunks; keep the entry name stable **or** point the host at `mf-manifest.json` that always names the current files.
+
+## When not to use this
+
+Skip runtime microfrontends when:
+
+- One team, one product, one deploy (this site).
+- You only wanted **code ownership** — a monorepo library is enough.
+- You cannot agree on **one React** (or you need Vue in one island and React in another — then iframe or web components, not a shared React runtime).
+- The “remote” is three components. The federation machinery is larger than the feature.
+
+Use them when **release independence** is a real org constraint, you can staff **platform** work (shared config, observability, a broken-remote fallback), and you accept that the architecture is a **distributed system in the browser**.
+
+## Interview questions
+
+**What is a microfrontend?**  
+A UI slice with its own build (and usually deploy), composed into a host. Not the same as a folder in a monorepo.
+
+**Host vs remote?**  
+Host: shell, routing, which remotes to load. Remote: exposed modules + `remoteEntry.js`.
+
+**Why share React as a singleton?**  
+Two Reacts → two hook dispatchers → `Invalid hook call`. Same for `react-dom`.
+
+**Vite plugin?**  
+`@module-federation/vite`. Remotes: `exposes` + `filename`. Host: `remotes` with `type: "module"` and an `entry` URL.
+
+**How does the host import a remote?**  
+`import("cart/MiniCart")` where `cart` is the remote key and `MiniCart` is an expose. Wrap in `lazy` + `Suspense` + an error boundary.
+
+**iframe vs Module Federation?**  
+iframe: process isolation, painful UX. Federation: one JS world, shared React, you must align versions and CSS.
+
+**Does a monorepo replace this?**  
+No. A monorepo shares git and install. Microfrontends share a **runtime**. You can do both (Nx + federation) or neither (one app).

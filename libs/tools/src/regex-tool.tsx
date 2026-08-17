@@ -1,7 +1,6 @@
-import { useMemo } from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { testRegex } from "@webdev/utils";
-import { StatusMessage, ToolShell, ToolTextarea } from "./components/tool-shell";
+import { StatusMessage, ToolInput, ToolShell, ToolTextarea } from "./components/tool-shell";
 
 export function RegexTool() {
   const [pattern, setPattern] = useState("\\w+");
@@ -14,30 +13,11 @@ export function RegexTool() {
     <ToolShell status={<StatusMessage ok={result.ok} message={result.ok ? "Results" : result.error} />}>
       <div className="grid gap-4">
         <div className="flex flex-wrap gap-3">
-          <label className="flex flex-1 min-w-[12rem] flex-col gap-1 text-sm">
-            Pattern
-            <input
-              value={pattern}
-              onChange={(event) => setPattern(event.target.value)}
-              className="rounded-xl border border-zinc-200 bg-white px-3 py-2 font-mono dark:border-white/10 dark:bg-zinc-900"
-            />
-          </label>
-          <label className="flex w-24 flex-col gap-1 text-sm">
-            Flags
-            <input
-              value={flags}
-              onChange={(event) => setFlags(event.target.value)}
-              className="rounded-xl border border-zinc-200 bg-white px-3 py-2 font-mono dark:border-white/10 dark:bg-zinc-900"
-            />
-          </label>
+          <ToolInput value={pattern} onChange={setPattern} label="Pattern" className="min-w-[12rem] flex-1" />
+          <ToolInput value={flags} onChange={setFlags} label="Flags" className="w-24" />
         </div>
         <ToolTextarea value={sample} onChange={setSample} label="Sample text" rows={5} />
-        <ToolTextarea
-          value={result.ok ? result.output : ""}
-          onChange={() => {}}
-          label="Matches"
-          rows={5}
-        />
+        <ToolTextarea value={result.ok ? result.output : ""} label="Matches" rows={5} readOnly />
       </div>
     </ToolShell>
   );

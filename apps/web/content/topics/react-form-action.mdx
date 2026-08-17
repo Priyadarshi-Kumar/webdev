@@ -10,6 +10,8 @@ tags:
 
 A React **Action** is a function meant to run from a form (or `useTransition`). It can be `async`. Hooks like `useActionState` give you the last result and `isPending`.
 
+## Save a field without `onSubmit` glue
+
 ```tsx
 import { useActionState } from "react";
 
@@ -29,5 +31,35 @@ export function NameForm() {
   );
 }
 ```
+
+React calls `saveName` with the previous state and a `FormData` of the fields. `pending` is true until the promise settles. You do not wire `useState` for “is submitting” by hand.
+
+## Pending state from a transition
+
+Any async function passed to `startTransition` is also an Action. `useFormStatus` (inside the form) reads whether *that* form is pending — useful for a nested Submit button:
+
+```tsx
+import { useFormStatus } from "react";
+
+function Submit() {
+  const { pending } = useFormStatus();
+  return <button disabled={pending}>{pending ? "Working…" : "Submit"}</button>;
+}
+
+export function Signup() {
+  return (
+    <form action={createAccount}>
+      <input name="email" type="email" required />
+      <Submit />
+    </form>
+  );
+}
+```
+
+`useFormStatus` must be a **child** of the `<form>`, not the same component that renders the form.
+
+## Progressive enhancement
+
+A plain `action="/api"` still works if JavaScript is slow to load. A function `action={fn}` needs React on the client (or a framework that maps it to a server endpoint). This site’s tools run in the browser; they use the function form.
 
 Related: [React Hooks by version](/blog/react-hooks).

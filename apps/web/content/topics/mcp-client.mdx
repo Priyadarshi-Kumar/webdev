@@ -10,9 +10,9 @@ tags:
   - ai
 ---
 
-An **MCP client** is a session (or, on newer HTTP transports, a request pipeline) from the [host](/blog/mcp-host) to **one** [server](/blog/mcp-server). The host usually runs **one client per server**.
+An **MCP client** is a session (or, on newer HTTP transports, a request pipeline) from the <Term id="mcp-host">host</Term> to **one** <Term id="mcp-server">server</Term>. The host usually runs **one client per server**.
 
-It sends JSON-RPC methods such as `initialize`, `tools/list`, and `tools/call`, and turns the replies into something the model can use (tool definitions, file text, errors).
+## Many clients, one chat window
 
 ```txt
 Host
@@ -20,5 +20,26 @@ Host
  ├─ client → GitHub server (HTTP)
  └─ client → your company’s API server (HTTP)
 ```
+
+Each client sends JSON-RPC methods such as `initialize`, `tools/list`, and `tools/call`, and turns the replies into something the model can use (tool definitions, file text, errors).
+
+## Handshake (simplified)
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {},
+    "clientInfo": { "name": "cursor", "version": "1.0" }
+  }
+}
+```
+
+After `initialize`, the client calls `tools/list`. Those names show up as callable tools in the model’s next request. If the server later sends a `notifications/tools/list_changed` <Term id="json-rpc">notification</Term> (no `id`), the client lists again.
+
+You rarely write a client unless you are building a host. App developers write **servers**; Cursor already has the client.
 
 Related: [JSON-RPC](/blog/json-rpc), [MCP in depth](/blog/model-context-protocol).

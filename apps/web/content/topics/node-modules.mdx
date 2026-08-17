@@ -11,21 +11,46 @@ tags:
 
 `node_modules` is the folder of groceries. After install, `import "react"` resolves to a directory in here (or, with Yarn PnP, to a zip that plays the same role).
 
+## Layout after install
+
 ```txt
 my-app/
   package.json
+  pnpm-lock.yaml
   node_modules/
     react/
     lodash/
+    .bin/          ← CLI shims: tsc, vite, eslint
 ```
-
-You almost never commit this folder. `.gitignore` should list `node_modules`. CI and teammates recreate it from the lockfile.
-
-npm and Yarn Classic **hoist** (flatten) the tree. pnpm uses a nested layout plus a global store. Yarn Berry can skip the folder entirely (Plug’n’Play).
 
 ```js
 // Node walks node_modules looking for "lodash"
 import { debounce } from "lodash";
 ```
+
+Node’s algorithm: start in the current file’s folder, look for `node_modules/lodash`, then walk **up** parent directories until it finds one. That is why a <Term id="monorepo">monorepo</Term> can hoist shared packages to the repo root.
+
+## Do not commit it
+
+You almost never commit this folder. `.gitignore` should list `node_modules`. CI and teammates recreate it from the <Term id="lockfile">lockfile</Term>.
+
+```gitignore
+node_modules
+dist
+.nx
+```
+
+A committed `node_modules` is huge, OS-specific (optional native addons), and fights the lockfile. The exception is a tiny “vendor” copy for air-gapped builds — still unusual.
+
+## Layout differs by manager
+
+npm and Yarn Classic **<Term id="hoisting">hoist</Term>** (flatten) the tree so one `react` sits at the top. pnpm uses a nested `.pnpm` store plus <Term id="hard-links">hard links</Term>. Yarn Berry can skip the folder entirely (<Term id="yarn-plug-n-play">Plug’n’Play</Term>).
+
+```bash
+# where did this import resolve?
+node -e "console.log(require.resolve('react'))"
+```
+
+If a tool greps `node_modules/some-pkg` and you are on PnP, that path will not exist. Point the tool at the resolved path, or set `nodeLinker: node-modules`.
 
 Related: [hoisting](/blog/hoisting), [lockfile](/blog/lockfile), [Yarn Plug’n’Play](/blog/yarn-plug-n-play).

@@ -12,6 +12,8 @@ tags:
 
 A **prompt** in MCP is a *template*, not the chat box. `prompts/list` / `prompts/get` return messages the host can send to the model — often a slash command: `/pr-review 1842`.
 
+## A template with an argument
+
 ```json
 {
   "name": "pr_review",
@@ -19,12 +21,29 @@ A **prompt** in MCP is a *template*, not the chat box. `prompts/list` / `prompts
   "messages": [
     {
       "role": "user",
-      "content": { "type": "text", "text": "Review pull request {{pr}}" }
+      "content": {
+        "type": "text",
+        "text": "Review pull request {{pr}}. Focus on lockfile and CI."
+      }
     }
   ]
 }
 ```
 
-Use prompts for **repeatable workflows**. Use tools for **live actions**. Use resources for **blobs**.
+The user picks `pr_review` and types `1842`. The host substitutes and sends a normal chat turn. The server can also *fetch* PR 1842 inside `prompts/get` and put the diff in the message — then you do not need a separate tool for that workflow.
+
+## When to use which
+
+| Primitive | Job |
+| --- | --- |
+| Prompt | Repeatable workflow the **user** starts |
+| Tool | Live action the **model** chooses mid-chat |
+| Resource | Blob the host attaches |
+
+```txt
+/pr-review 1842     → prompt (you decided to review)
+“look at CI”        → model may call get_check_run (tool)
+attach schema.sql   → resource
+```
 
 Related: [MCP](/blog/mcp), [MCP in depth](/blog/model-context-protocol).

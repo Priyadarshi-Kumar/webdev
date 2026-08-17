@@ -12,6 +12,8 @@ tags:
 
 A **tool** is an action: `tools/list` advertises it; `tools/call` runs it. Arguments follow JSON Schema. The result is content the host stuffs back into the model’s context (text, images, or an error).
 
+## Schema the model sees
+
 ```json
 {
   "name": "get_issue",
@@ -20,12 +22,39 @@ A **tool** is an action: `tools/list` advertises it; `tools/call` runs it. Argum
     "type": "object",
     "required": ["number"],
     "properties": {
-      "number": { "type": "integer" }
+      "number": { "type": "integer", "description": "Issue number, e.g. 1842" }
     }
   }
 }
 ```
 
-Tools can have **side effects**. Resources are for read-only blobs. Do not hide a delete behind a “resource.”
+A vague `description` (“gets stuff”) makes the model guess. A precise one (“Fetch a GitHub issue by number”) makes it pass `{ "number": 1842 }`.
+
+## Call and result
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 7,
+  "method": "tools/call",
+  "params": { "name": "get_issue", "arguments": { "number": 1842 } }
+}
+```
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 7,
+  "result": {
+    "content": [
+      { "type": "text", "text": "#1842: Lockfile not committed in CI" }
+    ]
+  }
+}
+```
+
+Tools can have **side effects** (write a file, comment on a PR). <Term id="mcp-resource">Resources</Term> are for read-only blobs. Do not hide a delete behind a “resource.”
+
+The host should confirm dangerous tools. Your server should still check auth — the model is not a security boundary.
 
 Related: [MCP resource](/blog/mcp-resource), [MCP in depth](/blog/model-context-protocol).

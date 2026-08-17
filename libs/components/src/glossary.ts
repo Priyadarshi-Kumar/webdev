@@ -222,6 +222,16 @@ export const glossary = {
     explain:
       "A simple request/response format in JSON: method name, params, and an id. MCP messages are JSON-RPC 2.0 (plus notifications with no id).",
   },
+  microfrontend: {
+    slug: "microfrontend",
+    explain:
+      "A slice of a UI that is built, versioned, and often deployed as its own app, then composed into a larger product at runtime (or at build time) instead of living as one giant frontend.",
+  },
+  "module-federation": {
+    slug: "module-federation",
+    explain:
+      "A bundler feature: one app (the host) loads JS modules from another app (a remote) at runtime via a remoteEntry file, and can share libraries like React so both trees use one copy.",
+  },
 } as const;
 
 export type GlossaryId = keyof typeof glossary;

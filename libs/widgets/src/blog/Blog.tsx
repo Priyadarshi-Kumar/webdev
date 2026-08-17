@@ -1,275 +1,434 @@
-import { Card, Eyebrow, JsonLd, ManagerCompare, Tag, Term } from "@webdev/components";
+import { CodeBlock, JsonLd, ManagerCompare, ScrollHints, Tag, Term } from "@webdev/components";
 import type { PostFrontmatter } from "@webdev/types";
-import { groupPostsBySubject, paginate, type BlogSubjectGroup, type TocEntry } from "@webdev/utils";
-import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { groupPostsBySubject, resolveSubject, type TocEntry } from "@webdev/utils";
+import { ChevronDown, Maximize2, Minimize2, Search } from "lucide-react";
 import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { SITE, getSiteUrl } from "../site/config";
 import { ArticleToc } from "./ArticleToc";
 
-const GLOSSARY_PAGE_SIZE = 12;
-const GLOSSARY_PAGE_PARAM = "glossary";
+type MdxComponents = {
+  Term: typeof Term;
+  ManagerCompare: typeof ManagerCompare;
+  pre: typeof CodeBlock;
+};
+
+type NotePost = PostFrontmatter & {
+  Component?: ComponentType<{ components?: MdxComponents }>;
+};
+
+const mdxComponents: MdxComponents = { Term, ManagerCompare, pre: CodeBlock };
+
+function isGlossary(post: PostFrontmatter) {
+  return post.tags?.includes("glossary") ?? false;
+}
 
 function titleMatches(post: PostFrontmatter, query: string) {
-  return post.title.toLowerCase().includes(query);
+  return post.title.toLowerCase().includes(query) || post.slug.toLowerCase().includes(query);
 }
 
-function readGlossaryPage() {
-  if (typeof window === "undefined") return 1;
-  const value = new URL(window.location.href).searchParams.get(GLOSSARY_PAGE_PARAM);
-  const page = Number(value);
-  return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+function SearchField({ query, onQueryChange }: { query: string; onQueryChange: (value: string) => void }) {
+  return (
+    <label className="relative block">
+      <span className="sr-only">Search notes and jargon</span>
+      <Search
+        size={16}
+        className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400"
+        aria-hidden
+      />
+      <input
+        type="search"
+        value={query}
+        onChange={(event) => onQueryChange(event.target.value)}
+        placeholder="Search notes and jargon"
+        autoComplete="off"
+        className="field"
+      />
+    </label>
+  );
 }
 
-function writeGlossaryPage(page: number) {
-  const url = new URL(window.location.href);
-  if (page <= 1) url.searchParams.delete(GLOSSARY_PAGE_PARAM);
-  else url.searchParams.set(GLOSSARY_PAGE_PARAM, String(page));
-  window.history.replaceState(window.history.state, "", url);
-}
-
-function SubjectGroups({
-  groups,
-  listClassName,
-  renderPost,
+function CollapsibleSection({
+  id,
+  title,
+  count,
+  open,
+  onToggle,
+  nested = false,
+  children,
 }: {
-  groups: BlogSubjectGroup[];
-  listClassName?: string;
-  renderPost: (post: PostFrontmatter) => ReactNode;
+  id: string;
+  title: string;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+  nested?: boolean;
+  children: ReactNode;
+}) {
+  if (count === 0) return null;
+
+  if (nested) {
+    return (
+      <div className="rounded-xl border border-zinc-200/70 bg-zinc-50/80 dark:border-white/10 dark:bg-zinc-900/40">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={id}
+          onClick={onToggle}
+          className="flex w-full items-center gap-2 px-2 py-1.5 text-left transition hover:bg-zinc-100/90 dark:hover:bg-white/5"
+        >
+          <ChevronDown
+            size={14}
+            className={`shrink-0 text-zinc-500 transition duration-200 ${open ? "rotate-180 text-sky-500" : ""}`}
+            aria-hidden
+          />
+          <span className="min-w-0 flex-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-600 dark:text-sky-400">
+            {title}
+          </span>
+          <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-zinc-500 dark:bg-white/10 dark:text-zinc-400">
+            {count}
+          </span>
+        </button>
+        {open ? (
+          <div id={id} className="border-t border-zinc-200/70 px-1.5 py-1.5 dark:border-white/10">
+            {children}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-zinc-200/90 bg-white/70 shadow-[0_1px_0_rgba(255,255,255,0.6)_inset] dark:border-white/10 dark:bg-zinc-950/45 dark:shadow-[0_1px_0_rgba(255,255,255,0.05)_inset]">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={onToggle}
+        className="flex w-full items-center gap-3 px-2.5 py-2.5 text-left transition hover:bg-zinc-100/80 dark:hover:bg-white/5"
+      >
+        <span
+          className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border text-zinc-600 transition dark:text-zinc-300 ${
+            open
+              ? "border-sky-400/50 bg-sky-400/15 text-sky-700 dark:text-sky-300"
+              : "border-zinc-200 bg-zinc-50 dark:border-white/10 dark:bg-zinc-900"
+          }`}
+        >
+          <ChevronDown size={16} className={`transition duration-200 ${open ? "rotate-180" : ""}`} aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span className="font-display text-sm font-semibold tracking-tight text-zinc-950 dark:text-white">
+              {title}
+            </span>
+            <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-zinc-500 dark:bg-white/10 dark:text-zinc-400">
+              {count}
+            </span>
+          </span>
+          <span className="mt-0.5 block text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+            {open ? "Hide list" : "Show list"}
+          </span>
+        </span>
+      </button>
+      {open ? (
+        <div id={id} className="space-y-2 border-t border-zinc-200/80 px-2 py-2 dark:border-white/10">
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PostList({
+  posts,
+  selectedSlug,
+}: {
+  posts: PostFrontmatter[];
+  selectedSlug?: string;
 }) {
   return (
+    <ul className="space-y-1">
+      {posts.map((post) => {
+        const active = post.slug === selectedSlug;
+        return (
+          <li key={post.slug}>
+            <a
+              href={`/blog/${post.slug}`}
+              aria-current={active ? "page" : undefined}
+              className={`block rounded-xl px-3 py-2 text-sm font-medium leading-snug transition ${
+                active
+                  ? "bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
+                  : "text-zinc-700 hover:bg-zinc-200/70 dark:text-zinc-300 dark:hover:bg-white/10"
+              }`}
+            >
+              {post.title}
+            </a>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function SubjectLists({
+  scope,
+  posts,
+  selectedSlug,
+  openTopics,
+  onToggleTopic,
+}: {
+  scope: string;
+  posts: PostFrontmatter[];
+  selectedSlug?: string;
+  openTopics: Record<string, boolean>;
+  onToggleTopic: (key: string) => void;
+}) {
+  const groups = useMemo(() => groupPostsBySubject(posts), [posts]);
+
+  return (
     <>
-      {groups.map((group) => (
-        <section
-          key={group.id}
-          className="mt-10 grid grid-cols-1 gap-x-8 gap-y-4 first:mt-0 sm:grid-cols-[minmax(6.5rem,9.5rem)_1fr]"
-        >
-          <div className="sm:pt-0.5">
-            <Eyebrow>{group.label}</Eyebrow>
-          </div>
-          <ul className={listClassName ?? "space-y-4"}>{group.posts.map((post) => renderPost(post))}</ul>
-        </section>
-      ))}
+      {groups.map((group) => {
+        const key = `${scope}:${group.id}`;
+        return (
+          <CollapsibleSection
+            key={group.id}
+            id={`blog-topic-${scope}-${group.id}`}
+            title={group.label}
+            count={group.posts.length}
+            nested
+            open={openTopics[key] ?? false}
+            onToggle={() => onToggleTopic(key)}
+          >
+            <PostList posts={group.posts} selectedSlug={selectedSlug} />
+          </CollapsibleSection>
+        );
+      })}
     </>
   );
 }
 
-function GlossaryPagination({
-  page,
-  totalPages,
-  total,
-  onPageChange,
+export function BlogWorkspace({
+  posts,
+  selectedSlug,
+  toc = [],
 }: {
-  page: number;
-  totalPages: number;
-  total: number;
-  onPageChange: (page: number) => void;
+  posts: NotePost[];
+  selectedSlug?: string;
+  toc?: TocEntry[];
 }) {
-  if (totalPages <= 1) return null;
-
-  return (
-    <nav
-      className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 pt-6 dark:border-white/10"
-      aria-label="Glossary pages"
-    >
-      <p className="text-sm text-zinc-500 dark:text-zinc-400">
-        Page {page} of {totalPages} · {total} terms
-      </p>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          className="btn-ghost inline-flex items-center gap-1 px-3 py-2 text-sm disabled:opacity-40"
-          disabled={page <= 1}
-          onClick={() => onPageChange(page - 1)}
-        >
-          <ChevronLeft size={16} aria-hidden />
-          Previous
-        </button>
-        <button
-          type="button"
-          className="btn-ghost inline-flex items-center gap-1 px-3 py-2 text-sm disabled:opacity-40"
-          disabled={page >= totalPages}
-          onClick={() => onPageChange(page + 1)}
-        >
-          Next
-          <ChevronRight size={16} aria-hidden />
-        </button>
-      </div>
-    </nav>
-  );
-}
-
-export function BlogIndex({ posts }: { posts: PostFrontmatter[] }) {
   const [query, setQuery] = useState("");
-  const [glossaryPage, setGlossaryPage] = useState(readGlossaryPage);
   const needle = query.trim().toLowerCase();
 
   const notes = useMemo(() => {
-    const list = posts.filter((post) => !post.tags?.includes("glossary"));
+    const list = posts.filter((post) => !isGlossary(post));
     if (!needle) return list;
     return list.filter((post) => titleMatches(post, needle));
   }, [posts, needle]);
 
-  const glossary = useMemo(() => {
+  const jargon = useMemo(() => {
     const list = posts
-      .filter((post) => post.tags?.includes("glossary"))
+      .filter(isGlossary)
       .slice()
       .sort((a, b) => a.title.localeCompare(b.title));
     if (!needle) return list;
-    return list.filter((post) => titleMatches(post, needle) || post.slug.toLowerCase().includes(needle));
+    return list.filter((post) => titleMatches(post, needle));
   }, [posts, needle]);
 
-  const noteGroups = useMemo(() => groupPostsBySubject(notes), [notes]);
+  const selected = selectedSlug ? posts.find((post) => post.slug === selectedSlug) : undefined;
+  const selectedIsJargon = selected ? isGlossary(selected) : false;
 
-  const glossaryPagination = useMemo(
-    () => paginate(glossary, glossaryPage, GLOSSARY_PAGE_SIZE),
-    [glossary, glossaryPage],
-  );
-
-  const glossaryGroups = useMemo(
-    () => groupPostsBySubject(glossaryPagination.items),
-    [glossaryPagination.items],
-  );
+  const [articlesOpen, setArticlesOpen] = useState(!selectedIsJargon);
+  const [jargonOpen, setJargonOpen] = useState(selectedIsJargon);
+  const [openTopics, setOpenTopics] = useState<Record<string, boolean>>(() => {
+    if (!selected) return {};
+    const scope = selectedIsJargon ? "jargon" : "articles";
+    return { [`${scope}:${resolveSubject(selected.tags)}`]: true };
+  });
 
   useEffect(() => {
-    if (glossaryPage > glossaryPagination.totalPages) {
-      setGlossaryPage(glossaryPagination.totalPages);
-      writeGlossaryPage(glossaryPagination.totalPages);
+    const compact = !window.matchMedia("(min-width: 1024px)").matches;
+    if (!selectedSlug) {
+      setArticlesOpen(true);
+      setJargonOpen(false);
+      return;
     }
-  }, [glossaryPage, glossaryPagination.totalPages]);
+    if (compact) {
+      setArticlesOpen(false);
+      setJargonOpen(false);
+      return;
+    }
+    if (selectedIsJargon) setJargonOpen(true);
+    else setArticlesOpen(true);
+  }, [selectedSlug, selectedIsJargon]);
 
   useEffect(() => {
-    setGlossaryPage(1);
-    writeGlossaryPage(1);
-  }, [needle]);
+    if (!selected) return;
+    const scope = selectedIsJargon ? "jargon" : "articles";
+    const key = `${scope}:${resolveSubject(selected.tags)}`;
+    setOpenTopics((current) => (current[key] ? current : { ...current, [key]: true }));
+  }, [selected, selectedIsJargon]);
 
-  const empty = notes.length === 0 && glossary.length === 0;
+  useEffect(() => {
+    if (!needle) return;
+    if (notes.length > 0) setArticlesOpen(true);
+    if (jargon.length > 0) setJargonOpen(true);
+    setOpenTopics((current) => {
+      const next = { ...current };
+      for (const group of groupPostsBySubject(notes)) next[`articles:${group.id}`] = true;
+      for (const group of groupPostsBySubject(jargon)) next[`jargon:${group.id}`] = true;
+      return next;
+    });
+  }, [needle, notes, jargon]);
 
-  function changeGlossaryPage(page: number) {
-    setGlossaryPage(page);
-    writeGlossaryPage(page);
-  }
+  const Content = selected?.Component;
+  const empty = notes.length === 0 && jargon.length === 0;
+  const [zen, setZen] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("zen-mode", zen);
+    return () => document.documentElement.classList.remove("zen-mode");
+  }, [zen]);
+
+  useEffect(() => {
+    if (!zen) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setZen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [zen]);
 
   return (
-    <section>
-      <h1 className="page-title">Blog</h1>
-      <label className="relative mt-8 block">
-        <span className="sr-only">Search notes and glossary</span>
-        <Search
-          size={16}
-          className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400"
-          aria-hidden
-        />
-        <input
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search notes and jargon by title"
-          autoComplete="off"
-          className="w-full rounded-full border border-zinc-200 bg-white py-3 pl-10 pr-4 text-base text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-sky-400 sm:py-2.5 sm:text-sm dark:border-white/10 dark:bg-zinc-900/70 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-sky-400/70"
-        />
-      </label>
-      {empty ? (
-        <p className="mt-10 text-sm text-zinc-500 dark:text-zinc-400">
-          Nothing matches “{query.trim()}”. Try another title or jargon word.
-        </p>
-      ) : null}
-      {noteGroups.length > 0 ? (
-        <div className="mt-10">
-          <Eyebrow>Notes</Eyebrow>
-          <h2 className="mt-2 text-2xl font-bold tracking-tight">Articles by subject</h2>
-          <div className="mt-6 space-y-10">
-            <SubjectGroups
-              groups={noteGroups}
-              renderPost={(post) => (
-                <li key={post.slug}>
-                  <Card href={`/blog/${post.slug}`}>
-                    <p className="text-xs text-zinc-500">{post.date}</p>
-                    <h3 className="mt-2 text-xl font-semibold tracking-tight">{post.title}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{post.description}</p>
-                    <div className="mt-4 flex flex-wrap gap-1.5">
-                      {post.tags.map((tag) => (
-                        <Tag key={tag}>{tag}</Tag>
-                      ))}
-                    </div>
-                  </Card>
-                </li>
-              )}
+    <div
+      className={`blog-workspace flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8 ${
+        toc.length > 0
+          ? "lg:pr-36 lg:w-[calc(100%+max(0px,calc((100vw-72rem)/2-16rem)))]"
+          : "lg:w-[calc(100%+max(0px,calc((100vw-72rem)/2-2rem)))]"
+      }`}
+    >
+      <aside className="blog-rail relative z-20 lg:sticky lg:top-0 lg:-ml-6 lg:flex lg:h-[calc(100svh-14rem)] lg:max-h-[calc(100svh-14rem)] lg:w-64 lg:shrink-0 lg:flex-col lg:overflow-hidden lg:self-start">
+        <SearchField query={query} onQueryChange={setQuery} />
+        <ScrollHints
+          frameClassName="mt-4 min-h-0 lg:flex-1"
+          className="rail-scroll min-h-0 space-y-3 lg:h-full lg:overflow-y-auto"
+        >
+          <nav aria-label="Notes and jargon">
+            {empty ? (
+              <p className="px-1 text-sm text-zinc-500 dark:text-zinc-400">
+                Nothing matches “{query.trim()}”. Try another title or jargon word.
+              </p>
+            ) : null}
+            <div className="space-y-3">
+              <CollapsibleSection
+                id="blog-articles"
+                title="Articles"
+                count={notes.length}
+                open={articlesOpen}
+                onToggle={() => setArticlesOpen((open) => !open)}
+              >
+                <SubjectLists
+                  scope="articles"
+                  posts={notes}
+                  selectedSlug={selectedSlug}
+                  openTopics={openTopics}
+                  onToggleTopic={(key) => setOpenTopics((current) => ({ ...current, [key]: !current[key] }))}
+                />
+              </CollapsibleSection>
+              <CollapsibleSection
+                id="blog-jargon"
+                title="Jargon"
+                count={jargon.length}
+                open={jargonOpen}
+                onToggle={() => setJargonOpen((open) => !open)}
+              >
+                <SubjectLists
+                  scope="jargon"
+                  posts={jargon}
+                  selectedSlug={selectedSlug}
+                  openTopics={openTopics}
+                  onToggleTopic={(key) => setOpenTopics((current) => ({ ...current, [key]: !current[key] }))}
+                />
+              </CollapsibleSection>
+            </div>
+          </nav>
+        </ScrollHints>
+      </aside>
+
+      {selected && Content ? (
+        <>
+          <article className="blog-article card min-w-0 flex-1 p-5 sm:p-7">
+            <JsonLd
+              data={{
+                "@context": "https://schema.org",
+                "@type": "BlogPosting",
+                headline: selected.title,
+                description: selected.description,
+                datePublished: selected.date,
+                author: { "@type": "Person", name: SITE.name, url: getSiteUrl() },
+                url: `${getSiteUrl()}/blog/${selected.slug}`,
+              }}
             />
-          </div>
+            <p className="text-xs text-zinc-500">{selected.date}</p>
+            <h1 className="mt-2 font-display text-2xl font-semibold tracking-tight text-zinc-950 sm:text-3xl dark:text-white">
+              {selected.title}
+            </h1>
+            <p className="mt-3 text-sm leading-relaxed text-zinc-600 sm:text-base dark:text-zinc-400">
+              {selected.description}
+            </p>
+            <div className="mt-4 flex flex-wrap gap-1.5">
+              {selected.tags.map((tag) => (
+                <Tag key={tag}>{tag}</Tag>
+              ))}
+            </div>
+            <div className="prose-article">
+              <Content components={mdxComponents} />
+            </div>
+          </article>
+          <ArticleToc items={toc} />
+        </>
+      ) : (
+        <div className="card min-w-0 flex-1 p-5 sm:p-7">
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-zinc-950 dark:text-white">Notes</h1>
+          <p className="mt-3 text-sm leading-relaxed text-zinc-600 sm:text-base dark:text-zinc-400">
+            Pick an article or a jargon term. Each one has its own URL, so Back and Forward move between them.
+          </p>
         </div>
+      )}
+      {selected && Content ? (
+        <button
+          type="button"
+          onClick={() => setZen((open) => !open)}
+          aria-pressed={zen}
+          className="fixed bottom-5 right-5 z-50 inline-flex items-center gap-1.5 rounded-full border-2 border-sky-400 bg-white/90 px-3 py-2 text-xs font-medium text-zinc-700 shadow-[0_8px_24px_-12px_rgba(15,23,42,0.45)] backdrop-blur-md transition hover:border-sky-300 hover:text-sky-700 dark:border-sky-400 dark:bg-zinc-950/80 dark:text-zinc-200 dark:hover:border-sky-300 dark:hover:text-sky-300"
+        >
+          {zen ? <Minimize2 size={14} aria-hidden /> : <Maximize2 size={14} aria-hidden />}
+          {zen ? "Exit zen" : "Zen"}
+        </button>
       ) : null}
-      {glossary.length > 0 ? (
-        <div className={noteGroups.length > 0 ? "mt-16" : "mt-10"}>
-          <Eyebrow>Glossary</Eyebrow>
-          <h2 className="page-title">Short notes on the jargon</h2>
-          <p className="page-lead">Each hover term in the articles has a full page with a small code example.</p>
-          <div className="mt-8 space-y-10">
-            <SubjectGroups
-              groups={glossaryGroups}
-              listClassName="grid gap-3 sm:grid-cols-2"
-              renderPost={(post) => (
-                <li key={post.slug}>
-                  <Card href={`/blog/${post.slug}`}>
-                    <h3 className="text-base font-semibold tracking-tight">{post.title}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{post.description}</p>
-                  </Card>
-                </li>
-              )}
-            />
-          </div>
-          <GlossaryPagination
-            page={glossaryPagination.page}
-            totalPages={glossaryPagination.totalPages}
-            total={glossaryPagination.total}
-            onPageChange={changeGlossaryPage}
-          />
-        </div>
-      ) : null}
-    </section>
+    </div>
   );
 }
 
-export function BlogPost({
-  post,
-  Content,
+export function BlogIndex({
+  posts,
+  selectedSlug,
+  toc,
 }: {
-  post: PostFrontmatter & { toc?: TocEntry[] };
-  Content: ComponentType<{ components?: { Term: typeof Term; ManagerCompare: typeof ManagerCompare } }>;
+  posts: NotePost[];
+  selectedSlug?: string;
+  toc?: TocEntry[];
 }) {
-  const toc = post.toc ?? [];
+  const firstNoteSlug = posts.find((post) => !isGlossary(post))?.slug;
+  return <BlogWorkspace posts={posts} selectedSlug={selectedSlug ?? firstNoteSlug} toc={toc} />;
+}
 
-  return (
-    <>
-      <article className="mx-auto min-w-0 max-w-3xl">
-        <JsonLd
-          data={{
-            "@context": "https://schema.org",
-            "@type": "BlogPosting",
-            headline: post.title,
-            description: post.description,
-            datePublished: post.date,
-            author: { "@type": "Person", name: SITE.name, url: getSiteUrl() },
-            url: `${getSiteUrl()}/blog/${post.slug}`,
-          }}
-        />
-        <a href="/blog" className="text-sm font-medium text-sky-600 dark:text-sky-400">
-          ← All notes
-        </a>
-        <div className="mt-6">
-          <Eyebrow>{post.date}</Eyebrow>
-        </div>
-        <h1 className="page-title">{post.title}</h1>
-        <p className="page-lead">{post.description}</p>
-        <div className="mt-4 flex flex-wrap gap-1.5">
-          {post.tags.map((tag) => (
-            <Tag key={tag}>{tag}</Tag>
-          ))}
-        </div>
-        <div className="prose-article">
-          <Content components={{ Term, ManagerCompare }} />
-        </div>
-      </article>
-      <ArticleToc items={toc} />
-    </>
-  );
+export function BlogPost({
+  posts,
+  selectedSlug,
+  toc,
+}: {
+  posts: NotePost[];
+  selectedSlug: string;
+  toc?: TocEntry[];
+}) {
+  return <BlogWorkspace posts={posts} selectedSlug={selectedSlug} toc={toc} />;
 }

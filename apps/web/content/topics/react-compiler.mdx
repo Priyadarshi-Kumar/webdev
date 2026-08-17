@@ -10,7 +10,9 @@ tags:
 
 The **React Compiler** (formerly React Forget) is an optional Babel plugin. It analyzes your components and inserts memoization so child components do not re-render for no reason.
 
-You still write hooks. You write **fewer** `useMemo` / `useCallback` wrappers:
+You still write hooks. You write **fewer** `useMemo` / `useCallback` wrappers.
+
+## Before and after
 
 ```tsx
 // without a compiler, people often write this by hand
@@ -22,6 +24,27 @@ const onSave = () => save(draft);
 const visible = items.filter((i) => i.ok);
 ```
 
-Interviews and older codebases still expect you to know `useMemo`. This site does not require the compiler.
+The compiler proves `onSave` only changes when `draft` changes, and wraps it for you. That only works if your code follows the Rules of React (no mutating props, hooks at the top).
+
+## It does not replace hooks
+
+```tsx
+const [query, setQuery] = useState("");
+useEffect(() => {
+  document.title = query;
+}, [query]);
+```
+
+State, effects, and refs stay. The compiler is about **skipping extra work**, not about new runtime APIs. Interviews and older codebases still expect you to know `useMemo`. This site does not require the compiler.
+
+## When memoization still matters by hand
+
+If you cannot turn the compiler on (old Babel config, a runtime that does not support it), memoize **at the boundary** that is expensive:
+
+```tsx
+const rows = useMemo(() => hugeList.filter(matchesQuery), [hugeList, matchesQuery]);
+```
+
+Do not wrap every `onClick={() => setOpen(true)}` — measure first.
 
 Related: [React Hooks by version](/blog/react-hooks), [React hook](/blog/react-hook).

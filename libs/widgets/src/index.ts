@@ -1,8 +1,17 @@
 export { SITE, getSiteUrl } from "./site/config";
-export { Header, Footer } from "./site/chrome";
+export { Header, Footer, ReadProgress } from "./site/chrome";
 export { HomePage } from "./site/HomePage";
+export { SettingsPage } from "./site/SettingsPage";
+export { ErrorPage } from "./site/ErrorPage";
 
-export { BlogIndex, BlogPost } from "./blog/Blog";
+export { BlogIndex, BlogPost, BlogWorkspace } from "./blog/Blog";
 
 export { profile, projects, getProject } from "./portfolio/data";
-export { PortfolioPage, ProjectListPage, ProjectPage } from "./portfolio/Portfolio";
+export {
+  PortfolioPage,
+  ProjectListPage,
+  ProjectPage,
+  portfolioSections,
+  isPortfolioSection,
+} from "./portfolio/Portfolio";
+export type { PortfolioSectionId } from "./portfolio/Portfolio";

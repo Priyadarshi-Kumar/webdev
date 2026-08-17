@@ -1,5 +1,5 @@
-import { ProjectListPage } from "@webdev/widgets";
+import { PortfolioPage } from "@webdev/widgets";
 
 export default function Page() {
-  return <ProjectListPage />;
+  return <PortfolioPage section="projects" />;
 }

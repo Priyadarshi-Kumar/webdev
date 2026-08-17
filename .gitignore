@@ -10,3 +10,4 @@ coverage
 tsconfig.tsbuildinfo
 .vite
 .netlify
+.pnpm-store

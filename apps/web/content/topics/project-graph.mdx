@@ -8,7 +8,9 @@ tags:
   - nx
 ---
 
-The **project graph** is Nx’s picture of the repo: nodes are [projects](/blog/nx-project), edges are “this one imports that one.”
+The **project graph** is Nx’s picture of the repo: nodes are <Term id="nx-project">projects</Term>, edges are “this one imports that one.”
+
+## A sketch of this site
 
 ```txt
 web → widgets → components → store
@@ -16,13 +18,33 @@ web → widgets → components → store
    tools
 ```
 
-Nx builds it from `package.json` dependencies, TypeScript path imports, and `implicitDependencies` in `project.json`.
+If `web` imports `@webdev/widgets`, Nx draws an arrow `web → widgets`. Change `widgets`, and anything that depends on it is downstream.
+
+Nx builds the map from `package.json` dependencies, TypeScript path imports, and `implicitDependencies` in `project.json`.
 
 ```bash
 pnpm nx graph
 pnpm nx show project web --web
 ```
 
-Task order follows the arrows: `utils` tests can run before `web` build if you ask Nx to respect deps (`^test` as a dependsOn).
+`nx graph` opens a browser picture. Use it when “why did CI rebuild web?” is the question — follow the arrows.
+
+## Task order follows the arrows
+
+You can tell a target to wait on dependencies’ targets:
+
+```json
+{
+  "targetDefaults": {
+    "build": {
+      "dependsOn": ["^build"]
+    }
+  }
+}
+```
+
+`^build` means “build my dependencies first.” `utils` compiles before `web` bundles. Without this, you might typecheck an app against yesterday’s library output.
+
+<Term id="nx-cache">Cache</Term> and <Term id="nx-affected">affected</Term> both read this same map. A wrong edge (missing implicit dep) means a stale cache or a skipped test.
 
 Related: [Nx affected](/blog/nx-affected), [Nx monorepo](/blog/nx-monorepo).

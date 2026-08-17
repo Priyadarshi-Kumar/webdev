@@ -9,7 +9,9 @@ tags:
   - yarn
 ---
 
-**Yarn Berry** is Yarn **2, 3, 4+**. New config (`.yarnrc.yml`), new constraints, and **Plug’n’Play** unless you opt out.
+**Yarn Berry** is Yarn **2, 3, 4+**. New config (`.yarnrc.yml`), new constraints, and **<Term id="yarn-plug-n-play">Plug’n’Play</Term>** unless you opt out.
+
+## Config that actually matters
 
 ```yml
 # .yarnrc.yml
@@ -24,11 +26,34 @@ nodeLinker: node-modules   # optional: behave like Yarn 1 on disk
 
 ```bash
 corepack enable
-yarn install --immutable    # CI
+yarn install --immutable    # CI — fail if lockfile would change
 yarn add lodash
 yarn why react
+yarn constraints            # optional: repo-wide dependency rules
 ```
 
-Corepack reads `packageManager` so everyone runs the same Yarn 4, not a leftover Yarn 1 from `brew`.
+<Term id="corepack">Corepack</Term> reads `packageManager` so everyone runs the same Yarn 4, not a leftover Yarn 1 from `brew`.
+
+## What changed from Classic
+
+| Classic (v1) | Berry (v2+) |
+| --- | --- |
+| `yarn.lock` (old format) | `yarn.lock` (new format — not interchangeable) |
+| `.yarnrc` | `.yarnrc.yml` |
+| `--frozen-lockfile` | `--immutable` |
+| always `node_modules` | PnP by default |
+| `yarn install` may mutate lockfile | CI should use `--immutable` |
+
+Zero-installs (commit `.yarn/cache`) is optional. Most teams still gitignore the cache and let CI download, same as pnpm.
+
+## Example: keep Berry, skip PnP
+
+```yml
+# .yarnrc.yml
+nodeLinker: node-modules
+enableGlobalCache: true
+```
+
+You still get workspaces, `yarn workspace web add lodash`, and an immutable lockfile — without teaching every script about `.pnp.cjs`.
 
 Related: [Yarn Plug’n’Play](/blog/yarn-plug-n-play), [Yarn Classic](/blog/yarn-classic), [Corepack](/blog/corepack).

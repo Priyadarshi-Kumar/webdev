@@ -8,15 +8,37 @@ tags:
   - nx
 ---
 
-**Affected** means: look at a git range, see which files changed, walk the [project graph](/blog/project-graph) *upward*, and run the target only on that set.
+**Affected** means: look at a git range, see which files changed, walk the <Term id="project-graph">project graph</Term> *upward*, and run the target only on that set.
+
+## Typical commands
 
 ```bash
 pnpm nx affected -t test
 pnpm nx affected -t build --base=origin/main --head=HEAD
+pnpm nx print-affected -t test    # see the set without running
 ```
 
 Edit `libs/utils/src/json.ts` → `utils` tests run, and `web` build is affected because the app depends on utils. A change only in `README.md` (if it is not an input) may affect nothing.
 
-In [CI](/blog/continuous-integration), `--base` is usually the target branch of the PR so you do not rebuild every library on every push.
+## How the git range works
+
+```txt
+--base=origin/main   # the branch you will merge into
+--head=HEAD          # your PR tip
+```
+
+Nx diffs that range, maps files → projects, then includes **dependents**. Changing a leaf library rebuilds the app. Changing only `apps/web` does **not** retest `utils`.
+
+In <Term id="ci">CI</Term>, `--base` is usually the target branch of the PR so you do not rebuild every library on every push.
+
+```yaml
+- run: pnpm nx affected -t test --base=origin/main --head=HEAD
+```
+
+On `main` itself after merge, there is no “PR diff.” Teams either run `run-many` on `main`, or compare to `HEAD~1`.
+
+## Affected vs cache
+
+**Affected** decides *who* to run. **Cache** decides *whether* that run is a no-op. Use both: skip unrelated projects, and skip identical rebuilds of the ones you still touch.
 
 Related: [Nx cache](/blog/nx-cache), [Nx monorepo](/blog/nx-monorepo).

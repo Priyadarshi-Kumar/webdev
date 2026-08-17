@@ -8,7 +8,9 @@ tags:
   - react
 ---
 
-`use` (React 19) can unwrap a **Promise** or a Context. For a promise, the component **pauses** until it resolves. A parent [Suspense](/blog/react-suspense) shows a fallback meanwhile.
+`use` (React 19) can unwrap a **Promise** or a Context. For a promise, the component **pauses** until it resolves. A parent <Term id="react-suspense">Suspense</Term> shows a fallback meanwhile.
+
+## Waiting on data
 
 ```tsx
 import { Suspense, use } from "react";
@@ -29,6 +31,33 @@ export function Page() {
 }
 ```
 
-Unlike other hooks, `use` **may** sit in `if` / `switch` if the condition is stable for that render. Prefer loading data in a Server Component when you can.
+Create the promise **outside** render (or pass it from a parent / cache it). `use(fetch(...))` inside the component body starts a new request every render.
+
+## Reading context
+
+```tsx
+import { createContext, use } from "react";
+
+const ThemeContext = createContext<"light" | "dark">("dark");
+
+function Label() {
+  const theme = use(ThemeContext);
+  return <span data-theme={theme}>Hi</span>;
+}
+```
+
+Same idea as `useContext`, with one extra: unlike other hooks, `use` **may** sit in `if` / `switch` if the condition is stable for that render.
+
+```tsx
+function Panel({ showUser }: { showUser: boolean }) {
+  if (showUser) {
+    const user = use(userPromise);
+    return <p>{user.name}</p>;
+  }
+  return <p>Hidden</p>;
+}
+```
+
+Prefer loading data in a <Term id="server-components">Server Component</Term> when you can — no client waterfall, no `use` needed.
 
 Related: [Suspense](/blog/react-suspense), [React Hooks by version](/blog/react-hooks).

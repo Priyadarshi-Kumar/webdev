@@ -12,6 +12,10 @@ tags:
 
 **JSON-RPC 2.0** is a tiny convention: call `method` with `params`, match the reply by `id`. A **notification** is the same shape with **no** `id` — fire and forget.
 
+MCP messages are JSON-RPC. REST is a different style (URLs and HTTP verbs). You can tunnel JSON-RPC *over* HTTP; the body is still this object.
+
+## Request and result
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -31,6 +35,27 @@ tags:
 }
 ```
 
-MCP adds capability negotiation and (on HTTP) extra headers. The body is still JSON-RPC.
+The `id` pairs them. If two calls are in flight, the host does not guess which reply is which.
+
+## Errors and notifications
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": { "code": -32601, "message": "Method not found" }
+}
+```
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "notifications/tools/list_changed"
+}
+```
+
+No `id` on the second object → do not send a result. The <Term id="mcp-client">client</Term> just re-runs `tools/list`.
+
+MCP adds capability negotiation and (on HTTP) extra headers. The body is still JSON-RPC. You can log it like any other JSON API.
 
 Related: [MCP](/blog/mcp), [MCP in depth](/blog/model-context-protocol).

@@ -1,0 +1,66 @@
+---
+title: What is Module Federation?
+description: Load another app’s modules at runtime through a remoteEntry file, and share libraries like React.
+slug: module-federation
+date: 2026-08-18
+tags:
+  - glossary
+  - javascript
+  - vite
+  - architecture
+---
+
+**Module Federation** is a bundler contract. A **remote** build writes a small entry file (`remoteEntry.js`) that lists what it **exposes** (`./MiniCart` → `src/MiniCart.tsx`). A **host** lists that file as a **remote**. At runtime the host `import("cart/MiniCart")` and the browser fetches that chunk from the remote’s origin.
+
+## Remote exposes, host consumes
+
+```ts
+// remote — exposes
+federation({
+  name: "cart",
+  filename: "remoteEntry.js",
+  exposes: { "./MiniCart": "./src/MiniCart.tsx" },
+  shared: ["react", "react-dom"],
+});
+```
+
+```ts
+// host — consumes
+federation({
+  name: "shell",
+  remotes: {
+    cart: {
+      type: "module",
+      name: "cart",
+      entry: "http://localhost:5174/remoteEntry.js",
+    },
+  },
+  shared: ["react", "react-dom"],
+});
+```
+
+```tsx
+const MiniCart = lazy(() => import("cart/MiniCart"));
+```
+
+In production, `entry` is a CDN URL (`https://cart.example.com/remoteEntry.js`). The host’s HTML does not contain the cart’s source — only the address of the manifest.
+
+## Shared React
+
+`shared` is how you avoid two Reacts (see <Term id="peer-dependency">peer dependency</Term>). Both apps must agree on a major. If the cart ships React 18 and the shell ships 19, federation cannot magically merge them.
+
+On Vite, use `@module-federation/vite` (the plugin Vite and VoidZero point at). Older tutorials use `@originjs/vite-plugin-federation`. Webpack has this built in as a plugin.
+
+## Failure mode
+
+If `remoteEntry.js` 404s, `import("cart/MiniCart")` rejects. Wrap in <Term id="react-suspense">Suspense</Term> **and** an error boundary so the shell still renders nav.
+
+```tsx
+<ErrorBoundary fallback={<p>Cart unavailable</p>}>
+  <Suspense fallback={<p>…</p>}>
+    <MiniCart />
+  </Suspense>
+</ErrorBoundary>
+```
+
+Related: [microfrontends with Vite](/blog/microfrontends), [microfrontend](/blog/microfrontend), [peer dependency](/blog/peer-dependency).

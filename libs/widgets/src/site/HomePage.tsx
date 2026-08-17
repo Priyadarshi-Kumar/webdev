@@ -1,20 +1,24 @@
 import { ArrowRight, Mail } from "lucide-react";
 import { Card, Eyebrow, JsonLd, Tag } from "@webdev/components";
-import type { PostFrontmatter, ToolMeta } from "@webdev/types";
+import type { PostFrontmatter } from "@webdev/types";
 import { profile, projects } from "../portfolio/data";
 import { SITE, getSiteUrl } from "./config";
+import { SkillSphere } from "./SkillSphere";
 
 export function HomePage({
   posts,
   notesCount,
-  tools,
 }: {
   posts: PostFrontmatter[];
   notesCount: number;
-  tools: ToolMeta[];
 }) {
   const featuredWork = projects.slice(0, 3);
   const currentRole = profile.experience[0];
+  const stats = [
+    { label: "Experience", value: "6+ yrs" },
+    { label: "Articles", value: String(notesCount) },
+    { label: "Core stack", value: "React & Python" },
+  ];
 
   return (
     <>
@@ -41,85 +45,80 @@ export function HomePage({
         }}
       />
 
-      <section className="relative overflow-hidden pb-10 pt-2 sm:pb-16 sm:pt-8">
-        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-sky-400/15 blur-3xl dark:bg-sky-400/10" />
-        <div className="pointer-events-none absolute -left-16 top-32 h-48 w-48 rounded-full bg-violet-400/10 blur-3xl dark:bg-violet-400/5" />
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="inline-flex items-center rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-            {profile.availability}
-          </span>
-          <span className="text-sm text-zinc-500 dark:text-zinc-400">{profile.location}</span>
-        </div>
-        <h1 className="mt-5 max-w-4xl text-3xl font-extrabold tracking-tight text-zinc-950 sm:text-6xl dark:text-white">
-          {SITE.name}
-        </h1>
-        <p className="mt-3 max-w-2xl text-lg font-medium text-sky-700 sm:text-xl dark:text-sky-300">
-          {profile.headline}
-        </p>
-        <p className="page-lead mt-4 max-w-3xl">{SITE.tagline}</p>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <a href={`mailto:${SITE.email}`} className="btn-primary inline-flex items-center gap-2">
-            <Mail size={16} aria-hidden />
-            Email me
-          </a>
-          <a href={SITE.socials.linkedin} className="btn-ghost">
-            LinkedIn
-          </a>
-          <a href="/portfolio" className="btn-ghost">
-            View portfolio
-          </a>
-        </div>
-      </section>
-
-      <section className="grid gap-3 border-t border-zinc-200 py-10 sm:grid-cols-2 lg:grid-cols-4 dark:border-white/10">
-        {[
-          { label: "Experience", value: "6+ yrs" },
-          { label: "Public repos", value: "38+" },
-          { label: "Technical articles", value: String(notesCount) },
-          { label: "Core stack", value: "React & TS" },
-        ].map((item) => (
-          <div
-            key={item.label}
-            className="rounded-2xl border border-zinc-200 bg-white px-5 py-4 dark:border-white/10 dark:bg-zinc-900/50"
-          >
-            <p className="text-2xl font-semibold tracking-tight">{item.value}</p>
-            <p className="mt-1 text-sm text-zinc-500">{item.label}</p>
+      <section className="relative grid items-stretch gap-8 pb-10 pt-4 sm:pb-16 sm:pt-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:gap-6">
+        <div className="max-w-3xl">
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            <span className="font-medium text-emerald-700 dark:text-emerald-300">{profile.availability}</span>
+            <span className="mx-2 text-zinc-300 dark:text-zinc-600">·</span>
+            {profile.location.split("·")[0].trim()}
+          </p>
+          <h1 className="mt-5 font-display text-4xl font-semibold leading-[1.05] tracking-tight text-zinc-950 sm:mt-6 sm:text-6xl dark:text-white">
+            Priyadarshi
+            <span className="text-gradient"> Kumar</span>
+          </h1>
+          <p className="mt-4 text-lg font-medium tracking-tight text-zinc-700 sm:text-xl dark:text-zinc-200">
+            {profile.headline}
+          </p>
+          <p className="mt-3 max-w-xl text-base leading-relaxed text-zinc-600 sm:text-lg dark:text-zinc-400">
+            {profile.bio[1]}
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <a href={`mailto:${SITE.email}`} className="btn-primary inline-flex items-center gap-2">
+              <Mail size={16} aria-hidden />
+              Email me
+            </a>
+            <a href="/portfolio/experience" className="btn-ghost">
+              View resume
+            </a>
           </div>
-        ))}
+          <dl className="mt-10 flex flex-wrap gap-x-8 gap-y-3 border-t border-zinc-200/80 pt-6 dark:border-white/10">
+            {stats.map((item) => (
+              <div key={item.label}>
+                <dt className="text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
+                  {item.label}
+                </dt>
+                <dd className="mt-1 font-display text-lg font-semibold tracking-tight text-zinc-950 sm:text-xl dark:text-white">
+                  {item.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+        <SkillSphere skills={[...profile.stack, ...profile.skillGroups.flatMap((group) => group.skills)]} />
       </section>
 
-      <section className="py-8">
+      <section className="py-4 sm:py-8">
         <Eyebrow>Why hire me</Eyebrow>
-        <h2 className="mt-2 text-2xl font-bold tracking-tight">What you get on day one</h2>
-        <ul className="mt-6 grid gap-4 md:grid-cols-2">
-          {profile.highlights.map((item) => (
-            <li
-              key={item}
-              className="rounded-2xl border border-zinc-200 bg-white px-5 py-4 text-sm leading-relaxed text-zinc-600 dark:border-white/10 dark:bg-zinc-900/50 dark:text-zinc-300"
-            >
-              {item.replace("{notesCount}", String(notesCount))}
+        <h2 className="section-title text-xl sm:text-3xl">What you get on day one</h2>
+        <ul className="card mt-3 divide-y divide-zinc-200/80 p-0 sm:mt-6 dark:divide-white/10">
+          {profile.highlights.map((item, index) => (
+            <li key={item} className="flex gap-3 px-3.5 py-3 text-[13px] leading-snug text-zinc-600 sm:gap-4 sm:px-5 sm:py-4 sm:text-sm sm:leading-relaxed dark:text-zinc-300">
+              <span className="font-display text-sm font-semibold text-sky-500 sm:text-lg dark:text-sky-400">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <span>{item.replace("{notesCount}", String(notesCount))}</span>
             </li>
           ))}
         </ul>
       </section>
 
-      <section className="py-8">
+      <section className="py-4 sm:py-8">
         <Eyebrow>Skills</Eyebrow>
-        <h2 className="mt-2 text-2xl font-bold tracking-tight">Stack I ship with</h2>
-        <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <h2 className="section-title text-xl sm:text-3xl">Stack I ship with</h2>
+        <div className="mt-3 grid gap-3 sm:mt-6 sm:grid-cols-2 lg:grid-cols-3">
           {profile.skillGroups.map((group) => (
             <div
               key={group.label}
-              className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-white/10 dark:bg-zinc-900/50"
+              className={`card p-4 sm:p-5 ${group.label === "Frontend" ? "sm:col-span-2 lg:col-span-2" : ""}`}
             >
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              <h3 className="text-sm font-semibold tracking-tight text-zinc-950 sm:text-base dark:text-white">
                 {group.label}
               </h3>
-              <ul className="mt-4 flex flex-wrap gap-2">
+              <ul className="mt-3 flex flex-wrap gap-2">
                 {group.skills.map((skill) => (
                   <li
                     key={skill}
-                    className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-sm dark:border-white/10 dark:bg-zinc-950/60"
+                    className="rounded-full border border-zinc-200/90 bg-zinc-50 px-3 py-1 text-sm leading-snug text-zinc-800 dark:border-white/10 dark:bg-zinc-950/70 dark:text-zinc-200"
                   >
                     {skill}
                   </li>
@@ -130,117 +129,108 @@ export function HomePage({
         </div>
       </section>
 
-      {currentRole ? (
-        <section className="py-8">
-          <Eyebrow>Experience</Eyebrow>
-          <h2 className="mt-2 text-2xl font-bold tracking-tight">Recent focus</h2>
-          <Card className="mt-6 block">
-            <p className="text-xs text-zinc-500">{currentRole.period}</p>
-            <h3 className="mt-2 text-lg font-semibold tracking-tight">
-              {currentRole.role} · {currentRole.company}
-            </h3>
-            <p className="mt-3 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-              {currentRole.highlights[0]}
-            </p>
-          </Card>
-          <a
-            href="/portfolio"
-            className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-sky-600 dark:text-sky-400"
-          >
-            Full résumé <ArrowRight size={14} />
-          </a>
+      <div className="grid gap-4 py-4 sm:gap-6 sm:py-8 lg:grid-cols-2">
+        {currentRole ? (
+          <section>
+            <div className="mb-3 flex items-end justify-between gap-3 sm:mb-4">
+              <div>
+                <Eyebrow>Experience</Eyebrow>
+                <h2 className="section-title text-xl sm:text-3xl">Recent focus</h2>
+              </div>
+              <a
+                href="/portfolio/experience"
+                className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-sky-600 sm:text-sm dark:text-sky-400"
+              >
+                Resume <ArrowRight size={14} />
+              </a>
+            </div>
+            <Card className="block p-3.5 sm:p-5">
+              <p className="text-[11px] text-zinc-500 sm:text-xs">{currentRole.period}</p>
+              <h3 className="mt-1 text-sm font-semibold tracking-tight sm:mt-2 sm:text-lg">
+                {currentRole.role} · {currentRole.company}
+              </h3>
+              <p className="mt-2 line-clamp-3 text-[13px] leading-snug text-zinc-600 sm:line-clamp-none sm:text-sm sm:leading-relaxed dark:text-zinc-400">
+                {currentRole.highlights[0]}
+              </p>
+            </Card>
+          </section>
+        ) : null}
+
+        <section>
+          <div className="mb-3 flex items-end justify-between gap-3 sm:mb-4">
+            <div>
+              <Eyebrow>Writing</Eyebrow>
+              <h2 className="section-title text-xl sm:text-3xl">Technical depth</h2>
+            </div>
+            <a href="/blog" className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-sky-600 sm:text-sm dark:text-sky-400">
+              All <ArrowRight size={14} />
+            </a>
+          </div>
+          <ul className="card divide-y divide-zinc-200/80 p-0 dark:divide-white/10">
+            {posts.map((post) => (
+              <li key={post.slug}>
+                <a href={`/blog/${post.slug}`} className="block px-3.5 py-3 transition hover:bg-zinc-50 sm:px-5 sm:py-3.5 dark:hover:bg-white/5">
+                  <p className="text-[11px] text-zinc-500">{post.date}</p>
+                  <h3 className="mt-0.5 text-sm font-semibold tracking-tight sm:text-base">{post.title}</h3>
+                  <p className="mt-1 hidden text-sm leading-relaxed text-zinc-600 sm:block dark:text-zinc-400">
+                    {post.description}
+                  </p>
+                </a>
+              </li>
+            ))}
+          </ul>
         </section>
-      ) : null}
+      </div>
 
-      <section className="py-8">
-        <div className="mb-6 flex items-end justify-between gap-3">
-          <div>
-            <Eyebrow>Proof of work</Eyebrow>
-            <h2 className="mt-2 text-2xl font-bold tracking-tight">Selected projects</h2>
+      {featuredWork.length > 0 ? (
+        <section className="py-4 sm:py-8">
+          <div className="mb-3 flex items-end justify-between gap-3 sm:mb-6">
+            <div>
+              <Eyebrow>Proof of work</Eyebrow>
+              <h2 className="section-title text-xl sm:text-3xl">Selected projects</h2>
+            </div>
+            <a
+              href="/portfolio/projects"
+              className="inline-flex items-center gap-1 text-xs font-medium text-sky-600 sm:text-sm dark:text-sky-400"
+            >
+              All <ArrowRight size={14} />
+            </a>
           </div>
-          <a
-            href="/portfolio/projects"
-            className="inline-flex items-center gap-1 text-sm font-medium text-sky-600 dark:text-sky-400"
-          >
-            All projects <ArrowRight size={14} />
-          </a>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {featuredWork.map((project) => (
-            <Card key={project.slug} href={project.href ?? `/portfolio/projects/${project.slug}`}>
-              <p className="text-xs text-zinc-500">{project.year}</p>
-              <h3 className="mt-2 text-lg font-semibold tracking-tight">{project.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{project.summary}</p>
-              <div className="mt-4 flex flex-wrap gap-1.5">
-                {project.tags.slice(0, 4).map((tag) => (
-                  <Tag key={tag}>{tag}</Tag>
-                ))}
-              </div>
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      <section className="py-8">
-        <div className="mb-6 flex items-end justify-between gap-3">
-          <div>
-            <Eyebrow>Writing</Eyebrow>
-            <h2 className="mt-2 text-2xl font-bold tracking-tight">Technical depth</h2>
-            <p className="mt-2 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
-              I explain hard topics clearly — the same skill I bring to code reviews and team docs.
-            </p>
-          </div>
-          <a href="/blog" className="inline-flex items-center gap-1 text-sm font-medium text-sky-600 dark:text-sky-400">
-            All articles <ArrowRight size={14} />
-          </a>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {posts.map((post) => (
-            <Card key={post.slug} href={`/blog/${post.slug}`}>
-              <p className="text-xs text-zinc-500">{post.date}</p>
-              <h3 className="mt-2 text-lg font-semibold tracking-tight">{post.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{post.description}</p>
-              <div className="mt-4 flex flex-wrap gap-1.5">
-                {post.tags.slice(0, 3).map((tag) => (
-                  <Tag key={tag}>{tag}</Tag>
-                ))}
-              </div>
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      {tools.length > 0 ? (
-        <section className="py-8">
-          <Eyebrow>Built tools</Eyebrow>
-          <h2 className="mt-2 text-2xl font-bold tracking-tight">Shipped utilities</h2>
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            {tools.map((tool) => (
-              <Card key={tool.slug} href={`/tools/${tool.slug}`}>
-                <h3 className="text-lg font-semibold tracking-tight">{tool.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{tool.description}</p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+            {featuredWork.map((project) => (
+              <Card key={project.slug} href={project.href ?? `/portfolio/projects/${project.slug}`} className="p-3.5 sm:p-5">
+                <p className="text-[11px] text-zinc-500 sm:text-xs">{project.year}</p>
+                <h3 className="mt-1 text-sm font-semibold tracking-tight sm:mt-2 sm:text-lg">{project.title}</h3>
+                <p className="mt-1 hidden text-sm leading-relaxed text-zinc-600 sm:mt-2 sm:block dark:text-zinc-400">
+                  {project.summary}
+                </p>
+                <div className="mt-2 hidden flex-wrap gap-1.5 sm:mt-4 sm:flex">
+                  {project.tags.slice(0, 4).map((tag) => (
+                    <Tag key={tag}>{tag}</Tag>
+                  ))}
+                </div>
               </Card>
             ))}
           </div>
         </section>
       ) : null}
 
-      <section className="mt-4 rounded-3xl border border-sky-400/20 bg-gradient-to-br from-sky-400/10 via-transparent to-violet-400/10 px-6 py-10 sm:px-10">
+      <section className="card mt-2 border-sky-400/25 bg-gradient-to-br from-sky-400/15 via-transparent to-violet-400/15 px-4 py-5 sm:mt-4 sm:px-10 sm:py-10">
         <Eyebrow>Let&apos;s talk</Eyebrow>
-        <h2 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Ready to add a React engineer who ships?</h2>
-        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-zinc-600 sm:text-base dark:text-zinc-300">
+        <h2 className="section-title text-xl sm:text-4xl">Ready to add a full-stack engineer who ships?</h2>
+        <p className="mt-2 max-w-2xl text-[13px] leading-snug text-zinc-600 sm:mt-3 sm:text-base sm:leading-relaxed dark:text-zinc-300">
           I am looking for teams that value clear code, fast iteration, and engineers who document what they build. Send a
           note — I reply within a day.
         </p>
-        <div className="mt-6 flex flex-wrap gap-3">
-          <a href={`mailto:${SITE.email}`} className="btn-primary inline-flex items-center gap-2">
+        <div className="mt-4 flex flex-wrap gap-2 sm:mt-6 sm:gap-3">
+          <a href={`mailto:${SITE.email}`} className="btn-primary inline-flex min-h-10 items-center gap-2 px-4 py-2 text-sm sm:min-h-11">
             <Mail size={16} aria-hidden />
-            {SITE.email}
+            Email
           </a>
-          <a href={SITE.socials.linkedin} className="btn-ghost">
-            Connect on LinkedIn
+          <a href={SITE.socials.linkedin} className="btn-ghost min-h-10 px-4 py-2 text-sm sm:min-h-11">
+            LinkedIn
           </a>
-          <a href={SITE.socials.github} className="btn-ghost">
+          <a href={SITE.socials.github} className="btn-ghost min-h-10 px-4 py-2 text-sm sm:min-h-11">
             GitHub
           </a>
         </div>

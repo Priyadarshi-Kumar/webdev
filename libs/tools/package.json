@@ -5,10 +5,13 @@
   "type": "module",
   "exports": { ".": "./src/index.ts" },
   "dependencies": {
+    "@webdev/components": "workspace:*",
     "@webdev/types": "workspace:*",
-    "@webdev/utils": "workspace:*"
+    "@webdev/utils": "workspace:*",
+    "lucide-react": "^0.525.0"
   },
   "peerDependencies": {
+    "lucide-react": "^0.525.0",
     "react": "^19.0.0"
   },
   "devDependencies": {

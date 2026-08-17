@@ -9,7 +9,9 @@ tags:
   - tooling
 ---
 
-A **monorepo** is one repository with more than one package — for example `apps/web` and `libs/utils`. You install **once at the root**. Apps depend on local libraries with `workspace:*` instead of publishing to npm first.
+A **monorepo** is one repository with more than one package — for example `apps/web` and `libs/utils`. You install **once at the root**. Apps depend on local libraries with <Term id="workspace-protocol">`workspace:*`</Term> instead of publishing to npm first.
+
+## Shape of this site
 
 ```txt
 repo/
@@ -17,6 +19,7 @@ repo/
   pnpm-workspace.yaml
   apps/web/package.json
   libs/utils/package.json
+  libs/widgets/package.json
 ```
 
 ```yaml
@@ -26,11 +29,30 @@ packages:
   - "libs/*"
 ```
 
+npm and Yarn put the same globs in `"workspaces"` inside the root `package.json`. <Term id="nx">Nx</Term>, Turborepo, and pnpm filters all assume this shape.
+
+## One install, many scripts
+
 ```bash
-pnpm install                 # root only
+pnpm install                 # root only — links every workspace
 pnpm --filter web dev        # run one package’s script
+pnpm --filter @webdev/utils test
 ```
 
-npm/Yarn put the same globs in `"workspaces"` inside root `package.json`. Nx, Turborepo, and pnpm filters all assume this shape.
+```json
+{
+  "name": "web",
+  "dependencies": {
+    "@webdev/widgets": "workspace:*",
+    "react": "^19.2.8"
+  }
+}
+```
+
+Change a button in `libs/widgets` and the app sees it immediately — no `npm publish`. That is the point.
+
+## Not a microfrontend
+
+A monorepo is a **git and install** choice. You can still ship **one** site from `apps/web`. A <Term id="microfrontend">microfrontend</Term> is a **deploy** choice: separate apps loaded at runtime. This repo is a monorepo, not a set of remotes.
 
 Related: [workspace protocol](/blog/workspace-protocol), [pnpm vs npm vs Yarn](/blog/pnpm-vs-npm-vs-yarn), [Nx monorepo](/blog/nx-monorepo).

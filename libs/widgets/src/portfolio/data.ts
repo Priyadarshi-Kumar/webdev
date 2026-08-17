@@ -4,17 +4,17 @@ import { findBySlug } from "@webdev/utils";
 export const profile: Profile = {
   name: "Priyadarshi Kumar",
   location: "Bangalore, Karnataka · open to remote",
-  headline: "Lead Software Engineer · Front-End",
+  headline: "Lead Software Engineer · Full-Stack",
   availability: "Open to full-time & contract",
-  phone: "+91 77649 44858",
+  photo: "/portrait.jpg",
   bio: [
-    "Front-end engineer with 6+ years shipping React products at scale — analytics dashboards, fintech onboarding, mobility platforms, and EDA tooling with AI-assisted workflows.",
+    "Full-stack engineer with 6+ years shipping products at scale — React and TypeScript on the client, Node.js, Python, and FastAPI on the server, plus MCP for AI-assisted tooling, across analytics dashboards, fintech onboarding, mobility platforms, and EDA workflows.",
     "I own features end to end: design, implementation, performance, release, and the docs that help the next engineer move faster.",
   ],
   highlights: [
+    "Ship EDA tooling today: multi-tab schematics, xterm.js terminals, and mai-ai chat over server-sent events.",
     "Led analytics dashboards at Tekion adopted by dealer partners — Teams dashboard alone drove 20% of total visits.",
     "Scaled tenant capacity 10× with virtualization, infinite scroll, and pagination (15 → 200 dealers per tenant).",
-    "Ship EDA tooling today: multi-tab schematics, xterm.js terminals, and mai-ai chat over server-sent events.",
     "Write the docs I wish existed: {notesCount}+ technical articles on React, Zustand, Nx, and browser APIs.",
   ],
   skillGroups: [
@@ -28,17 +28,21 @@ export const profile: Profile = {
     },
     {
       label: "Backend & data",
-      skills: ["Node.js", "Express", "SQL", "Socket.io", "SSE"],
+      skills: ["Node.js", "Express", "Python", "FastAPI", "SQL", "MCP", "Socket.io", "SSE"],
     },
     {
       label: "Browser APIs",
-      skills: ["BroadcastChannel", "Web Locks", "Web Workers", "Service Workers"],
+      skills: ["BroadcastChannel", "Web Locks", "Web Workers", "Service Workers", "localStorage", "sessionStorage", "IndexedDB"],
+    },
+    {
+      label: "Web security",
+      skills: ["CSP", "CORS", "XSS", "CSRF", "SameSite cookies"],
     },
   ],
   technicalSkills: [
     {
       label: "Languages",
-      skills: ["HTML", "CSS", "JavaScript", "SQL", "TypeScript"],
+      skills: ["HTML", "CSS", "JavaScript", "SQL", "TypeScript", "Python"],
     },
     {
       label: "Technologies & frameworks",
@@ -54,12 +58,18 @@ export const profile: Profile = {
         "Git",
         "Playwright",
         "Angular",
+        "FastAPI",
+        "MCP",
         "Web Storage (Cache, IndexedDB)",
       ],
     },
     {
       label: "Browser APIs",
       skills: ["BroadcastChannel", "Web Locks", "Web Workers", "Service Workers"],
+    },
+    {
+      label: "Web security",
+      skills: ["CSP", "CORS", "XSS", "CSRF", "SameSite cookies"],
     },
   ],
   stack: [
@@ -71,6 +81,9 @@ export const profile: Profile = {
     "Jest",
     "Playwright",
     "Node.js",
+    "Python",
+    "FastAPI",
+    "MCP",
     "AWS",
   ],
   experience: [
@@ -83,7 +96,7 @@ export const profile: Profile = {
         "Designed and developed multi-tab/panel feature to enable editing of multiple schematics/symbols simultaneously in tabs or panels.",
         "Designed and developed user interactions handling like drawing a shape, adding instance, etc. Added support for multiple interactions at once.",
         "Integrated terminal using xterm.js on UI and wrote a BE service to serve the terminal using node-pty and socket.io. Supported multiple terminals at once, connection handling, and data persistence.",
-        "Worked on mai-ai chat where user can ask AI to work on a circuit, run simulation, etc. using server-sent events.",
+        "Worked on mai-ai chat where user can ask AI to work on a circuit, run simulation, etc. using server-sent events and MCP.",
       ],
     },
     {
@@ -134,48 +147,7 @@ export const profile: Profile = {
   ],
 };
 
-export const projects: Project[] = [
-  {
-    slug: "this-site",
-    title: "Personal platform (this site)",
-    summary:
-      "Nx monorepo with Vike SSR, Zustand state, MDX blog, portfolio, and browser tools — the same stack I would bring to a product team.",
-    year: "2026",
-    tags: ["React", "TypeScript", "Nx", "Vike", "Zustand", "Netlify"],
-    role: "Design, architecture, and engineering",
-    href: "https://github.com/Priyadarshi-Kumar/webdev",
-  },
-  {
-    slug: "web-storage-apis",
-    title: "Web Storage APIs explorer",
-    summary:
-      "Hands-on demos for localStorage, sessionStorage, IndexedDB, and Cache API — practical browser storage patterns in JavaScript.",
-    year: "2025",
-    tags: ["JavaScript", "Browser APIs", "IndexedDB"],
-    role: "Solo project",
-    href: "https://github.com/Priyadarshi-Kumar/web-storage-apis",
-  },
-  {
-    slug: "chat-app",
-    title: "Real-time chat app",
-    summary:
-      "Messaging UI with live updates — React frontend wired to a real-time backend for channels and conversations.",
-    year: "2024",
-    tags: ["React", "JavaScript", "Real-time"],
-    role: "Solo project",
-    href: "https://github.com/Priyadarshi-Kumar/chat-app",
-  },
-  {
-    slug: "trello-clone",
-    title: "Trello clone",
-    summary:
-      "Kanban board with drag-and-drop lists and cards — built to practice React Context, reducers, and predictable state updates.",
-    year: "2022",
-    tags: ["React", "Context API", "Reducers"],
-    role: "Solo project",
-    href: "https://github.com/Priyadarshi-Kumar/trello-clone",
-  },
-];
+export const projects: Project[] = [];
 
 export function getProject(slug: string): Project | undefined {
   return findBySlug(projects, slug);

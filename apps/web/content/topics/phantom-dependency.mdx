@@ -9,7 +9,9 @@ tags:
   - tooling
 ---
 
-A **phantom dependency** is a module your code imports that is **not** in your `package.json`. It is on disk only because a dependency of a dependency was [hoisted](/blog/hoisting).
+A **phantom dependency** is a module your code imports that is **not** in your `package.json`. It is on disk only because a dependency of a dependency was <Term id="hoisting">hoisted</Term>.
+
+## It works… until it doesn’t
 
 ```ts
 // lodash is NOT in your package.json — this can still compile on npm
@@ -20,18 +22,41 @@ export const onResize = debounce(() => {
 }, 150);
 ```
 
-On pnpm (and Yarn PnP) you get:
+On a hoisted npm tree, `eslint` might have pulled `lodash` up to the root. Your app imports it. Six months later ESLint drops that dependency, or you switch to pnpm, and production (or <Term id="ci">CI</Term>) dies:
 
 ```txt
 Error: Cannot find module 'lodash'
 ```
 
-Fix: declare it.
+pnpm and Yarn PnP make this a **day-one** error instead of a surprise.
+
+## The fix is to declare it
 
 ```bash
 pnpm add lodash
+# or, if it is only for tests / build
+pnpm add -D lodash
+```
+
+```json
+{
+  "dependencies": {
+    "lodash": "^4.17.21"
+  }
+}
 ```
 
 The error is annoying for a day and cheaper than an outage after someone bumps a nested package.
+
+## How to hunt them
+
+```bash
+# pnpm: if this succeeds, you declared it (or shamefully-hoist is on)
+pnpm why lodash
+
+# TypeScript: skipLibCheck won't save you — the module is missing
+```
+
+If a generator “just works” on npm and fails on pnpm, list every `import "…"` that is not in `package.json`. Do not turn on <Term id="shamefully-hoist">shamefully-hoist</Term> unless you cannot change the generator today.
 
 Related: [hoisting](/blog/hoisting), [shamefully-hoist](/blog/shamefully-hoist), [pnpm vs npm vs Yarn](/blog/pnpm-vs-npm-vs-yarn).

@@ -10,6 +10,8 @@ tags:
 
 A **closure** is a function that remembers the variables around it. In React, each render creates new functions. A **stale** closure is one that still remembers *yesterday’s* `count`.
 
+## The interval that never counts
+
 ```tsx
 function Counter() {
   const [count, setCount] = useState(0);
@@ -23,10 +25,44 @@ function Counter() {
 }
 ```
 
-Fixes:
+First render: `count` is `0`. The interval closes over that `0`. Every tick does `setCount(0 + 1)`. The UI sits at `1`.
 
-1. Put `count` in the dependency array so the Effect re-subscribes.
-2. Use the functional setter: `setCount((c) => c + 1)` — no stale value needed.
-3. For “event from an Effect” (latest `theme`, but do not reconnect), use `useEffectEvent`.
+## Fixes
+
+**Functional setter** — React passes the latest state; you do not read `count` from the closure:
+
+```tsx
+useEffect(() => {
+  const id = setInterval(() => {
+    setCount((c) => c + 1);
+  }, 1000);
+  return () => clearInterval(id);
+}, []);
+```
+
+**Dependency array** — re-subscribe when `count` changes (here that also resets the interval every second, which is usually worse):
+
+```tsx
+useEffect(() => {
+  const id = setInterval(() => setCount(count + 1), 1000);
+  return () => clearInterval(id);
+}, [count]);
+```
+
+**`useEffectEvent`** (React 19.2) — the Effect stays subscribed once, but the event sees the latest props:
+
+```tsx
+const onTick = useEffectEvent(() => {
+  console.log("theme is", theme);
+  setCount((c) => c + 1);
+});
+
+useEffect(() => {
+  const id = setInterval(() => onTick(), 1000);
+  return () => clearInterval(id);
+}, []);
+```
+
+Click handlers have the same bug: `setTimeout(() => alert(count), 1000)` after three clicks may alert `0` if you closed over the first render. Prefer the functional setter or a ref.
 
 Related: [React hook](/blog/react-hook), [React Hooks by version](/blog/react-hooks).

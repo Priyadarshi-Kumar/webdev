@@ -10,6 +10,8 @@ tags:
 
 A **hook** is a function whose name starts with `use`. You call it at the **top level** of a function component (or another hook). React matches calls by **order**, so do not put them in `if` or loops.
 
+## A minimal example
+
 ```tsx
 import { useState } from "react";
 
@@ -19,10 +21,28 @@ export function Counter() {
 }
 ```
 
-Rules:
+`useState` is a hook. Each render, React returns the current `count` and a setter. The setter queues an update; React renders again with the new value.
 
-1. Top level only.
-2. React functions only (components and custom hooks).
+## The rules (why order matters)
+
+1. Top level only — not inside `if`, loops, or nested functions.
+2. React functions only (components and <Term id="custom-hook">custom hooks</Term>).
 3. Same number of calls every render.
+
+```tsx
+function Broken({ premium }: { premium: boolean }) {
+  if (premium) {
+    const [bonus, setBonus] = useState(0); // shifts every other hook down
+  }
+  const [name, setName] = useState("");
+  return <input value={name} onChange={(e) => setName(e.target.value)} />;
+}
+```
+
+React stores hook state in a list. Skip a call, and `name` might read `bonus`’s slot. The linter (`eslint-plugin-react-hooks`) catches this.
+
+## Built-in vs yours
+
+Built-ins you will meet: `useState`, `useEffect`, `useContext` / `use`, `useRef`, `useMemo`, `useCallback`, `useId`, `useSyncExternalStore`. A function you write that calls these is a custom hook — same rules, reusable logic.
 
 Related: [custom hook](/blog/custom-hook), [React Hooks by version](/blog/react-hooks).

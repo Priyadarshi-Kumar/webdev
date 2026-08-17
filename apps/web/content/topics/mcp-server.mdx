@@ -10,14 +10,34 @@ tags:
   - ai
 ---
 
-An **MCP server** is a small process or HTTP service. The [host](/blog/mcp-host) starts it (stdio) or POSTs to it (Streamable HTTP). The server answers structured requests. The **model stays in the host**.
+An **MCP server** is a small process or HTTP service. The <Term id="mcp-host">host</Term> starts it (stdio) or POSTs to it (Streamable HTTP). The server answers structured requests. The **model stays in the host**.
+
+## Register a tool
 
 ```ts
+import { z } from "zod";
+
 server.tool("search_docs", { query: z.string() }, async ({ query }) => ({
   content: [{ type: "text", text: await search(query) }],
 }));
 ```
 
+When the model wants docs, the host calls `tools/call` with `{ query: "lockfile" }`. Your `search` function runs. You return text. You never load an LLM SDK inside this process unless you *want* a second model (unusual).
+
 Official TypeScript today often lives in `@modelcontextprotocol/server` (2026 spec). Older samples use `@modelcontextprotocol/sdk`.
+
+## Two ways to run
+
+**stdio** — the host spawns `node dist/server.js`. Messages are newline-delimited JSON on stdin/stdout. Good for local files.
+
+**HTTP** — the host POSTs to `https://mcp.example.com`. Good for shared company tools, auth headers, and not installing a CLI on every laptop.
+
+```ts
+// stdio (sketch)
+const transport = new StdioServerTransport();
+await server.connect(transport);
+```
+
+Keep servers small. One job (filesystem, GitHub, your tickets). A giant “do everything” server is harder to allowlist.
 
 Related: [MCP tool](/blog/mcp-tool), [MCP in depth](/blog/model-context-protocol).

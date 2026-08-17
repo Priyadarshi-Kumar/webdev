@@ -10,33 +10,55 @@ tags:
 
 **Prop drilling** is threading a value through layers that only exist to forward it.
 
+## The long way
+
 ```tsx
 function App() {
   const user = { name: "Priya" };
   return <Page user={user} />;
 }
-function Page({ user }) {
+function Page({ user }: { user: { name: string } }) {
   return <Layout user={user} />;
 }
-function Layout({ user }) {
+function Layout({ user }: { user: { name: string } }) {
   return <Header user={user} />;
 }
-function Header({ user }) {
+function Header({ user }: { user: { name: string } }) {
   return <p>{user.name}</p>;
 }
 ```
 
-Context (or a store) lets `Header` subscribe without `Page` / `Layout` knowing:
+`Page` and `Layout` do not care about `user`. Every new field (`avatar`, `role`) touches every file in the chain.
+
+## Context skips the middle
 
 ```tsx
-const UserContext = createContext(null);
+import { createContext, use } from "react";
+
+type User = { name: string };
+const UserContext = createContext<User | null>(null);
+
+function App() {
+  return (
+    <UserContext value={{ name: "Priya" }}>
+      <Page />
+    </UserContext>
+  );
+}
 
 function Header() {
   const user = use(UserContext);
+  if (!user) return null;
   return <p>{user.name}</p>;
 }
 ```
 
-Do not put **everything** in context — it still re-renders consumers. Drill one or two levels if that is clearer.
+(`Provider` as `UserContext.Provider` is the older spelling; React 19 lets you use `<UserContext>`.)
+
+## When drilling is fine
+
+Do not put **everything** in context — it still re-renders consumers when the value identity changes. Drill one or two levels if that is clearer (`Button` receiving `onClick` is not a problem). Use context for **theme, auth, locale** — values many distant leaves need.
+
+A store (Zustand) is another skip-the-middle option when updates are frequent and you want selectors.
 
 Related: [React use()](/blog/react-use), [React Hooks by version](/blog/react-hooks).

@@ -9,14 +9,40 @@ tags:
   - javascript
 ---
 
-**Nx** sits next to your [package manager](/blog/package-manager). pnpm installs libraries. Nx **runs jobs** (`dev`, `build`, `test`) across many packages and remembers results.
+**Nx** sits next to your <Term id="package-manager">package manager</Term>. pnpm installs libraries. Nx **runs jobs** (`dev`, `build`, `test`) across many packages and remembers results.
+
+## Commands you will actually type
 
 ```bash
 pnpm nx build web          # one project
 pnpm nx run-many -t test   # every project that has "test"
 pnpm nx graph              # open the dependency map
+pnpm nx show project web   # targets and deps for `web`
 ```
 
-This site’s root `package.json` scripts are thin wrappers: `"build": "nx build web"`.
+This site’s root `package.json` scripts are thin wrappers:
+
+```json
+{
+  "scripts": {
+    "dev": "nx dev web",
+    "build": "nx build web"
+  }
+}
+```
+
+`pnpm build` therefore means “ask Nx to build the `web` project,” not “run a mystery script in every folder.”
+
+## What Nx adds over “just pnpm”
+
+| Need | pnpm | Nx |
+| --- | --- | --- |
+| Install React | yes | no |
+| Run `apps/web`’s `build` | `--filter web build` | `nx build web` |
+| Skip rebuild if inputs unchanged | no | <Term id="nx-cache">cache</Term> |
+| Test only what this PR touched | no | <Term id="nx-affected">affected</Term> |
+| Picture of who imports whom | weak | <Term id="project-graph">project graph</Term> |
+
+You can use both. This repo does: pnpm for the lockfile, Nx for task orchestration.
 
 Related: [Nx monorepo](/blog/nx-monorepo), [project graph](/blog/project-graph), [Nx cache](/blog/nx-cache).

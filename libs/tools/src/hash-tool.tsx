@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { hashText } from "@webdev/utils";
-import { CopyButton, ToolShell, ToolTextarea, useCopy } from "./components/tool-shell";
+import { CopyButton, ToolInput, ToolShell, ToolTextarea, useCopy } from "./components/tool-shell";
 
 export function HashTool() {
   const [input, setInput] = useState("");
@@ -25,7 +25,8 @@ export function HashTool() {
           <select
             value={algorithm}
             onChange={(event) => setAlgorithm(event.target.value as "SHA-256" | "SHA-1")}
-            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-zinc-900"
+            aria-label="Hash algorithm"
+            className="tool-input min-h-10 w-auto cursor-pointer py-2"
           >
             <option value="SHA-256">SHA-256</option>
             <option value="SHA-1">SHA-1</option>
@@ -36,12 +37,7 @@ export function HashTool() {
     >
       <div className="space-y-4">
         <ToolTextarea value={input} onChange={setInput} label="Text to hash" rows={6} />
-        <input
-          readOnly
-          value={hash}
-          aria-label="Hash output"
-          className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 p-3 font-mono text-sm text-zinc-900 dark:border-white/10 dark:bg-zinc-900/50 dark:text-zinc-100"
-        />
+        <ToolInput value={hash} label={`${algorithm} digest`} readOnly />
       </div>
     </ToolShell>
   );

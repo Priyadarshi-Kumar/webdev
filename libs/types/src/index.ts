@@ -42,7 +42,8 @@ export type Profile = {
   location: string;
   headline: string;
   availability: string;
-  phone: string;
+  /** Public path, e.g. `/portrait.jpg` in `apps/web/public`. */
+  photo?: string;
   bio: string[];
   highlights: string[];
   skillGroups: SkillGroup[];
@@ -52,10 +53,13 @@ export type Profile = {
   education: Education[];
 };
 
+export type ToolGroup = "encode" | "format" | "generate" | "inspect";
+
 export type ToolMeta = {
   slug: string;
   title: string;
   description: string;
+  group: ToolGroup;
   featured?: boolean;
 };
 

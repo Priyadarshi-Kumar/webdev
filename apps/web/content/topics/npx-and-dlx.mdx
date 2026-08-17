@@ -11,19 +11,45 @@ tags:
 
 **npx** (npm) and **dlx** (Yarn / pnpm) download a package, run its binary, and do not add it to your dependencies. Use this for generators and one-off tools.
 
+## Same job, three spellings
+
 ```bash
 npx create-vite@latest my-app
 yarn dlx create-vite@latest my-app
 pnpm dlx create-vite@latest my-app
 ```
 
-Pin the version (`create-vite@latest` or `@6.0.0`) so you do not silently get a new major next month.
+Pin the version (`create-vite@6.0.0`) so you do not silently get a new major next month. `@latest` is convenient and non-reproducible.
 
-If you run the tool **every day**, add it as a devDependency and call it with `pnpm exec`:
+```bash
+# bad: whatever create-vite is today
+npx create-vite my-app
+
+# better: you can replay this in a year
+npx create-vite@6.2.0 my-app
+```
+
+## Daily tools belong in the project
+
+If you run the tool **every day**, add it as a `devDependency` and call it with `pnpm exec` (or a script). Then the <Term id="lockfile">lockfile</Term> pins it for <Term id="ci">CI</Term>.
 
 ```bash
 pnpm add -D typescript
 pnpm exec tsc --noEmit
 ```
+
+```json
+{
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}
+```
+
+`npx tsc` in CI might download a different TypeScript than your teammate. `pnpm typecheck` will not.
+
+## npx also runs local bins
+
+Inside a project, `npx eslint` prefers `node_modules/.bin/eslint` if it exists. `pnpm dlx eslint` always fetches a temporary copy. For local tools, `pnpm exec eslint` or a script is the clear choice.
 
 Related: [package manager](/blog/package-manager), [package.json](/blog/package-json).

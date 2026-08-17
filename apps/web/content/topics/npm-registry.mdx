@@ -11,18 +11,51 @@ tags:
 
 The **npm registry** is a huge public catalog of JavaScript packages. The website is [npmjs.com](https://www.npmjs.com/). When you `pnpm add react`, the tarball still comes from this registry (unless you configured a private one).
 
+A <Term id="package-manager">package manager</Term> is the *client*. The registry is the *store*.
+
+## Same package, three clients
+
 ```bash
-# same package, three clients
 npm install react
 yarn add react
 pnpm add react
 ```
 
-A **scope** is the `@org/` prefix (`@types/react`). Companies often run a private registry (GitHub Packages, npm org, Verdaccio) and point `.npmrc` at it:
+All three hit `registry.npmjs.org` (or a mirror you set). You are not choosing “Yarn’s React” vs “pnpm’s React.” You are choosing how the tarball is laid out on disk.
+
+Look up a package in the browser, or from the CLI:
+
+```bash
+npm view react version
+npm view react versions --json
+npm view lodash description
+```
+
+## Scopes and private registries
+
+A **scope** is the `@org/` prefix. `@types/react` is DefinitelyTyped’s React types. Companies often publish `@acme/ui` to a private registry (GitHub Packages, npm org, Verdaccio) and point `.npmrc` at it:
 
 ```ini
 # .npmrc
 @acme:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
 ```
+
+Public packages still come from npmjs. Only `@acme/*` goes to GitHub. Never commit a real token — use an env var in <Term id="ci">CI</Term>.
+
+## What a registry entry contains
+
+Each version is a tarball plus metadata: name, version, `dependencies`, `peerDependencies`, and which file is the package entry (`main` / `exports`).
+
+```json
+{
+  "name": "left-pad",
+  "version": "1.3.0",
+  "main": "index.js",
+  "dependencies": {}
+}
+```
+
+If the registry is down, installs fail even with a perfect <Term id="lockfile">lockfile</Term> — unless you already have the tarballs in a cache or vendor them. Integrity hashes in the lockfile catch a swapped tarball.
 
 Related: [package manager](/blog/package-manager), [package.json](/blog/package-json).

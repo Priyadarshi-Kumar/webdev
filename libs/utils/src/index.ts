@@ -5,13 +5,16 @@ export { formatJson, minifyJson, validateJson } from "./json";
 export type { JsonParseResult, JsonTextResult } from "./json";
 export { findBySlug, sortByDateDesc } from "./collection";
 export {
+  HTTP_STATUS,
   compareSemver,
+  convertNumberBase,
   csvToJson,
   dateToUnix,
   decodeBase64,
   decodeHtmlEntities,
   decodeJwt,
   decodeUri,
+  describeCron,
   encodeBase64,
   encodeHtmlEntities,
   encodeUri,
@@ -20,9 +23,12 @@ export {
   generateUuid,
   hashText,
   hexToRgb,
+  inspectUrl,
   jsonToCsv,
   lineDiff,
+  lookupHttpStatus,
   parseByteInput,
+  parseChmod,
   rgbToHex,
   slugify,
   testRegex,
@@ -31,7 +37,10 @@ export {
   toKebabCase,
   toPascalCase,
   toSnakeCase,
+  transformLines,
   unixToDate,
+  type LineMode,
+  type NumberBase,
   type ToolResult,
 } from "./dev-tools";
 export {

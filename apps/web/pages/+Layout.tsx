@@ -1,14 +1,22 @@
-import { Footer, Header } from "@webdev/widgets";
+import { AppearanceSync, ScrollHints } from "@webdev/components";
+import { Footer, Header, ReadProgress } from "@webdev/widgets";
 import "./tailwind.css";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="relative flex h-dvh flex-col overflow-hidden">
+      <AppearanceSync />
+      <div className="page-atmosphere pointer-events-none absolute inset-0" aria-hidden />
+      <ReadProgress />
       <Header />
-      <div id="page-content" className="flex-1">
-        <main className="mx-auto w-full min-w-0 max-w-6xl px-4 py-8 sm:px-6 sm:py-12">{children}</main>
-      </div>
-      <Footer />
+      <ScrollHints
+        id="page-content"
+        frameClassName="z-10 flex min-h-0 flex-1 flex-col"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
+      >
+        <main className="mx-auto w-full min-w-0 max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-10">{children}</main>
+        <Footer />
+      </ScrollHints>
     </div>
   );
 }

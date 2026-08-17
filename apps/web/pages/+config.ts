@@ -5,7 +5,7 @@ import { SITE } from "@webdev/widgets/config";
 const config: Config = {
   title: `${SITE.name} — ${SITE.role}`,
   description: SITE.description,
-  prerender: true,
+  prerender: { parallel: 4 },
   extends: [vikeReact],
   htmlAttributes: {
     lang: "en",

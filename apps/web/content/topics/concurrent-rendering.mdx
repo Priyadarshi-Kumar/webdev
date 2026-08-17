@@ -10,9 +10,13 @@ tags:
 
 **Concurrent rendering** (React 18+) means a render is not a single uninterruptible burst. React may prepare the next screen in the background, show the old UI until the new one is ready, or throw work away if the user typed again.
 
-You opt in with `startTransition` / `useTransition` / `useDeferredValue`:
+You opt in with `startTransition` / `useTransition` / `useDeferredValue`.
+
+## Keep the input fast
 
 ```tsx
+const [query, setQuery] = useState("");
+const [list, setList] = useState(items);
 const [isPending, startTransition] = useTransition();
 
 function onChange(value: string) {
@@ -21,8 +25,27 @@ function onChange(value: string) {
     setList(filter(items, value)); // can wait: the big list
   });
 }
+
+return (
+  <>
+    <input value={query} onChange={(e) => onChange(e.target.value)} />
+    {isPending ? <p>Updating results…</p> : null}
+    <ResultList items={list} />
+  </>
+);
 ```
 
-Because a render can pause, reading `Date.now()` or `window.innerWidth` during render can [tear](/blog/react-tearing). Subscribe with `useSyncExternalStore` instead.
+Without a transition, every keystroke waits for `filter` to finish before the letter appears. With one, the letter appears immediately; the list catches up.
+
+`useDeferredValue(query)` is the same idea when you cannot split two state variables:
+
+```tsx
+const deferredQuery = useDeferredValue(query);
+const list = useMemo(() => filter(items, deferredQuery), [items, deferredQuery]);
+```
+
+## Why tearing shows up
+
+Because a render can pause, reading `Date.now()` or `window.innerWidth` during render can <Term id="react-tearing">tear</Term>. Subscribe with `useSyncExternalStore` instead. Do not store “the current time” in a module-level variable and read it in two components during one pass.
 
 Related: [tearing](/blog/react-tearing), [React Hooks by version](/blog/react-hooks).

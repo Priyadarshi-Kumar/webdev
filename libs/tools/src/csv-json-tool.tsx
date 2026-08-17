@@ -31,16 +31,16 @@ export function CsvJsonTool() {
     <ToolShell
       actions={
         <>
-          <button type="button" className="btn-primary" onClick={() => run("csvToJson")}>
+          <button type="button" className="btn-primary min-h-10 px-4 py-2 text-sm" onClick={() => run("csvToJson")}>
             CSV → JSON
           </button>
-          <button type="button" className="btn-ghost" onClick={() => run("jsonToCsv")}>
+          <button type="button" className="btn-ghost min-h-10 px-4 py-2 text-sm" onClick={() => run("jsonToCsv")}>
             JSON → CSV
           </button>
-          <button type="button" className="btn-ghost" onClick={() => setInput(SAMPLE_CSV)}>
+          <button type="button" className="btn-ghost min-h-10 px-4 py-2 text-sm" onClick={() => setInput(SAMPLE_CSV)}>
             Sample CSV
           </button>
-          <button type="button" className="btn-ghost" onClick={() => setInput(SAMPLE_JSON)}>
+          <button type="button" className="btn-ghost min-h-10 px-4 py-2 text-sm" onClick={() => setInput(SAMPLE_JSON)}>
             Sample JSON
           </button>
           {output ? <CopyButton text={output} copied={copied} onCopy={() => void copy(output)} /> : null}

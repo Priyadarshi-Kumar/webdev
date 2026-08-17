@@ -10,6 +10,8 @@ tags:
 
 A **Server Component** runs on the server (or at build time). It can `await` a database or file. It sends UI to the client. It **cannot** use `useState`, `useEffect`, or browser APIs.
 
+## Fetch on the server
+
 ```tsx
 // Server Component (no "use client")
 export async function PostList() {
@@ -24,8 +26,46 @@ export async function PostList() {
 }
 ```
 
+The browser never sees the database call — only HTML (or a compact RSC payload). Secrets stay on the server.
+
+## Where hooks live
+
 A file with `"use client"` is a Client Component. That is where hooks live. Pass data down as props; do not fetch in `useEffect` if a Server Component can do it.
 
-This site’s pages are prerendered; interactive bits (theme toggle, tools) are client components.
+```tsx
+"use client";
+
+import { useState } from "react";
+
+export function LikeButton({ postId }: { postId: string }) {
+  const [liked, setLiked] = useState(false);
+  return (
+    <button onClick={() => setLiked(true)} disabled={liked}>
+      {liked ? "Liked" : "Like"}
+    </button>
+  );
+}
+```
+
+```tsx
+// Server Component
+import { LikeButton } from "./LikeButton";
+
+export async function Post({ id }: { id: string }) {
+  const post = await db.posts.find(id);
+  return (
+    <article>
+      <h1>{post.title}</h1>
+      <LikeButton postId={id} />
+    </article>
+  );
+}
+```
+
+You can pass a Server Component as `children` into a client wrapper. You cannot import a Server Component **into** a client file and call it as a function — the client bundle cannot run `db`.
+
+## This site
+
+Pages here are prerendered (Vike). Interactive bits (theme toggle, tools) are client components. That is the same split: static tree on the server, hooks where the user clicks.
 
 Related: [React hook](/blog/react-hook), [Suspense](/blog/react-suspense), [React Hooks by version](/blog/react-hooks).

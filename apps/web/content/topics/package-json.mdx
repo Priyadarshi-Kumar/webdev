@@ -8,13 +8,16 @@ tags:
   - javascript
 ---
 
-`package.json` is the project manifest. Humans edit it. The lockfile is the machine-exact copy of what got installed.
+`package.json` is the project manifest. Humans edit it. The <Term id="lockfile">lockfile</Term> is the machine-exact copy of what got installed.
+
+## A typical app manifest
 
 ```json
 {
   "name": "web",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@9.15.0",
   "scripts": {
     "dev": "vike dev",
     "build": "vike build"
@@ -28,9 +31,40 @@ tags:
 }
 ```
 
-- `dependencies` — needed to run the app (React).
-- `devDependencies` — needed to build/test (TypeScript).
-- `scripts` — `npm run dev` / `pnpm dev`.
-- `^19.2.8` is a **range**, not a pin.
+| Field | Meaning |
+| --- | --- |
+| `name` | Package id. In a <Term id="monorepo">monorepo</Term>, this is what `workspace:*` refers to. |
+| `private` | Do not publish this folder to the <Term id="npm-registry">registry</Term>. |
+| `type` | `"module"` → `.js` files are ESM (`import`). |
+| `scripts` | `pnpm dev` / `npm run build`. |
+| `dependencies` | Needed to **run** the app (React). |
+| `devDependencies` | Needed to **build or test** (TypeScript). Production images can omit these. |
+| `packageManager` | Exact Yarn/pnpm version for <Term id="corepack">Corepack</Term>. |
+
+`^19.2.8` is a <Term id="semver-range">range</Term>, not a pin. Two laptops that only share `package.json` can still get different patch versions until they share a lockfile.
+
+## Scripts are just shell commands
+
+```json
+{
+  "scripts": {
+    "dev": "vike dev",
+    "lint": "eslint .",
+    "test": "vitest run"
+  }
+}
+```
+
+```bash
+pnpm dev          # pnpm lets you skip "run"
+npm run dev
+yarn dev
+```
+
+Binaries from packages land in `node_modules/.bin`. The manager puts that folder on `PATH` while a script runs, so `eslint` works without a global install.
+
+## What does not belong here
+
+Exact nested versions belong in the lockfile. Secrets belong in env vars, not in this file. If you need a sibling library in the same repo, use `workspace:*` instead of a copied version number you will forget to bump.
 
 Related: [semver range](/blog/semver-range), [lockfile](/blog/lockfile), [peer dependency](/blog/peer-dependency).

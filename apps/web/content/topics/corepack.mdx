@@ -9,7 +9,9 @@ tags:
   - tooling
 ---
 
-**Corepack** ships with Node. It reads `"packageManager"` and downloads that Yarn/pnpm version so laptops and CI match. npm itself still comes from Node.
+**Corepack** ships with Node. It reads `"packageManager"` and downloads that Yarn/pnpm version so laptops and <Term id="ci">CI</Term> match. npm itself still comes from Node.
+
+## Pin the manager in git
 
 ```json
 {
@@ -24,5 +26,24 @@ pnpm --version    # 9.15.0
 ```
 
 `npm install -g pnpm` works until one person has 8 and CI has 9. Put `packageManager` in git; enable Corepack in the CI setup step.
+
+## Why versions of the manager matter
+
+pnpm 8 and pnpm 9 write slightly different lockfile fields. Yarn 1 and Yarn 4 are different products. If Alice’s shell aliases `pnpm` to 8 and Bob uses Corepack 9, one of them will constantly rewrite `pnpm-lock.yaml`.
+
+```yaml
+# GitHub Actions
+- uses: actions/setup-node@v4
+  with:
+    node-version: 22
+- run: corepack enable
+- run: pnpm install --frozen-lockfile
+```
+
+`setup-node` can also read `packageManager` and enable Corepack for you, depending on the action version — still keep `packageManager` in `package.json` as the source of truth.
+
+## npm is not managed this way
+
+Corepack does not replace `npm`. The npm version tracks the Node installer. To pin npm, use a Node version manager (fnm, nvm, Volta) or `engines.npm`. For Yarn and pnpm, Corepack is the intended pin.
 
 Related: [CI](/blog/continuous-integration), [Yarn Berry](/blog/yarn-berry), [pnpm vs npm vs Yarn](/blog/pnpm-vs-npm-vs-yarn).

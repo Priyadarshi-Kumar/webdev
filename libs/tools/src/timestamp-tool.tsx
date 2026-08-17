@@ -22,15 +22,15 @@ export function TimestampTool() {
     <ToolShell
       actions={
         <>
-          <button type="button" className="btn-primary" onClick={() => run("toDate")}>
+          <button type="button" className="btn-primary min-h-10 px-4 py-2 text-sm" onClick={() => run("toDate")}>
             Unix → date
           </button>
-          <button type="button" className="btn-ghost" onClick={() => run("toUnix")}>
+          <button type="button" className="btn-ghost min-h-10 px-4 py-2 text-sm" onClick={() => run("toUnix")}>
             Date → Unix
           </button>
           <button
             type="button"
-            className="btn-ghost"
+            className="btn-ghost min-h-10 px-4 py-2 text-sm"
             onClick={() => setInput(String(Math.floor(Date.now() / 1000)))}
           >
             Now

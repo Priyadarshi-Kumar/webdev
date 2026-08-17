@@ -1,7 +1,6 @@
-import { useMemo } from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { compareSemver } from "@webdev/utils";
-import { StatusMessage, ToolShell } from "./components/tool-shell";
+import { StatusMessage, ToolInput, ToolShell } from "./components/tool-shell";
 
 export function SemverTool() {
   const [a, setA] = useState("1.2.3");
@@ -10,24 +9,17 @@ export function SemverTool() {
 
   return (
     <ToolShell status={<StatusMessage ok={result.ok} message={result.ok ? result.output : result.error} />}>
-      <div className="flex flex-wrap items-end gap-4">
-        <label className="flex flex-col gap-1 text-sm">
-          Version A
-          <input
-            value={a}
-            onChange={(event) => setA(event.target.value)}
-            className="w-40 rounded-xl border border-zinc-200 bg-white px-3 py-2 font-mono dark:border-white/10 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          Version B
-          <input
-            value={b}
-            onChange={(event) => setB(event.target.value)}
-            className="w-40 rounded-xl border border-zinc-200 bg-white px-3 py-2 font-mono dark:border-white/10 dark:bg-zinc-900"
-          />
-        </label>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <ToolInput value={a} onChange={setA} label="Version A" />
+        <ToolInput value={b} onChange={setB} label="Version B" />
       </div>
+      {result.ok ? (
+        <div className="mt-4 rounded-2xl border border-sky-400/25 bg-gradient-to-br from-sky-400/15 via-transparent to-violet-400/15 px-5 py-6 text-center">
+          <p className="font-display text-2xl font-semibold tracking-tight text-zinc-950 dark:text-white">
+            {result.output}
+          </p>
+        </div>
+      ) : null}
     </ToolShell>
   );
 }

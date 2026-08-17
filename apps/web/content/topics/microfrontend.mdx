@@ -1,0 +1,50 @@
+---
+title: What is a microfrontend?
+description: A UI slice that is built and often deployed as its own app, then composed into a larger product.
+slug: microfrontend
+date: 2026-08-18
+tags:
+  - glossary
+  - javascript
+  - architecture
+---
+
+A **microfrontend** is a piece of the UI that a team can ship **without rebuilding the whole product**. Checkout, the cart drawer, the admin grid — each can be a separate Vite (or Webpack) app with its own `package.json`, CI, and URL.
+
+## Host and remotes
+
+Composition is the rest of the story. The **host** owns the shell (nav, auth, routing). A **remote** exposes a component or a route. The host loads that JS at **runtime** (<Term id="module-federation">Module Federation</Term>, an iframe, a web component) or at **build time** (a workspace package). Runtime is the usual meaning of “microfrontend.”
+
+```tsx
+// host route — cart is another deployed app
+const MiniCart = lazy(() => import("cart/MiniCart"));
+
+export function Header() {
+  return (
+    <Suspense fallback={null}>
+      <MiniCart />
+    </Suspense>
+  );
+}
+```
+
+Deploy `cart` at 3pm without rebuilding `shell`. That is the payoff. The cost is shared libraries, version skew, and a harder local story.
+
+## One React
+
+Two Reacts on one page break hooks. Shared libraries must be **one copy**, usually listed as a <Term id="peer-dependency">peer</Term> and as `shared` in federation config.
+
+```ts
+shared: {
+  react: { singleton: true, requiredVersion: "^19.0.0" },
+  "react-dom": { singleton: true, requiredVersion: "^19.0.0" },
+}
+```
+
+## Not a monorepo
+
+A <Term id="monorepo">monorepo</Term> is not a microfrontend. One repo with `apps/web` and `libs/widgets` is still **one deploy** unless you also split hosts and remotes. You can keep remotes in one git repo (this is common) and still publish two URLs.
+
+This site is a monorepo on purpose. It does not ship microfrontends.
+
+Related: [microfrontends with Vite](/blog/microfrontends), [module federation](/blog/module-federation), [monorepo](/blog/monorepo).

@@ -10,6 +10,8 @@ tags:
 
 A UI library often says: “I need React, but I will not ship my own.” That is `peerDependencies`. **You** install React once. Two Reacts in one page cause “Invalid hook call.”
 
+## Library vs app
+
 ```json
 {
   "name": "fancy-button",
@@ -29,10 +31,30 @@ A UI library often says: “I need React, but I will not ship my own.” That is
 }
 ```
 
-npm 7+ auto-installs peers (and can still duplicate). pnpm prints `WARN` if a peer is missing. Inspect the tree:
+`fancy-button` calls `useState`. Hooks are stored on **a** React module instance. If the button bundled React 18 and the app uses React 19, you have two instances. The button’s state is not the app’s state. React throws.
+
+## How managers treat peers
+
+npm 7+ auto-installs peers (and can still duplicate in nested trees). pnpm prints `WARN` if a peer is missing and will not silently invent a second React at the root unless you allow it.
 
 ```bash
 pnpm why react
 ```
+
+You want **one** `react` for `web` and every workspace that imports it. In Module Federation, the same idea is `shared: ["react", "react-dom"]`.
+
+## Example: the invalid hook call
+
+```tsx
+// fancy-button/src/Button.tsx
+import { useState } from "react";
+
+export function Button() {
+  const [n, setN] = useState(0);
+  return <button onClick={() => setN(n + 1)}>{n}</button>;
+}
+```
+
+If this `react` is not the same module as the app’s `react`, the first click can already error. Deduplicate; do not “fix” it by wrapping hooks in `try/catch`.
 
 Related: [package.json](/blog/package-json), [React hooks](/blog/react-hooks).

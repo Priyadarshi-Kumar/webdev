@@ -1,3 +1,3 @@
 import { SITE } from "@webdev/widgets/config";
 
-export default `About ${SITE.name} — work, stack, and selected projects.`;
+export default `Experience for ${SITE.name} — roles at Maieutic, Tekion, Setu, and Yulu.`;

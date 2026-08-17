@@ -12,6 +12,8 @@ tags:
 
 A **resource** is data, not a verb. The server lists URIs (`resources/list`); the host reads one (`resources/read`) and may attach it as context. Typical URIs: `file:///…`, `postgres://…/schema`, `ticket://42`.
 
+## Listing
+
 ```json
 {
   "uri": "file:///Users/you/notes.md",
@@ -20,6 +22,29 @@ A **resource** is data, not a verb. The server lists URIs (`resources/list`); th
 }
 ```
 
-The model does not “call” a resource the way it calls a [tool](/blog/mcp-tool). The host or user chooses to include it.
+```json
+{
+  "uri": "ticket://1842",
+  "name": "CI: lockfile missing",
+  "mimeType": "text/plain"
+}
+```
+
+The model does not “call” a resource the way it calls a <Term id="mcp-tool">tool</Term>. The host or user chooses to include it — like attaching a file to the chat.
+
+## Read
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "resources/read",
+  "params": { "uri": "file:///Users/you/notes.md" }
+}
+```
+
+The server returns bytes or text. If the file can change, the server may emit `notifications/resources/updated`. The host can re-read.
+
+Use a **tool** when the model must *choose* a query (`search_docs`). Use a **resource** when the blob is known (`notes.md` is always that path). Use a <Term id="mcp-prompt">prompt</Term> when the workflow is a filled-in template.
 
 Related: [MCP prompt](/blog/mcp-prompt), [MCP in depth](/blog/model-context-protocol).

@@ -1,5 +1,4 @@
-import { useMemo } from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { decodeJwt } from "@webdev/utils";
 import { CopyButton, StatusMessage, ToolShell, ToolTextarea, useCopy } from "./components/tool-shell";
 
@@ -17,20 +16,12 @@ export function JwtDecoder() {
         result.ok ? <CopyButton text={result.output} copied={copied} onCopy={() => void copy(result.output)} /> : null
       }
       status={
-        <StatusMessage
-          ok={result.ok}
-          message={result.ok ? "Decoded (signature not verified)" : result.error}
-        />
+        <StatusMessage ok={result.ok} message={result.ok ? "Decoded (signature not verified)" : result.error} />
       }
     >
       <div className="grid gap-4 lg:grid-cols-2">
         <ToolTextarea value={input} onChange={setInput} label="JWT token" rows={8} />
-        <ToolTextarea
-          value={result.ok ? result.output : ""}
-          onChange={() => {}}
-          label="Decoded JSON"
-          rows={8}
-        />
+        <ToolTextarea value={result.ok ? result.output : ""} label="Decoded JSON" rows={8} readOnly />
       </div>
     </ToolShell>
   );

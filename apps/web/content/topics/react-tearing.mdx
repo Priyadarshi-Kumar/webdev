@@ -10,12 +10,20 @@ tags:
 
 **Tearing** means part of the UI read store version A and another part read version B in the **same** render — or the server HTML does not match the first client render.
 
+<Term id="concurrent-rendering">Concurrent rendering</Term> makes this more likely: React may pause a render. If you read `Date.now()` or `store.getState()` directly during render, a later component in the same pass can see a newer value.
+
+## The naive read
+
 ```tsx
 // risky: window width during render differs on server (0) vs client
 function Width() {
   return <span>{window.innerWidth}</span>;
 }
 ```
+
+On the server, `window` may not exist. On the client, it does. Even with a guard, two `Width` components could theoretically see two widths if a resize happens mid-render.
+
+## The intended API
 
 ```tsx
 import { useSyncExternalStore } from "react";
@@ -31,6 +39,14 @@ export function Width() {
 }
 ```
 
-The third argument is the **server snapshot** (here `0`) so SSR has a defined value.
+The third argument is the **server snapshot** (here `0`) so SSR has a defined value. React will <Term id="hydration">hydrate</Term> with `0`, then subscribe and update to the real width — one consistent snapshot per render.
+
+## Zustand and friends
+
+Libraries that support concurrent React use `useSyncExternalStore` internally. If you write `const n = myStore.count` during render, you are on your own. Use the library’s hook:
+
+```tsx
+const count = useStore((s) => s.count);
+```
 
 Related: [hydration](/blog/hydration), [React Hooks by version](/blog/react-hooks).

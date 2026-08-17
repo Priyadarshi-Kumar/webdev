@@ -10,12 +10,23 @@ tags:
 
 **SemVer** versions look like `MAJOR.MINOR.PATCH` (`19.2.8`). A **range** in `package.json` allows more than one version. A **pin** is exact (`19.2.8` with no `^`).
 
+The contract:
+
+- **MAJOR** — breaking changes (`18` → `19`)
+- **MINOR** — new features, still compatible (`19.1` → `19.2`)
+- **PATCH** — bugfixes (`19.2.7` → `19.2.8`)
+
+Authors can get this wrong. Ranges are a *promise*, not a proof.
+
+## How to read the specifiers
+
 ```json
 {
   "dependencies": {
     "react": "^19.2.8",
     "left-pad": "~1.3.0",
-    "webpack": "5.97.1"
+    "webpack": "5.97.1",
+    "eslint": ">=8 <10"
   }
 }
 ```
@@ -25,7 +36,23 @@ tags:
 | `^19.2.8` | 19.2.8 up to (not including) 20.0.0 |
 | `~1.3.0` | 1.3.0 up to (not including) 1.4.0 |
 | `19.2.8` | exactly 19.2.8 |
+| `>=8 <10` | 8.x and 9.x, not 10 |
+| `*` / `workspace:*` | any / the copy in this repo |
 
-`npm install` / `pnpm update` may move within the range. The lockfile records what you actually got. CI should install from the lockfile, not “whatever ^ allows today.”
+`npm install` / `pnpm update` may move within the range. The <Term id="lockfile">lockfile</Term> records what you actually got. <Term id="ci">CI</Term> should install from the lockfile, not “whatever `^` allows today.”
+
+## Example: a surprise minor
+
+Monday, lockfile has `left-pad@1.3.0`. Friday, someone deletes `node_modules` and runs `npm install` **without** a frozen lockfile. npm sees `~1.3.0`, finds `1.3.1` on the registry, and rewrites the lockfile. CI that uses `npm ci` would have stayed on `1.3.0`.
+
+```bash
+# see what the range allows right now
+npm view react@^19.2.8 version
+
+# bump within ranges on purpose
+pnpm update
+```
+
+Pin tools that must not drift (`webpack: "5.97.1"`). Use `^` for libraries you trust to follow SemVer. Never let CI be the first place a range is resolved.
 
 Related: [lockfile](/blog/lockfile), [npm ci](/blog/npm-ci).

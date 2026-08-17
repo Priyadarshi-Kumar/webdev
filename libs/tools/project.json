@@ -4,5 +4,5 @@
   "sourceRoot": "libs/tools/src",
   "projectType": "library",
   "tags": ["type:lib"],
-  "implicitDependencies": ["types", "utils"]
+  "implicitDependencies": ["types", "utils", "components"]
 }

@@ -1,0 +1,395 @@
+---
+title: FastAPI — typed Python APIs with OpenAPI for free
+description: How FastAPI turns type hints into validation, JSON, and docs. A small app you can run, path and body models, Depends, async routes, CORS for a Vite frontend, and interview answers.
+slug: fastapi
+date: 2026-08-18
+tags:
+  - python
+  - fastapi
+  - api
+  - http
+  - interview
+---
+
+**FastAPI** is a Python framework for HTTP APIs. You write functions with type hints. It turns those hints into **request parsing**, **validation errors**, **JSON responses**, and an **OpenAPI** schema (`/docs` is Swagger UI; `/redoc` is ReDoc). Under the hood it is **Starlette** (ASGI, routing, middleware) plus **Pydantic** (models and validation).
+
+It is not a template-heavy “full website” framework like Django. You still pick your own ORM, auth, and queue. What you get is a fast way to ship a JSON API that a React or Vite app can call, with types that stay honest.
+
+## Mental model
+
+### A path operation is just a function
+
+```python
+from fastapi import FastAPI
+
+app = FastAPI()
+
+
+@app.get("/health")
+def health():
+    return {"ok": True}
+```
+
+`GET /health` runs `health` and JSON-encodes the return value. The decorator is the **path** plus the **HTTP method**. Same idea as Express `app.get`, with types instead of `req` / `res`.
+
+### Type hints are the contract
+
+```python
+@app.get("/items/{item_id}")
+def read_item(item_id: int, q: str | None = None):
+    return {"item_id": item_id, "q": q}
+```
+
+`item_id` is a **path** parameter because it is in the URL. `q` is a **query** parameter because it is not. FastAPI reads that from the function signature. `GET /items/abc` is a **422**, not a crash inside your handler — `abc` is not an `int`.
+
+Pydantic v2 (FastAPI 0.100+) uses `str | None`. Older examples used `Optional[str]` from `typing`. Both work.
+
+### Two processes: your app and the server
+
+```bash
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install "fastapi[standard]"
+```
+
+`fastapi[standard]` pulls in **Uvicorn** (the ASGI server) and the CLI. Run:
+
+```bash
+fastapi dev main.py
+```
+
+or:
+
+```bash
+uvicorn main:app --reload
+```
+
+`main:app` means “module `main.py`, variable `app`.” `--reload` restarts on file change. Production is Uvicorn (or Gunicorn + Uvicorn workers) **without** `--reload`, behind a reverse proxy.
+
+Open `http://127.0.0.1:8000/docs`. That UI is generated from your functions. If a field is missing from `/docs`, it is missing from the signature.
+
+## Request shapes
+
+### Path, query, and headers
+
+```python
+from typing import Annotated
+
+from fastapi import FastAPI, Header, Query
+
+app = FastAPI()
+
+
+@app.get("/users/{user_id}/orders")
+def list_orders(
+    user_id: int,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    authorization: Annotated[str | None, Header()] = None,
+):
+    return {"user_id": user_id, "limit": limit, "has_auth": bool(authorization)}
+```
+
+`Query(ge=1, le=100)` is validation on the query string. `Header()` maps `Authorization` (FastAPI lowercases and treats `_` as `-` unless you pass `convert_underscores=False`).
+
+### JSON body with a Pydantic model
+
+A **body** is a class, not a dict you parse by hand.
+
+```python
+from pydantic import BaseModel, Field
+
+from fastapi import FastAPI
+
+app = FastAPI()
+
+
+class ItemIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    price: float = Field(gt=0)
+    tags: list[str] = []
+
+
+class ItemOut(ItemIn):
+    id: int
+
+
+@app.post("/items", status_code=201)
+def create_item(item: ItemIn) -> ItemOut:
+    return ItemOut(id=1, **item.model_dump())
+```
+
+`item: ItemIn` with no `Query` / `Path` / `Body` extra means **JSON body**. Invalid JSON or `price: -1` → 422 with a list of field errors. `-> ItemOut` is the **response model**: extra keys you accidentally return are stripped, and `/docs` shows the output shape.
+
+`status_code=201` is the success status. Errors still use 4xx/5xx from `HTTPException` or validation.
+
+### Form data and files
+
+JSON is the default. Uploads are `Form` / `File` / `UploadFile`:
+
+```python
+from fastapi import FastAPI, File, UploadFile
+
+app = FastAPI()
+
+
+@app.post("/avatar")
+async def upload_avatar(file: UploadFile = File()):
+    data = await file.read()
+    return {"filename": file.filename, "bytes": len(data)}
+```
+
+`UploadFile` is a spool (memory then disk). `await file.read()` is the whole file — stream it for large uploads. The route is `async` because reading the upload is I/O.
+
+## Status codes and errors
+
+### Raise `HTTPException`
+
+```python
+from fastapi import FastAPI, HTTPException
+
+app = FastAPI()
+
+ITEMS = {1: {"name": "widget"}}
+
+
+@app.get("/items/{item_id}")
+def get_item(item_id: int):
+    item = ITEMS.get(item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return item
+```
+
+`detail` can be a string or a JSON-able value. Clients see `{"detail": "Item not found"}`. Do not catch this yourself and return a dict with status 200.
+
+### Response models vs `Response`
+
+Most routes return a dict or a Pydantic model. If you need a raw body (CSV, redirect), use Starlette’s `Response`, `RedirectResponse`, or `JSONResponse` and set `status_code` there. Mixing a typed return with a manual `JSONResponse` is how `/docs` and reality drift apart — pick one per route.
+
+## Dependencies (`Depends`)
+
+A **dependency** is a function FastAPI calls before (or while resolving) the route. Use it for DB sessions, the current user, and shared query params. It is not React context; it is constructor injection for HTTP.
+
+```python
+from typing import Annotated
+
+from fastapi import Depends, FastAPI, Header, HTTPException
+
+app = FastAPI()
+
+
+def get_token(authorization: Annotated[str | None, Header()] = None) -> str:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    return authorization.removeprefix("Bearer ")
+
+
+@app.get("/me")
+def me(token: Annotated[str, Depends(get_token)]):
+    return {"token_prefix": token[:4]}
+```
+
+`Depends(get_token)` runs `get_token` with the same parameter rules as a route. If it raises `HTTPException`, the route never runs. Nested `Depends` are allowed; FastAPI caches a dependency **per request** if you use the same function twice.
+
+A typical DB pattern (SQLAlchemy session, sketched):
+
+```python
+from collections.abc import Generator
+from typing import Annotated
+
+from fastapi import Depends
+
+# SessionLocal = sessionmaker(bind=engine)
+
+
+def get_db() -> Generator:
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@app.get("/items")
+def list_items(db: Annotated[object, Depends(get_db)]):
+    return db.query(Item).all()
+```
+
+`yield` means “setup / teardown.” The code after `yield` runs after the response is built (or after an error). This is the FastAPI equivalent of a middleware `finally`, scoped to one resource. Use `Annotated[YourSessionType, Depends(get_db)]` so the type checker sees a real session, not `object`.
+
+## Async vs sync routes
+
+### When to use `async def`
+
+```python
+import httpx
+from fastapi import FastAPI
+
+app = FastAPI()
+
+
+@app.get("/title")
+async def title():
+    async with httpx.AsyncClient() as client:
+        r = await client.get("https://httpbin.org/get")
+        return {"origin": r.json()["origin"]}
+```
+
+Uvicorn runs an **event loop**. `async def` + `await` lets other requests proceed while you wait on the network. `httpx.AsyncClient`, async SQLAlchemy, and async Redis belong here.
+
+### When to keep `def`
+
+A **sync** `def` that does blocking I/O (sync `requests`, sync SQLAlchemy, `time.sleep`) is run in a **thread pool** so it does not freeze the loop. That is fine for a small API. It is not “faster than async.” Do **not** call blocking I/O inside `async def` without `await` — that *does* freeze the loop:
+
+```python
+# wrong inside async def
+import requests
+requests.get("https://example.com")  # blocks the event loop
+```
+
+Rule: `async def` only if you `await` something, or the body is CPU-light. Otherwise `def` and let FastAPI thread it.
+
+## Talking to a frontend
+
+### CORS
+
+A Vite app on `http://localhost:5173` calling `http://localhost:8000` is a **cross-origin** request. The browser will hide the JSON unless the API sends CORS headers.
+
+```python
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+`allow_origins=["*"]` plus `allow_credentials=True` is invalid in browsers — list explicit origins if you send cookies. For a bearer token in `Authorization`, cookies are optional; you still need CORS on the API, not on Vite.
+
+### Fetch from TypeScript
+
+```ts
+type Item = { id: number; name: string; price: number };
+
+export async function createItem(body: { name: string; price: number }): Promise<Item> {
+  const res = await fetch("http://localhost:8000/items", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(await res.text());
+  }
+  return res.json() as Promise<Item>;
+}
+```
+
+The Pydantic model on the server and this `Item` type on the client are **two copies**. OpenAPI generators (`openapi-typescript`, etc.) can derive the client types from `/openapi.json` so they do not drift. `/docs` is for humans; `/openapi.json` is for machines.
+
+## App lifespan
+
+Startup and shutdown (connection pools, caches) go on **lifespan**, not a global `engine = create_engine()` at import time if you need a clean close.
+
+```python
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # startup
+    yield
+    # shutdown
+
+
+app = FastAPI(lifespan=lifespan)
+```
+
+Code before `yield` runs once when Uvicorn starts. Code after runs on shutdown. Route functions should take resources via `Depends`, not from random globals, if you want tests to swap them.
+
+## Tests without a real server
+
+```python
+from fastapi.testclient import TestClient
+
+from main import app
+
+client = TestClient(app)
+
+
+def test_health():
+    r = client.get("/health")
+    assert r.status_code == 200
+    assert r.json() == {"ok": True}
+
+
+def test_missing_item():
+    r = client.get("/items/999")
+    assert r.status_code == 404
+```
+
+`TestClient` is httpx talking to the ASGI app in-process. Override dependencies in tests:
+
+```python
+app.dependency_overrides[get_token] = lambda: "test-token"
+```
+
+Clear `dependency_overrides` after the test so the next one sees the real `get_token`.
+
+## What FastAPI is not
+
+- **Not Django.** No admin, no batteries-included ORM, no `startproject` that is a CMS. Pair it with SQLAlchemy, SQLModel, or raw SQL.
+- **Not Flask with types glued on.** Flask is WSGI and a microframework; FastAPI is ASGI and validation-first. You can run both, but the request object is not the same.
+- **Not automatic auth.** `OAuth2PasswordBearer` is a scheme helper. You still verify JWTs or sessions.
+- **Not a replacement for a queue.** Long work belongs in a worker (Celery, arq, a cron). The HTTP handler should return 202 or a job id, not block for minutes.
+
+## Interview answers
+
+<details>
+<summary>What is FastAPI built on?</summary>
+
+Starlette for the ASGI app, routing, and middleware. Pydantic for models and validation. Uvicorn (or another ASGI server) actually speaks HTTP. FastAPI is the layer that maps function signatures onto those two.
+
+</details>
+
+<details>
+<summary>How does FastAPI know path vs query vs body?</summary>
+
+Path parameters are names that appear in the route string (`/items/{item_id}`). Simple types (`int`, `str`, `bool`) that are not in the path become query parameters. A Pydantic `BaseModel` parameter (without `Form`) is the JSON body. `Header`, `Cookie`, `File`, and `Depends` opt in explicitly.
+
+</details>
+
+<details>
+<summary>Why do invalid requests return 422?</summary>
+
+Pydantic validation failed before your function ran. 422 is FastAPI’s default for that. 400 is for other client errors you raise yourself. Do not start the handler and then return 422 by hand unless you have a custom exception handler.
+
+</details>
+
+<details>
+<summary>When should a route be async?</summary>
+
+When it awaits I/O (async DB, httpx, file upload reads). A sync `def` with blocking I/O is offloaded to a thread pool. An `async def` that calls blocking I/O without `await` blocks the event loop and stalls every other request on that worker.
+
+</details>
+
+<details>
+<summary>What is <code>Depends</code>?</summary>
+
+A callable FastAPI invokes to produce an argument. Shared auth, DB sessions, and pagination live there. `yield` dependencies can close resources after the response. The same dependency is cached once per request.
+
+</details>
+
+<details>
+<summary>How do you get API docs without writing OpenAPI by hand?</summary>
+
+FastAPI builds the schema from your path operations, Pydantic models, status codes, and `response_model`. Serve `/docs` and `/redoc` in development. Point a client generator at `/openapi.json` so the TypeScript types match the Python models.
+
+</details>

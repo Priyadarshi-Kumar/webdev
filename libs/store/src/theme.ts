@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { Theme } from "@webdev/types";
+import { THEME_STORAGE_KEY, useAppearanceStore } from "./appearance";
 
 type ThemeState = {
   theme: Theme;
@@ -7,34 +8,36 @@ type ThemeState = {
   toggleTheme: () => void;
 };
 
-const STORAGE_KEY = "color-theme";
-
 export function readStoredTheme(): Theme {
   try {
-    return localStorage.getItem(STORAGE_KEY) === "light" ? "light" : "dark";
+    const raw = localStorage.getItem("site-appearance");
+    if (raw) {
+      const parsed = JSON.parse(raw) as { state?: { mode?: Theme }; mode?: Theme };
+      const mode = parsed.state?.mode ?? parsed.mode;
+      if (mode === "light" || mode === "dark") return mode;
+    }
+    return localStorage.getItem(THEME_STORAGE_KEY) === "light" ? "light" : "dark";
   } catch {
     return "dark";
   }
 }
 
 export function applyTheme(theme: Theme) {
-  document.documentElement.classList.toggle("dark", theme === "dark");
-  try {
-    localStorage.setItem(STORAGE_KEY, theme);
-  } catch {
-    /* ignore */
-  }
+  useAppearanceStore.getState().setMode(theme);
 }
 
-export const useThemeStore = create<ThemeState>((set, get) => ({
+export const useThemeStore = create<ThemeState>((set) => ({
   theme: "dark",
   setTheme: (theme) => {
-    applyTheme(theme);
+    useAppearanceStore.getState().setMode(theme);
     set({ theme });
   },
   toggleTheme: () => {
-    const theme = get().theme === "dark" ? "light" : "dark";
-    applyTheme(theme);
-    set({ theme });
+    useAppearanceStore.getState().toggleMode();
+    set({ theme: useAppearanceStore.getState().mode });
   },
 }));
+
+useAppearanceStore.subscribe((state) => {
+  useThemeStore.setState({ theme: state.mode });
+});

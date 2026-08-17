@@ -11,11 +11,14 @@ tags:
 
 `npm install` may update `package-lock.json` to satisfy ranges. `npm ci` will **not**. It deletes `node_modules`, requires an existing lockfile, and installs that graph — or fails.
 
-```bash
-# local tinkering
-npm install
+## When to use which
 
-# CI / production image
+```bash
+# local tinkering — may rewrite the lockfile
+npm install
+npm install lodash
+
+# CI / production image — lockfile is the source of truth
 npm ci
 ```
 
@@ -26,6 +29,23 @@ yarn install --immutable           # Yarn Berry
 pnpm install --frozen-lockfile     # pnpm
 ```
 
-If `npm ci` fails, the lockfile is out of date with `package.json`. Fix it locally, commit the lockfile, push again.
+This site uses pnpm, so the CI equivalent is `pnpm install --frozen-lockfile`, not `npm ci`. The *idea* is the same: do not resolve <Term id="semver-range">ranges</Term> from scratch on the robot.
+
+## What failure means
+
+If `npm ci` exits non-zero, `package.json` and `package-lock.json` disagree — someone added a dependency and forgot to commit the lockfile, or edited a version by hand.
+
+```bash
+# fix on your laptop
+npm install
+git add package.json package-lock.json
+git commit -m "Pin lodash in the lockfile"
+```
+
+Do not “fix” CI by switching the job to `npm install`. That hides the drift and makes every build a slightly different tree.
+
+## Extra guarantees
+
+`npm ci` also refuses to run without a lockfile, and it does a clean `node_modules` so leftover packages from an old branch cannot leak into tests. That is slower than an incremental `npm install` and worth it on a VM.
 
 Related: [lockfile](/blog/lockfile), [CI](/blog/continuous-integration).

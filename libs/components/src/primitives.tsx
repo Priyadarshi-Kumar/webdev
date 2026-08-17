@@ -26,7 +26,7 @@ export function Card({
 
 export function Tag({ children }: { children: ReactNode }) {
   return (
-    <span className="rounded-full border border-zinc-200 px-2.5 py-0.5 text-[11px] font-medium text-zinc-500 dark:border-white/10 dark:text-zinc-400">
+    <span className="rounded-full border border-zinc-200/80 bg-zinc-50/80 px-2.5 py-0.5 text-[11px] font-medium text-zinc-500 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
       {children}
     </span>
   );
@@ -48,7 +48,7 @@ export function NavLink({
   children: ReactNode;
 }) {
   return (
-    <a href={href} className={`${className} ${active ? "text-sky-400" : ""}`.trim()}>
+    <a href={href} aria-current={active ? "page" : undefined} className={className}>
       {children}
     </a>
   );
