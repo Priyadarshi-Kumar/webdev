@@ -1,12 +1,7 @@
 import { useData } from "vike-react/useData";
-import type { ComponentType } from "react";
 import { Eyebrow } from "@webdev/components";
-import { JsonConverter } from "@webdev/tools";
+import { toolUi } from "@webdev/tools";
 import type { Data } from "./+data";
-
-const toolUi: Record<string, ComponentType> = {
-  json: JsonConverter,
-};
 
 export default function Page() {
   const tool = useData<Data>();
