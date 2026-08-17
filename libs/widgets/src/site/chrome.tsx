@@ -17,11 +17,18 @@ export function Header() {
         <NavLink
           href="/"
           active={urlPathname === "/"}
-          className="shrink-0 font-semibold tracking-tight text-zinc-900 dark:text-white"
+          className="group flex min-w-0 shrink items-center gap-2.5 sm:gap-3"
         >
-          {SITE.shortName}
-          <span className="ml-2 hidden text-sm font-normal text-zinc-500 sm:inline dark:text-zinc-400">
-            {SITE.name}
+          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-[13px] font-extrabold tracking-tight text-sky-400 shadow-[0_0_0_1px_rgba(56,189,248,0.35)] transition group-hover:shadow-[0_0_0_1px_rgba(56,189,248,0.7)] dark:bg-sky-400 dark:text-zinc-950 dark:shadow-none">
+            {SITE.shortName}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[15px] font-extrabold leading-tight tracking-tight text-zinc-950 sm:text-base dark:text-white">
+              {SITE.name}
+            </span>
+            <span className="hidden text-[11px] font-medium tracking-wide text-zinc-500 sm:block dark:text-zinc-400">
+              {SITE.role}
+            </span>
           </span>
         </NavLink>
         <nav className="flex min-w-0 items-center gap-0 text-[13px] text-zinc-600 sm:gap-0.5 sm:text-sm dark:text-zinc-300">

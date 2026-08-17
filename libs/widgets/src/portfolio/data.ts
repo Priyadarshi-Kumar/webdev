@@ -30,6 +30,10 @@ export const profile: Profile = {
       label: "Backend & data",
       skills: ["Node.js", "Express", "SQL", "Socket.io", "SSE"],
     },
+    {
+      label: "Browser APIs",
+      skills: ["BroadcastChannel", "Web Locks", "Web Workers", "Service Workers"],
+    },
   ],
   technicalSkills: [
     {
@@ -52,6 +56,10 @@ export const profile: Profile = {
         "Angular",
         "Web Storage (Cache, IndexedDB)",
       ],
+    },
+    {
+      label: "Browser APIs",
+      skills: ["BroadcastChannel", "Web Locks", "Web Workers", "Service Workers"],
     },
   ],
   stack: [

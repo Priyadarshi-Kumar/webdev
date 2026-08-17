@@ -106,7 +106,7 @@ export function HomePage({
       <section className="py-8">
         <Eyebrow>Skills</Eyebrow>
         <h2 className="mt-2 text-2xl font-bold tracking-tight">Stack I ship with</h2>
-        <div className="mt-6 grid gap-6 md:grid-cols-3">
+        <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {profile.skillGroups.map((group) => (
             <div
               key={group.label}
