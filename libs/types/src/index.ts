@@ -20,7 +20,16 @@ export type Experience = {
   company: string;
   role: string;
   period: string;
-  detail: string;
+  location: string;
+  highlights: string[];
+};
+
+export type Education = {
+  school: string;
+  degree: string;
+  period: string;
+  location: string;
+  detail?: string;
 };
 
 export type SkillGroup = {
@@ -33,11 +42,14 @@ export type Profile = {
   location: string;
   headline: string;
   availability: string;
+  phone: string;
   bio: string[];
   highlights: string[];
   skillGroups: SkillGroup[];
+  technicalSkills: SkillGroup[];
   stack: string[];
   experience: Experience[];
+  education: Education[];
 };
 
 export type ToolMeta = {

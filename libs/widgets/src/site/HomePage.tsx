@@ -73,7 +73,7 @@ export function HomePage({
 
       <section className="grid gap-3 border-t border-zinc-200 py-10 sm:grid-cols-2 lg:grid-cols-4 dark:border-white/10">
         {[
-          { label: "Experience", value: "8+ yrs" },
+          { label: "Experience", value: "6+ yrs" },
           { label: "Public repos", value: "38+" },
           { label: "Technical articles", value: String(notesCount) },
           { label: "Core stack", value: "React & TS" },
@@ -139,7 +139,9 @@ export function HomePage({
             <h3 className="mt-2 text-lg font-semibold tracking-tight">
               {currentRole.role} · {currentRole.company}
             </h3>
-            <p className="mt-3 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{currentRole.detail}</p>
+            <p className="mt-3 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+              {currentRole.highlights[0]}
+            </p>
           </Card>
           <a
             href="/portfolio"

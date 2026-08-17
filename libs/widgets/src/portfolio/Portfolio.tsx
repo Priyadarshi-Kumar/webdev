@@ -1,70 +1,126 @@
+import type { ReactNode } from "react";
 import { Card, Eyebrow } from "@webdev/components";
 import type { Project } from "@webdev/types";
 import { SITE } from "../site/config";
 import { profile, projects } from "./data";
 
+function ResumeSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="mt-10 border-t border-zinc-200 pt-8 first:mt-0 first:border-t-0 first:pt-0 dark:border-white/10">
+      <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-zinc-950 dark:text-white">{title}</h2>
+      <div className="mt-5">{children}</div>
+    </section>
+  );
+}
+
+function ContactLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a href={href} className="text-zinc-600 transition hover:text-sky-600 dark:text-zinc-300 dark:hover:text-sky-400">
+      {children}
+    </a>
+  );
+}
+
 export function PortfolioPage() {
   return (
-    <article>
-      <Eyebrow>Portfolio</Eyebrow>
-      <h1 className="page-title">{profile.name}</h1>
-      <p className="mt-2 text-zinc-500">
-        {SITE.role} · {profile.location}
-      </p>
-      <div className="mt-8 max-w-2xl space-y-4 text-base leading-relaxed text-zinc-600 sm:text-lg dark:text-zinc-300">
-        {profile.bio.map((paragraph) => (
-          <p key={paragraph}>{paragraph}</p>
-        ))}
-      </div>
-
-      <section className="mt-12">
-        <h2 className="text-xl font-bold">Stack</h2>
-        <ul className="mt-4 flex flex-wrap gap-2">
-          {profile.stack.map((item) => (
-            <li
-              key={item}
-              className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm dark:border-white/10 dark:bg-zinc-900/60"
-            >
-              {item}
-            </li>
-          ))}
+    <article className="mx-auto max-w-3xl">
+      <header className="border-b border-zinc-200 pb-8 dark:border-white/10">
+        <h1 className="text-3xl font-extrabold tracking-tight text-zinc-950 sm:text-4xl dark:text-white">
+          {profile.name}
+        </h1>
+        <p className="mt-2 text-base font-medium text-zinc-600 dark:text-zinc-300">{profile.headline}</p>
+        <ul className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm text-zinc-500 dark:text-zinc-400">
+          <li>
+            <ContactLink href={`tel:${profile.phone.replace(/\s/g, "")}`}>{profile.phone}</ContactLink>
+          </li>
+          <li aria-hidden className="text-zinc-300 dark:text-zinc-600">
+            ·
+          </li>
+          <li>
+            <ContactLink href={`mailto:${SITE.email}`}>{SITE.email}</ContactLink>
+          </li>
+          <li aria-hidden className="text-zinc-300 dark:text-zinc-600">
+            ·
+          </li>
+          <li>
+            <ContactLink href={SITE.socials.linkedin}>linkedin.com/in/priyadarshikumar</ContactLink>
+          </li>
+          <li aria-hidden className="text-zinc-300 dark:text-zinc-600">
+            ·
+          </li>
+          <li>
+            <ContactLink href={SITE.socials.github}>github.com/Priyadarshi-Kumar</ContactLink>
+          </li>
         </ul>
-      </section>
+      </header>
 
-      <section className="mt-12">
-        <h2 className="text-xl font-bold">Experience</h2>
-        <ul className="mt-6 space-y-6">
+      <ResumeSection title="Experience">
+        <ul className="space-y-8">
           {profile.experience.map((job) => (
-            <li key={job.company}>
-              <Card>
-                <p className="text-sm text-zinc-500">{job.period}</p>
-                <h3 className="mt-1 font-semibold">
-                  {job.role} · {job.company}
-                </h3>
-                <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{job.detail}</p>
-              </Card>
+            <li key={`${job.company}-${job.period}`}>
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+                <h3 className="text-base font-bold text-zinc-950 dark:text-white">{job.company}</h3>
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">{job.period}</p>
+              </div>
+              <p className="mt-1 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                {job.role} · {job.location}
+              </p>
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+                {job.highlights.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
             </li>
           ))}
         </ul>
-      </section>
+      </ResumeSection>
 
-      <section className="mt-12">
-        <div className="flex items-end justify-between">
-          <h2 className="text-xl font-bold">Projects</h2>
-          <a href="/portfolio/projects" className="text-sm font-medium text-sky-600 dark:text-sky-400">
-            All projects
-          </a>
+      <ResumeSection title="Technical Skills">
+        <div className="space-y-4">
+          {profile.technicalSkills.map((group) => (
+            <div key={group.label}>
+              <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">{group.label}</p>
+              <p className="mt-1 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+                {group.skills.join(", ")}
+              </p>
+            </div>
+          ))}
         </div>
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
+      </ResumeSection>
+
+      <ResumeSection title="Education">
+        <ul className="space-y-4">
+          {profile.education.map((item) => (
+            <li key={item.school}>
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+                <h3 className="text-base font-bold text-zinc-950 dark:text-white">{item.school}</h3>
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">{item.period}</p>
+              </div>
+              <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">
+                {item.degree} · {item.location}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </ResumeSection>
+
+      <ResumeSection title="Side projects">
+        <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
+          Open-source work and experiments outside my day job.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
           {projects.map((project) => (
-            <Card key={project.slug} href={`/portfolio/projects/${project.slug}`}>
+            <Card key={project.slug} href={project.href ?? `/portfolio/projects/${project.slug}`}>
               <p className="text-xs text-zinc-500">{project.year}</p>
               <h3 className="mt-2 font-semibold">{project.title}</h3>
               <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{project.summary}</p>
             </Card>
           ))}
         </div>
-      </section>
+        <a href="/portfolio/projects" className="mt-4 inline-block text-sm font-medium text-sky-600 dark:text-sky-400">
+          View all projects →
+        </a>
+      </ResumeSection>
     </article>
   );
 }
