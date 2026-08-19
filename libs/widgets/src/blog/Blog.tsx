@@ -1,4 +1,5 @@
 import { CodeBlock, JsonLd, ManagerCompare, ScrollHints, Tag, Term } from "@webdev/components";
+import { resolveLastArticleSlug, writeLastArticle } from "@webdev/store";
 import type { PostFrontmatter } from "@webdev/types";
 import { groupPostsBySubject, resolveSubject, type TocEntry } from "@webdev/utils";
 import { ChevronDown, Maximize2, Minimize2, Search } from "lucide-react";
@@ -284,6 +285,15 @@ export function BlogWorkspace({
   const [zen, setZen] = useState(false);
 
   useEffect(() => {
+    if (!selected) return;
+    writeLastArticle({
+      slug: selected.slug,
+      title: selected.title,
+      readAt: new Date().toISOString(),
+    });
+  }, [selected?.slug, selected?.title]);
+
+  useEffect(() => {
     document.documentElement.classList.toggle("zen-mode", zen);
     return () => document.documentElement.classList.remove("zen-mode");
   }, [zen]);
@@ -418,6 +428,20 @@ export function BlogIndex({
   toc?: TocEntry[];
 }) {
   const firstNoteSlug = posts.find((post) => !isGlossary(post))?.slug;
+  const validSlugs = useMemo(() => posts.map((post) => post.slug), [posts]);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const lastSlug = resolveLastArticleSlug(validSlugs);
+    if (lastSlug) {
+      window.location.replace(`/blog/${lastSlug}`);
+      return;
+    }
+    setReady(true);
+  }, [validSlugs]);
+
+  if (!ready) return null;
+
   return <BlogWorkspace posts={posts} selectedSlug={selectedSlug ?? firstNoteSlug} toc={toc} />;
 }
 

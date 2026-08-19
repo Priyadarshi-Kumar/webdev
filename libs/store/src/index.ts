@@ -12,4 +12,11 @@ export {
   useAppearanceStore,
 } from "./appearance";
 export type { ColorPalette, PaletteId } from "./appearance";
+export {
+  LAST_ARTICLE_STORAGE_KEY,
+  readLastArticle,
+  resolveLastArticleSlug,
+  writeLastArticle,
+} from "./last-article";
+export type { LastArticle } from "./last-article";
 export { applyTheme, readStoredTheme, useThemeStore } from "./theme";

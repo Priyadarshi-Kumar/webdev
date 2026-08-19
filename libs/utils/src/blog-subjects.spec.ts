@@ -26,6 +26,10 @@ describe("resolveSubject", () => {
     expect(resolveSubject(["javascript", "tooling", "pnpm", "npm", "yarn"])).toBe("packages");
   });
 
+  it("maps python and fastapi tags to backend", () => {
+    expect(resolveSubject(["python", "fastapi", "api", "interview"])).toBe("backend");
+  });
+
   it("falls back to tooling", () => {
     expect(resolveSubject(["interview"])).toBe("tooling");
   });
