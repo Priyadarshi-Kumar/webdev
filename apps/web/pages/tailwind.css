@@ -111,6 +111,85 @@ html {
     -webkit-mask-image: radial-gradient(ellipse 92% 86% at 50% 42%, #000 52%, transparent 78%);
   }
 
+  .skill-sphere {
+    perspective: 900px;
+    transform-style: preserve-3d;
+  }
+
+  .skill-core {
+    background:
+      radial-gradient(circle at 32% 28%, rgb(255 255 255 / 0.22), transparent 28%),
+      radial-gradient(circle at 50% 48%, rgb(var(--theme-accent-rgb) / 0.2), rgb(var(--theme-glow-rgb) / 0.08) 42%, transparent 68%);
+  }
+
+  :where(.dark) .skill-core {
+    background:
+      radial-gradient(circle at 32% 28%, rgb(255 255 255 / 0.12), transparent 26%),
+      radial-gradient(circle at 50% 48%, rgb(var(--theme-accent-rgb) / 0.18), rgb(var(--theme-glow-rgb) / 0.1) 42%, transparent 70%);
+  }
+
+  .skill-orbit {
+    border: 1px solid rgb(var(--theme-accent-rgb) / 0.22);
+    animation: skill-orbit-spin 32s linear infinite;
+  }
+
+  .skill-orbit-slow {
+    border-color: rgb(var(--theme-glow-rgb) / 0.2);
+    animation-name: skill-orbit-spin-offset;
+    animation-duration: 48s;
+    animation-direction: reverse;
+  }
+
+  .skill-tag {
+    border: 1px solid rgb(255 255 255 / 0.08);
+    background: rgb(255 255 255 / 0.38);
+    box-shadow: 0 8px 18px -16px rgb(15 23 42 / 0.45);
+    backdrop-filter: blur(8px);
+  }
+
+  :where(.dark) .skill-tag {
+    border-color: rgb(255 255 255 / 0.08);
+    background: rgb(9 12 20 / 0.45);
+  }
+
+  .skill-tag.is-front {
+    border-color: rgb(var(--theme-accent-rgb) / 0.55);
+    background: color-mix(in srgb, var(--theme-accent) 18%, white 82%);
+    color: rgb(15 23 42);
+    box-shadow: 0 10px 22px -14px rgb(var(--theme-accent-rgb) / 0.8);
+  }
+
+  :where(.dark) .skill-tag.is-front {
+    background: rgb(var(--theme-accent-rgb) / 0.18);
+    color: rgb(255 255 255);
+    box-shadow: 0 10px 24px -14px rgb(var(--theme-accent-rgb) / 0.7);
+  }
+
+  @keyframes skill-orbit-spin {
+    from {
+      transform: translate(-50%, -50%) rotateX(72deg) rotateZ(0deg);
+    }
+    to {
+      transform: translate(-50%, -50%) rotateX(72deg) rotateZ(360deg);
+    }
+  }
+
+  @keyframes skill-orbit-spin-offset {
+    from {
+      transform: translate(-50%, -50%) rotateX(72deg) rotateZ(40deg);
+    }
+    to {
+      transform: translate(-50%, -50%) rotateX(72deg) rotateZ(400deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skill-orbit {
+      animation: none;
+      transform: translate(-50%, -50%) rotateX(72deg);
+    }
+  }
+
   .field {
     @apply w-full rounded-2xl border border-zinc-200/90 bg-white/80 py-3 pl-10 pr-4 text-base text-zinc-900 shadow-inner outline-none placeholder:text-zinc-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20 sm:py-2.5 sm:text-sm dark:border-white/10 dark:bg-zinc-950/50 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-sky-400/70;
   }

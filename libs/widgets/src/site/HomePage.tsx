@@ -3,6 +3,7 @@ import { Card, Eyebrow, JsonLd, Tag } from "@webdev/components";
 import type { PostFrontmatter } from "@webdev/types";
 import { profile, projects } from "../portfolio/data";
 import { SITE, getSiteUrl } from "./config";
+import { SkillSphere } from "./SkillSphere";
 import { SkillsGrid } from "./SkillsGrid";
 
 export function HomePage({
@@ -84,7 +85,7 @@ export function HomePage({
             ))}
           </dl>
         </div>
-        <SkillsGrid groups={profile.skillGroups} variant="compact" />
+        <SkillSphere skills={[...profile.stack, ...profile.skillGroups.flatMap((group) => group.skills)]} />
       </section>
 
       <section className="py-4 sm:py-8">
