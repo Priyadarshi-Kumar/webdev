@@ -505,74 +505,95 @@ html {
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35);
   }
 
-  .site-cursor-ring,
-  .site-cursor-dot {
+  .site-cursor-shadow,
+  .site-cursor-haze {
     @apply pointer-events-none fixed left-0 top-0 opacity-0 will-change-transform;
     z-index: 2147483646;
-    transition: opacity 0.15s ease;
-  }
-
-  .site-cursor-ring {
-    width: 2.25rem;
-    height: 2.25rem;
+    border: none;
     border-radius: 9999px;
-    border: 2px solid var(--theme-accent);
-    background: rgb(var(--theme-accent-rgb) / 0.14);
-    box-shadow:
-      0 0 0 1px rgb(255 255 255 / 0.12),
-      0 4px 14px rgb(var(--theme-accent-rgb) / 0.45),
-      0 0 28px rgb(var(--theme-accent-rgb) / 0.35),
-      0 0 48px rgb(var(--theme-glow-rgb) / 0.22);
-    transition:
-      width 0.2s ease,
-      height 0.2s ease,
-      border-color 0.2s ease,
-      background 0.2s ease,
-      box-shadow 0.2s ease,
-      opacity 0.15s ease;
+    background: transparent;
+    transition: opacity 0.18s ease, width 0.22s ease, height 0.22s ease, filter 0.22s ease;
   }
 
-  .site-cursor-ring[data-hover="true"] {
+  .site-cursor-shadow {
+    width: 4.5rem;
+    height: 3.25rem;
+    background: radial-gradient(
+      ellipse 90% 80% at 42% 38%,
+      rgb(15 23 42 / 0.16) 0%,
+      rgb(var(--theme-accent-rgb) / 0.14) 38%,
+      transparent 72%
+    );
+    filter: blur(14px);
+  }
+
+  :where(.dark) .site-cursor-shadow {
+    background: radial-gradient(
+      ellipse 90% 80% at 42% 38%,
+      rgb(var(--theme-accent-rgb) / 0.22) 0%,
+      rgb(var(--theme-glow-rgb) / 0.14) 42%,
+      transparent 74%
+    );
+  }
+
+  .site-cursor-shadow[data-state="hover"] {
+    width: 5.75rem;
+    height: 4rem;
+    filter: blur(16px);
+  }
+
+  .site-cursor-shadow[data-state="press"] {
     width: 3rem;
-    height: 3rem;
-    border-color: var(--theme-accent-soft);
-    background: rgb(var(--theme-accent-rgb) / 0.22);
-    box-shadow:
-      0 0 0 1px rgb(255 255 255 / 0.18),
-      0 6px 20px rgb(var(--theme-accent-rgb) / 0.55),
-      0 0 36px rgb(var(--theme-accent-rgb) / 0.42),
-      0 0 56px rgb(var(--theme-glow-rgb) / 0.3);
+    height: 2.25rem;
+    filter: blur(10px);
   }
 
-  .site-cursor-ring[data-press="true"] {
-    width: 1.75rem;
-    height: 1.75rem;
-    background: rgb(var(--theme-accent-rgb) / 0.28);
-    box-shadow:
-      0 0 0 1px rgb(255 255 255 / 0.2),
-      0 2px 12px rgb(var(--theme-accent-rgb) / 0.6),
-      0 0 24px rgb(var(--theme-accent-rgb) / 0.45);
+  .site-cursor-shadow[data-state="grab"] {
+    width: 4.75rem;
+    height: 3.5rem;
+    filter: blur(12px) saturate(1.15);
   }
 
-  .site-cursor-ring[data-grab="true"] {
-    width: 2.5rem;
-    height: 2.5rem;
-    border-style: dashed;
-    border-color: var(--theme-glow);
-  }
-
-  .site-cursor-dot {
+  .site-cursor-haze {
     z-index: 2147483647;
-    width: 0.5rem;
-    height: 0.5rem;
-    border-radius: 9999px;
-    background: #fff;
-    border: 1px solid rgb(var(--theme-accent-rgb) / 0.65);
-    box-shadow:
-      0 0 0 2px rgb(var(--theme-accent-rgb) / 0.35),
-      0 0 12px rgb(var(--theme-accent-rgb) / 0.9),
-      0 0 22px rgb(var(--theme-glow-rgb) / 0.55);
-    transition: opacity 0.15s ease;
+    width: 2.75rem;
+    height: 2rem;
+    background: radial-gradient(
+      ellipse 85% 75% at 50% 45%,
+      rgb(var(--theme-accent-rgb) / 0.42) 0%,
+      rgb(var(--theme-glow-rgb) / 0.18) 48%,
+      transparent 72%
+    );
+    filter: blur(8px);
+    mix-blend-mode: multiply;
+  }
+
+  :where(.dark) .site-cursor-haze {
+    background: radial-gradient(
+      ellipse 85% 75% at 50% 45%,
+      rgb(var(--theme-accent-rgb) / 0.5) 0%,
+      rgb(var(--theme-glow-rgb) / 0.24) 50%,
+      transparent 74%
+    );
+    mix-blend-mode: screen;
+  }
+
+  .site-cursor-haze[data-state="hover"] {
+    width: 3.5rem;
+    height: 2.5rem;
+    filter: blur(10px);
+  }
+
+  .site-cursor-haze[data-state="press"] {
+    width: 2rem;
+    height: 1.5rem;
+    filter: blur(6px);
+  }
+
+  .site-cursor-haze[data-state="grab"] {
+    width: 3.25rem;
+    height: 2.35rem;
+    filter: blur(9px) hue-rotate(12deg);
   }
 }
 

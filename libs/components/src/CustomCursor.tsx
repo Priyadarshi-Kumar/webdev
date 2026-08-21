@@ -26,11 +26,11 @@ function shouldUseCustomCursor() {
 
 export function CustomCursor() {
   const [enabled, setEnabled] = useState(false);
-  const ringRef = useRef<HTMLDivElement>(null);
-  const dotRef = useRef<HTMLDivElement>(null);
+  const hazeRef = useRef<HTMLDivElement>(null);
+  const shadowRef = useRef<HTMLDivElement>(null);
   const target = useRef({ x: -100, y: -100 });
-  const ring = useRef({ x: -100, y: -100 });
-  const dot = useRef({ x: -100, y: -100 });
+  const haze = useRef({ x: -100, y: -100 });
+  const shadow = useRef({ x: -100, y: -100 });
   const frame = useRef<number | null>(null);
   const hovering = useRef(false);
   const pressing = useRef(false);
@@ -47,16 +47,16 @@ export function CustomCursor() {
     const root = document.documentElement;
     root.classList.add("custom-cursor-active");
 
-    const ringEl = ringRef.current;
-    const dotEl = dotRef.current;
-    if (!ringEl || !dotEl) return;
+    const hazeEl = hazeRef.current;
+    const shadowEl = shadowRef.current;
+    if (!hazeEl || !shadowEl) return;
 
     const setCursorState = () => {
-      ringEl.dataset.hover = hovering.current ? "true" : "false";
-      ringEl.dataset.press = pressing.current ? "true" : "false";
-      ringEl.dataset.grab = grabbing.current ? "true" : "false";
-      ringEl.style.opacity = visible.current ? "1" : "0";
-      dotEl.style.opacity = visible.current ? "1" : "0";
+      const state = hovering.current ? "hover" : pressing.current ? "press" : grabbing.current ? "grab" : "default";
+      hazeEl.dataset.state = state;
+      shadowEl.dataset.state = state;
+      hazeEl.style.opacity = visible.current ? "1" : "0";
+      shadowEl.style.opacity = visible.current ? "1" : "0";
     };
 
     const moveTo = (x: number, y: number) => {
@@ -103,17 +103,18 @@ export function CustomCursor() {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const tick = () => {
-      const ringLerp = reducedMotion ? 1 : hovering.current ? 0.24 : 0.18;
-      const dotLerp = reducedMotion ? 1 : 0.42;
-      const dotScale = pressing.current ? 0.75 : 1;
+      const hazeLerp = reducedMotion ? 1 : hovering.current ? 0.34 : 0.28;
+      const shadowLerp = reducedMotion ? 1 : hovering.current ? 0.16 : 0.12;
+      const shadowOffsetX = pressing.current ? 3 : 6;
+      const shadowOffsetY = pressing.current ? 4 : 10;
 
-      ring.current.x += (target.current.x - ring.current.x) * ringLerp;
-      ring.current.y += (target.current.y - ring.current.y) * ringLerp;
-      dot.current.x += (target.current.x - dot.current.x) * dotLerp;
-      dot.current.y += (target.current.y - dot.current.y) * dotLerp;
+      haze.current.x += (target.current.x - haze.current.x) * hazeLerp;
+      haze.current.y += (target.current.y - haze.current.y) * hazeLerp;
+      shadow.current.x += (target.current.x + shadowOffsetX - shadow.current.x) * shadowLerp;
+      shadow.current.y += (target.current.y + shadowOffsetY - shadow.current.y) * shadowLerp;
 
-      ringEl.style.transform = `translate3d(${ring.current.x}px, ${ring.current.y}px, 0) translate(-50%, -50%)`;
-      dotEl.style.transform = `translate3d(${dot.current.x}px, ${dot.current.y}px, 0) translate(-50%, -50%) scale(${dotScale})`;
+      hazeEl.style.transform = `translate3d(${haze.current.x}px, ${haze.current.y}px, 0) translate(-50%, -50%)`;
+      shadowEl.style.transform = `translate3d(${shadow.current.x}px, ${shadow.current.y}px, 0) translate(-50%, -50%)`;
 
       frame.current = window.requestAnimationFrame(tick);
     };
@@ -144,8 +145,8 @@ export function CustomCursor() {
 
   return createPortal(
     <>
-      <div ref={ringRef} className="site-cursor-ring" aria-hidden />
-      <div ref={dotRef} className="site-cursor-dot" aria-hidden />
+      <div ref={shadowRef} className="site-cursor-shadow" aria-hidden />
+      <div ref={hazeRef} className="site-cursor-haze" aria-hidden />
     </>,
     document.body,
   );
