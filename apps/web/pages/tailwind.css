@@ -506,94 +506,82 @@ html {
   }
 
   .site-cursor-shadow,
-  .site-cursor-haze {
-    @apply pointer-events-none fixed left-0 top-0 opacity-0 will-change-transform;
+  .site-cursor-glow {
+    @apply pointer-events-none fixed left-0 top-0 will-change-transform;
     z-index: 2147483646;
-    border: none;
     border-radius: 9999px;
-    background: transparent;
-    transition: opacity 0.18s ease, width 0.22s ease, height 0.22s ease, filter 0.22s ease;
+    opacity: 1;
+    transition: opacity 0.16s ease, width 0.2s ease, height 0.2s ease, box-shadow 0.2s ease;
   }
 
   .site-cursor-shadow {
-    width: 4.5rem;
-    height: 3.25rem;
-    background: radial-gradient(
-      ellipse 90% 80% at 42% 38%,
-      rgb(15 23 42 / 0.16) 0%,
-      rgb(var(--theme-accent-rgb) / 0.14) 38%,
-      transparent 72%
-    );
-    filter: blur(14px);
+    width: 0.75rem;
+    height: 0.75rem;
+    background: rgb(var(--theme-accent-rgb) / 0.2);
+    box-shadow:
+      0 12px 24px 8px rgb(15 23 42 / 0.14),
+      0 8px 28px 12px rgb(var(--theme-accent-rgb) / 0.22),
+      0 0 40px 18px rgb(var(--theme-glow-rgb) / 0.14);
   }
 
   :where(.dark) .site-cursor-shadow {
-    background: radial-gradient(
-      ellipse 90% 80% at 42% 38%,
-      rgb(var(--theme-accent-rgb) / 0.22) 0%,
-      rgb(var(--theme-glow-rgb) / 0.14) 42%,
-      transparent 74%
-    );
+    background: rgb(var(--theme-accent-rgb) / 0.28);
+    box-shadow:
+      0 12px 28px 10px rgb(0 0 0 / 0.42),
+      0 8px 32px 14px rgb(var(--theme-accent-rgb) / 0.3),
+      0 0 44px 20px rgb(var(--theme-glow-rgb) / 0.2);
   }
 
   .site-cursor-shadow[data-state="hover"] {
-    width: 5.75rem;
-    height: 4rem;
-    filter: blur(16px);
+    width: 0.9rem;
+    height: 0.9rem;
+    box-shadow:
+      0 14px 30px 10px rgb(15 23 42 / 0.16),
+      0 10px 36px 16px rgb(var(--theme-accent-rgb) / 0.3),
+      0 0 52px 24px rgb(var(--theme-glow-rgb) / 0.2);
   }
 
   .site-cursor-shadow[data-state="press"] {
-    width: 3rem;
-    height: 2.25rem;
-    filter: blur(10px);
+    width: 0.55rem;
+    height: 0.55rem;
+    box-shadow:
+      0 6px 16px 6px rgb(15 23 42 / 0.12),
+      0 4px 20px 8px rgb(var(--theme-accent-rgb) / 0.28),
+      0 0 28px 12px rgb(var(--theme-glow-rgb) / 0.16);
   }
 
   .site-cursor-shadow[data-state="grab"] {
-    width: 4.75rem;
-    height: 3.5rem;
-    filter: blur(12px) saturate(1.15);
+    box-shadow:
+      0 10px 26px 9px rgb(15 23 42 / 0.15),
+      0 8px 30px 14px rgb(var(--theme-glow-rgb) / 0.26),
+      0 0 46px 20px rgb(var(--theme-accent-rgb) / 0.22);
   }
 
-  .site-cursor-haze {
+  .site-cursor-glow {
     z-index: 2147483647;
-    width: 2.75rem;
-    height: 2rem;
-    background: radial-gradient(
-      ellipse 85% 75% at 50% 45%,
-      rgb(var(--theme-accent-rgb) / 0.42) 0%,
-      rgb(var(--theme-glow-rgb) / 0.18) 48%,
-      transparent 72%
-    );
-    filter: blur(8px);
-    mix-blend-mode: multiply;
+    width: 0.45rem;
+    height: 0.45rem;
+    background: rgb(var(--theme-accent-rgb) / 0.55);
+    box-shadow:
+      0 0 12px 4px rgb(var(--theme-accent-rgb) / 0.45),
+      0 0 24px 8px rgb(var(--theme-glow-rgb) / 0.28);
   }
 
-  :where(.dark) .site-cursor-haze {
-    background: radial-gradient(
-      ellipse 85% 75% at 50% 45%,
-      rgb(var(--theme-accent-rgb) / 0.5) 0%,
-      rgb(var(--theme-glow-rgb) / 0.24) 50%,
-      transparent 74%
-    );
-    mix-blend-mode: screen;
+  :where(.dark) .site-cursor-glow {
+    background: rgb(var(--theme-accent-rgb) / 0.72);
+    box-shadow:
+      0 0 14px 5px rgb(var(--theme-accent-rgb) / 0.55),
+      0 0 28px 10px rgb(var(--theme-glow-rgb) / 0.35);
   }
 
-  .site-cursor-haze[data-state="hover"] {
-    width: 3.5rem;
-    height: 2.5rem;
-    filter: blur(10px);
+  .site-cursor-glow[data-state="hover"] {
+    width: 0.55rem;
+    height: 0.55rem;
   }
 
-  .site-cursor-haze[data-state="press"] {
-    width: 2rem;
-    height: 1.5rem;
-    filter: blur(6px);
-  }
-
-  .site-cursor-haze[data-state="grab"] {
-    width: 3.25rem;
-    height: 2.35rem;
-    filter: blur(9px) hue-rotate(12deg);
+  .site-cursor-glow[data-state="press"] {
+    width: 0.35rem;
+    height: 0.35rem;
   }
 }
 

@@ -25,128 +25,138 @@ function shouldUseCustomCursor() {
 }
 
 export function CustomCursor() {
-  const [enabled, setEnabled] = useState(false);
-  const hazeRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+  const glowRef = useRef<HTMLDivElement>(null);
   const shadowRef = useRef<HTMLDivElement>(null);
-  const target = useRef({ x: -100, y: -100 });
-  const haze = useRef({ x: -100, y: -100 });
-  const shadow = useRef({ x: -100, y: -100 });
-  const frame = useRef<number | null>(null);
-  const hovering = useRef(false);
-  const pressing = useRef(false);
-  const grabbing = useRef(false);
-  const visible = useRef(false);
+  const target = useRef({ x: 0, y: 0 });
+  const glow = useRef({ x: 0, y: 0 });
+  const trail = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
-    if (shouldUseCustomCursor()) setEnabled(true);
+    if (shouldUseCustomCursor()) setMounted(true);
   }, []);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!mounted) return;
 
-    const root = document.documentElement;
-    root.classList.add("custom-cursor-active");
+    let disposed = false;
+    let frame: number | null = null;
+    const hovering = { current: false };
+    const pressing = { current: false };
+    const grabbing = { current: false };
+    const visible = { current: true };
 
-    const hazeEl = hazeRef.current;
-    const shadowEl = shadowRef.current;
-    if (!hazeEl || !shadowEl) return;
+    const boot = () => {
+      const glowEl = glowRef.current;
+      const shadowEl = shadowRef.current;
+      if (!glowEl || !shadowEl) {
+        if (!disposed) requestAnimationFrame(boot);
+        return;
+      }
 
-    const setCursorState = () => {
-      const state = hovering.current ? "hover" : pressing.current ? "press" : grabbing.current ? "grab" : "default";
-      hazeEl.dataset.state = state;
-      shadowEl.dataset.state = state;
-      hazeEl.style.opacity = visible.current ? "1" : "0";
-      shadowEl.style.opacity = visible.current ? "1" : "0";
-    };
+      const root = document.documentElement;
+      root.classList.add("custom-cursor-active");
 
-    const moveTo = (x: number, y: number) => {
-      target.current = { x, y };
-      visible.current = true;
+      const setCursorState = () => {
+        const state = hovering.current ? "hover" : pressing.current ? "press" : grabbing.current ? "grab" : "default";
+        glowEl.dataset.state = state;
+        shadowEl.dataset.state = state;
+        const opacity = visible.current ? "1" : "0";
+        glowEl.style.opacity = opacity;
+        shadowEl.style.opacity = opacity;
+      };
+
+      const moveTo = (x: number, y: number) => {
+        target.current = { x, y };
+        visible.current = true;
+        setCursorState();
+      };
+
+      const onPointerMove = (event: PointerEvent) => {
+        if (event.pointerType !== "mouse") return;
+        moveTo(event.clientX, event.clientY);
+        hovering.current = isInteractiveTarget(event.target);
+        grabbing.current = pressing.current && isGrabTarget(event.target);
+        setCursorState();
+      };
+
+      const onPointerDown = (event: PointerEvent) => {
+        if (event.pointerType !== "mouse") return;
+        pressing.current = true;
+        grabbing.current = isGrabTarget(event.target);
+        setCursorState();
+      };
+
+      const onPointerUp = () => {
+        pressing.current = false;
+        grabbing.current = false;
+        setCursorState();
+      };
+
+      const onWindowLeave = () => {
+        visible.current = false;
+        setCursorState();
+      };
+
+      const onWindowEnter = (event: MouseEvent) => {
+        visible.current = true;
+        moveTo(event.clientX, event.clientY);
+      };
+
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      const tick = () => {
+        const glowLerp = reducedMotion ? 1 : hovering.current ? 0.32 : 0.26;
+        const trailLerp = reducedMotion ? 1 : hovering.current ? 0.14 : 0.1;
+        const trailOffsetX = pressing.current ? 2 : 5;
+        const trailOffsetY = pressing.current ? 3 : 9;
+
+        glow.current.x += (target.current.x - glow.current.x) * glowLerp;
+        glow.current.y += (target.current.y - glow.current.y) * glowLerp;
+        trail.current.x += (target.current.x + trailOffsetX - trail.current.x) * trailLerp;
+        trail.current.y += (target.current.y + trailOffsetY - trail.current.y) * trailLerp;
+
+        glowEl.style.transform = `translate3d(${glow.current.x}px, ${glow.current.y}px, 0) translate(-50%, -50%)`;
+        shadowEl.style.transform = `translate3d(${trail.current.x}px, ${trail.current.y}px, 0) translate(-50%, -50%)`;
+
+        frame = window.requestAnimationFrame(tick);
+      };
+
+      frame = window.requestAnimationFrame(tick);
+      window.addEventListener("pointermove", onPointerMove, { passive: true });
+      window.addEventListener("pointerdown", onPointerDown, { passive: true });
+      window.addEventListener("pointerup", onPointerUp, { passive: true });
+      document.documentElement.addEventListener("mouseleave", onWindowLeave);
+      document.documentElement.addEventListener("mouseenter", onWindowEnter);
+
       setCursorState();
+
+      cleanup = () => {
+        root.classList.remove("custom-cursor-active");
+        if (frame !== null) window.cancelAnimationFrame(frame);
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerdown", onPointerDown);
+        window.removeEventListener("pointerup", onPointerUp);
+        document.documentElement.removeEventListener("mouseleave", onWindowLeave);
+        document.documentElement.removeEventListener("mouseenter", onWindowEnter);
+      };
     };
 
-    const onPointerMove = (event: PointerEvent) => {
-      if (event.pointerType !== "mouse") return;
-      moveTo(event.clientX, event.clientY);
-      hovering.current = isInteractiveTarget(event.target);
-      grabbing.current = pressing.current && isGrabTarget(event.target);
-      setCursorState();
-    };
-
-    const onPointerDown = (event: PointerEvent) => {
-      if (event.pointerType !== "mouse") return;
-      pressing.current = true;
-      grabbing.current = isGrabTarget(event.target);
-      setCursorState();
-    };
-
-    const onPointerUp = () => {
-      pressing.current = false;
-      grabbing.current = false;
-      setCursorState();
-    };
-
-    const onDocumentOut = (event: MouseEvent) => {
-      const next = event.relatedTarget;
-      if (next && next instanceof Node && document.documentElement.contains(next)) return;
-      visible.current = false;
-      setCursorState();
-    };
-
-    const onPointerEnter = (event: PointerEvent) => {
-      if (event.pointerType !== "mouse") return;
-      visible.current = true;
-      moveTo(event.clientX, event.clientY);
-      setCursorState();
-    };
-
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    const tick = () => {
-      const hazeLerp = reducedMotion ? 1 : hovering.current ? 0.34 : 0.28;
-      const shadowLerp = reducedMotion ? 1 : hovering.current ? 0.16 : 0.12;
-      const shadowOffsetX = pressing.current ? 3 : 6;
-      const shadowOffsetY = pressing.current ? 4 : 10;
-
-      haze.current.x += (target.current.x - haze.current.x) * hazeLerp;
-      haze.current.y += (target.current.y - haze.current.y) * hazeLerp;
-      shadow.current.x += (target.current.x + shadowOffsetX - shadow.current.x) * shadowLerp;
-      shadow.current.y += (target.current.y + shadowOffsetY - shadow.current.y) * shadowLerp;
-
-      hazeEl.style.transform = `translate3d(${haze.current.x}px, ${haze.current.y}px, 0) translate(-50%, -50%)`;
-      shadowEl.style.transform = `translate3d(${shadow.current.x}px, ${shadow.current.y}px, 0) translate(-50%, -50%)`;
-
-      frame.current = window.requestAnimationFrame(tick);
-    };
-
-    frame.current = window.requestAnimationFrame(tick);
-
-    window.addEventListener("pointermove", onPointerMove, { passive: true });
-    window.addEventListener("pointerdown", onPointerDown, { passive: true });
-    window.addEventListener("pointerup", onPointerUp, { passive: true });
-    document.addEventListener("mouseout", onDocumentOut);
-    document.documentElement.addEventListener("pointerenter", onPointerEnter, { passive: true });
-
-    visible.current = true;
-    setCursorState();
+    let cleanup: (() => void) | undefined;
+    boot();
 
     return () => {
-      root.classList.remove("custom-cursor-active");
-      if (frame.current !== null) window.cancelAnimationFrame(frame.current);
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("pointerup", onPointerUp);
-      document.removeEventListener("mouseout", onDocumentOut);
-      document.documentElement.removeEventListener("pointerenter", onPointerEnter);
+      disposed = true;
+      cleanup?.();
     };
-  }, [enabled]);
+  }, [mounted]);
 
-  if (!enabled) return null;
+  if (!mounted) return null;
 
   return createPortal(
     <>
       <div ref={shadowRef} className="site-cursor-shadow" aria-hidden />
-      <div ref={hazeRef} className="site-cursor-haze" aria-hidden />
+      <div ref={glowRef} className="site-cursor-glow" aria-hidden />
     </>,
     document.body,
   );
