@@ -9,7 +9,9 @@
     "dev": "nx dev web",
     "build": "nx build web",
     "preview": "nx preview web",
-    "test": "nx run-many -t test"
+    "test": "nx run-many -t test",
+    "deploy:site": "nx build web --skip-nx-cache && node scripts/netlify-publish.mjs",
+    "deploy:draft": "nx build web --skip-nx-cache && node scripts/netlify-publish.mjs --draft"
   },
   "devDependencies": {
     "nx": "^21.4.1"

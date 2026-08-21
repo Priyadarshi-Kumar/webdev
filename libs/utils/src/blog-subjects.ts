@@ -7,7 +7,7 @@ export const BLOG_SUBJECTS = [
   { id: "llm", label: "LLM", tags: ["llm", "mcp", "ai"] },
   { id: "nx", label: "Nx & monorepos", tags: ["nx", "monorepo"] },
   { id: "packages", label: "Package managers", tags: ["pnpm", "npm", "yarn", "nodejs"] },
-  { id: "backend", label: "Backend", tags: ["python", "fastapi", "api"] },
+  { id: "backend", label: "Backend", tags: ["python", "fastapi", "api", "database", "sql"] },
   { id: "tooling", label: "Tooling", tags: ["tooling"] },
 ] as const;
 

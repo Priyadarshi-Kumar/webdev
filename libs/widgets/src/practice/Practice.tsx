@@ -21,12 +21,25 @@ import {
   writeDraft,
   writePracticeSplit,
 } from "@webdev/store";
-import type { PracticeGroup, PracticeQuestion } from "@webdev/types";
+import type { PracticeDifficulty, PracticeGroup, PracticeQuestion } from "@webdev/types";
 import type { PracticeRunResult } from "@webdev/utils";
 import { runPracticeCode } from "@webdev/utils";
-import { getPracticeQuestion, practiceGroups, practiceQuestions } from "./data";
+import {
+  difficultyOrder,
+  getPracticeQuestion,
+  practiceDifficulties,
+  practiceGroups,
+  practiceQuestions,
+} from "./data";
 
 type TopicFilter = PracticeGroup | "all";
+type DifficultyFilter = PracticeDifficulty | "all";
+
+function difficultyClass(level: PracticeDifficulty) {
+  if (level === "easy") return "text-emerald-700 dark:text-emerald-300";
+  if (level === "medium") return "text-amber-700 dark:text-amber-300";
+  return "text-rose-700 dark:text-rose-300";
+}
 
 export function PracticeWorkspace({ selectedSlug }: { selectedSlug?: string }) {
   const [passed, setPassed] = useState<string[]>([]);
@@ -45,7 +58,6 @@ export function PracticeWorkspace({ selectedSlug }: { selectedSlug?: string }) {
       <PracticeKata
         question={question}
         passed={passed}
-        ready={ready}
         onPassed={(slug) => {
           markPassed(slug);
           setPassed(readPassedSlugs());
@@ -68,6 +80,7 @@ function PracticeHub({
 }) {
   const [query, setQuery] = useState("");
   const [topic, setTopic] = useState<TopicFilter>("all");
+  const [difficulty, setDifficulty] = useState<DifficultyFilter>("all");
 
   useEffect(() => {
     const hash = window.location.hash.replace(/^#/, "");
@@ -79,8 +92,9 @@ function PracticeHub({
   const needle = query.trim().toLowerCase();
   const visible = useMemo(() => {
     const byTopic = topic === "all" ? practiceQuestions : practiceQuestions.filter((item) => item.group === topic);
-    if (!needle) return byTopic;
-    return byTopic.filter(
+    const byDifficulty = difficulty === "all" ? byTopic : byTopic.filter((item) => item.difficulty === difficulty);
+    if (!needle) return byDifficulty;
+    return byDifficulty.filter(
       (item) =>
         item.title.toLowerCase().includes(needle) ||
         item.description.toLowerCase().includes(needle) ||
@@ -88,7 +102,7 @@ function PracticeHub({
         item.fnName.toLowerCase().includes(needle) ||
         item.group.includes(needle),
     );
-  }, [needle, topic]);
+  }, [needle, topic, difficulty]);
 
   const sections = practiceGroups
     .map((group) => ({
@@ -105,22 +119,14 @@ function PracticeHub({
 
   return (
     <div className="pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-      <header className="max-w-3xl">
-        <p className="eyebrow">JavaScript</p>
-        <h1 className="page-title">
-          Practice <span className="text-gradient">by topic</span>
-        </h1>
-        <p className="page-lead">
-          Pick a topic, open a question, write the function in the browser, then Check. Nothing is uploaded. Progress
-          stays on this device.
-        </p>
-        <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">
-          {ready ? `${passedCount} / ${practiceQuestions.length} questions passed` : "Progress is saved in this browser."}
-        </p>
-      </header>
-
-      <div className="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:items-start sm:gap-4">
-        <label className="relative block min-w-0 flex-1">
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-zinc-950 dark:text-white">Practice</h1>
+        {ready ? (
+          <p className="text-sm tabular-nums text-zinc-500 dark:text-zinc-400">
+            {passedCount}/{practiceQuestions.length}
+          </p>
+        ) : null}
+        <label className="relative min-w-0 flex-1 basis-full sm:basis-64 sm:flex-none sm:ml-auto">
           <span className="sr-only">Search questions</span>
           <Search
             size={16}
@@ -131,20 +137,16 @@ function PracticeHub({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search by title, function, or topic"
+            placeholder="Search"
             autoComplete="off"
             enterKeyHint="search"
-            className="field min-h-11"
+            className="field min-h-10 py-2"
           />
         </label>
       </div>
 
-      <TopicChips
-        className="mt-4"
-        topic={topic}
-        passed={passed}
-        onChange={selectTopic}
-      />
+      <TopicChips className="mt-4" topic={topic} passed={passed} onChange={selectTopic} />
+      <DifficultyChips className="mt-2" difficulty={difficulty} onChange={setDifficulty} />
 
       {sections.length === 0 ? (
         <p className="mt-8 text-sm text-zinc-500 dark:text-zinc-400">
@@ -153,25 +155,23 @@ function PracticeHub({
       ) : (
         <div className="mt-8 space-y-10">
           {sections.map((section) => {
-            const total = practiceQuestions.filter((item) => item.group === section.id).length;
             const done = section.items.filter((item) => passed.includes(item.slug)).length;
+            const total = section.items.length;
+            const sorted = [...section.items].sort(
+              (a, b) => difficultyOrder[a.difficulty] - difficultyOrder[b.difficulty] || a.title.localeCompare(b.title),
+            );
             return (
-              <section key={section.id} id={section.id} className="scroll-mt-24">
-                <div className="flex flex-wrap items-end justify-between gap-2">
-                  <div className="min-w-0">
-                    <h2 className="font-display text-xl font-semibold tracking-tight text-zinc-950 sm:text-2xl dark:text-white">
-                      {section.label}
-                    </h2>
-                    <p className="mt-1 max-w-2xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-                      {section.description}
-                    </p>
-                  </div>
+              <section key={section.id} id={section.id} className="scroll-mt-20">
+                <div className="flex items-baseline justify-between gap-2">
+                  <h2 className="font-display text-lg font-semibold tracking-tight text-zinc-950 dark:text-white">
+                    {section.label}
+                  </h2>
                   <p className="text-xs tabular-nums text-zinc-500 dark:text-zinc-400">
-                    {ready ? `${done} / ${total} passed` : `${total} questions`}
+                    {ready ? `${done}/${total}` : total}
                   </p>
                 </div>
-                <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {section.items.map((item) => (
+                <ul className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {sorted.map((item) => (
                     <li key={item.slug}>
                       <QuestionCard question={item} done={passed.includes(item.slug)} />
                     </li>
@@ -242,11 +242,54 @@ function TopicChips({
   );
 }
 
+function DifficultyChips({
+  difficulty,
+  onChange,
+  className = "",
+}: {
+  difficulty: DifficultyFilter;
+  onChange: (id: DifficultyFilter) => void;
+  className?: string;
+}) {
+  const chips: { id: DifficultyFilter; label: string; count: number }[] = [
+    { id: "all", label: "All levels", count: practiceQuestions.length },
+    ...practiceDifficulties.map((item) => ({
+      id: item.id,
+      label: item.label,
+      count: practiceQuestions.filter((question) => question.difficulty === item.id).length,
+    })),
+  ];
+
+  return (
+    <div className={`flex flex-wrap gap-2 ${className}`.trim()} role="group" aria-label="Filter by difficulty">
+      {chips.map((chip) => {
+        const selected = difficulty === chip.id;
+        return (
+          <button
+            key={chip.id}
+            type="button"
+            onClick={() => onChange(chip.id)}
+            aria-pressed={selected}
+            className={`inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+              selected
+                ? "border-zinc-950 bg-zinc-950 text-white dark:border-white dark:bg-white dark:text-zinc-950"
+                : "border-zinc-200/90 bg-white/70 text-zinc-600 hover:border-sky-400/50 hover:text-sky-700 dark:border-white/10 dark:bg-zinc-950/40 dark:text-zinc-300 dark:hover:text-sky-300"
+            }`}
+          >
+            {chip.label}
+            <span className="tabular-nums opacity-70">{chip.count}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function QuestionCard({ question, done }: { question: PracticeQuestion; done: boolean }) {
   return (
     <a href={`/practice/${question.slug}`} className="card block h-full p-4 sm:p-5">
       <div className="flex items-start justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-600 dark:text-sky-400">
+        <p className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${difficultyClass(question.difficulty)}`}>
           {question.difficulty}
         </p>
         {done ? (
@@ -261,8 +304,6 @@ function QuestionCard({ question, done }: { question: PracticeQuestion; done: bo
       <h3 className="mt-2 font-display text-lg font-semibold tracking-tight text-zinc-950 dark:text-white">
         {question.title}
       </h3>
-      <p className="mt-1 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{question.description}</p>
-      <p className="mt-3 break-all font-mono text-xs text-zinc-500 dark:text-zinc-400">{question.signature}</p>
     </a>
   );
 }
@@ -270,16 +311,16 @@ function QuestionCard({ question, done }: { question: PracticeQuestion; done: bo
 function PracticeKata({
   question,
   passed,
-  ready,
   onPassed,
 }: {
   question: PracticeQuestion;
   passed: string[];
-  ready: boolean;
   onPassed: (slug: string) => void;
 }) {
   const group = practiceGroups.find((item) => item.id === question.group) ?? practiceGroups[0];
-  const inTopic = practiceQuestions.filter((item) => item.group === question.group);
+  const inTopic = practiceQuestions
+    .filter((item) => item.group === question.group)
+    .sort((a, b) => difficultyOrder[a.difficulty] - difficultyOrder[b.difficulty] || a.title.localeCompare(b.title));
   const index = inTopic.findIndex((item) => item.slug === question.slug);
   const prev = index > 0 ? inTopic[index - 1] : undefined;
   const next = index >= 0 && index < inTopic.length - 1 ? inTopic[index + 1] : undefined;
@@ -323,11 +364,9 @@ function PracticeKata({
     setResult(null);
   }
 
-  const done = passed.includes(question.slug);
-
   return (
     <div className="-mx-1 flex min-h-0 flex-col lg:-mx-2">
-      <header className="mb-3 flex min-w-0 items-center gap-2 sm:mb-4">
+      <header className="mb-2 flex min-w-0 items-center gap-2">
         <a
           href={`/practice#${group.id}`}
           className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-zinc-600 hover:text-sky-700 dark:text-zinc-400 dark:hover:text-sky-300"
@@ -335,15 +374,9 @@ function PracticeKata({
           <ChevronLeft size={16} aria-hidden />
           {group.label}
         </a>
-        <h1 className="min-w-0 flex-1 truncate font-display text-lg font-semibold tracking-tight text-zinc-950 sm:text-xl dark:text-white">
+        <h1 className="min-w-0 flex-1 truncate font-display text-lg font-semibold tracking-tight text-zinc-950 dark:text-white">
           {question.title}
         </h1>
-        {ready && done ? (
-          <span className="hidden shrink-0 items-center gap-1 rounded-full bg-emerald-400/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 sm:inline-flex dark:text-emerald-300">
-            <Check size={12} aria-hidden />
-            Passed
-          </span>
-        ) : null}
         <select
           className="tool-input hidden max-w-[10rem] shrink py-1.5 text-xs sm:block md:max-w-[14rem]"
           value={question.slug}
@@ -388,7 +421,7 @@ function PracticeKata({
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-600 dark:text-sky-400">
                 {group.label}
                 <span className="mx-1.5 text-zinc-300 dark:text-zinc-600">·</span>
-                <span className={question.difficulty === "easy" ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}>
+                <span className={difficultyClass(question.difficulty)}>
                   {question.difficulty}
                 </span>
               </p>

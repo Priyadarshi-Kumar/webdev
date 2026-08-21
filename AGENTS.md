@@ -10,3 +10,4 @@ Nx monorepo: apps in `apps/`, libraries in `libs/`.
 - Articles: `apps/web/content/topics/*.mdx` (`##` / `###` become the desktop-right “On this page” nav; hidden on mobile). Optional frontmatter `subject` sets the rail bucket.
 - Glossary: every `<Term>` needs `glossary.ts` **and** a `content/topics/<slug>.mdx` page
 - Deploy: push `main` → Netlify (`pnpm nx build web`, publish `apps/web/dist/client`)
+- Do not write, update, or run tests unless the user explicitly asks

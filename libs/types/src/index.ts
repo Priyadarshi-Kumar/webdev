@@ -58,7 +58,7 @@ export type Profile = {
 
 export type PracticeGroup = "basics" | "arrays" | "objects" | "functions" | "async";
 
-export type PracticeDifficulty = "easy" | "medium";
+export type PracticeDifficulty = "easy" | "medium" | "hard";
 
 export type PracticeExample = {
   call: string;

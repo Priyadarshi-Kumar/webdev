@@ -30,6 +30,10 @@ describe("resolveSubject", () => {
     expect(resolveSubject(["python", "fastapi", "api", "interview"])).toBe("backend");
   });
 
+  it("maps database tags to backend", () => {
+    expect(resolveSubject(["database", "sql", "interview"])).toBe("backend");
+  });
+
   it("maps javascript-only tags to javascript", () => {
     expect(resolveSubject(["javascript"])).toBe("javascript");
   });
