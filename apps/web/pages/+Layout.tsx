@@ -1,4 +1,4 @@
-import { AppearanceSync, ScrollHints } from "@webdev/components";
+import { AppearanceSync, CustomCursor, ScrollHints } from "@webdev/components";
 import { Footer, Header, ReadProgress } from "@webdev/widgets";
 import "./tailwind.css";
 
@@ -6,6 +6,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative flex h-dvh flex-col overflow-hidden">
       <AppearanceSync />
+      <CustomCursor />
       <div className="page-atmosphere pointer-events-none absolute inset-0" aria-hidden />
       <ReadProgress />
       <Header />
