@@ -1,0 +1,299 @@
+---
+title: How JavaScript actually runs — engine, host, and the system
+description: JS is a language. V8 (or SpiderMonkey) is the engine. The browser is the host. How source becomes machine code, how the event loop talks to the OS, and how fetch and the DOM cross from JavaScript into C++ and back.
+slug: how-javascript-works
+date: 2026-08-22
+subject: javascript
+tags:
+  - javascript
+  - browser
+  - web-apis
+  - tooling
+---
+
+JavaScript cannot open a file, draw a pixel, or send a packet **by itself**. The language spec (ECMAScript) only defines values, functions, objects, and how to evaluate source. Everything that touches the machine — DOM, network, timers, disks, GPUs — is a **host** capability. The engine evaluates JS. The host implements the APIs and talks to the operating system.
+
+If you keep those three layers separate, “how does `fetch` work?” stops being magic.
+
+| Layer | What it is | Example |
+| --- | --- | --- |
+| **Language** | Rules for syntax and semantics | `const x = 1`, closures, `this`, promises |
+| **Engine** | Program that parses and runs that language | V8 (Chrome, Node, Deno), SpiderMonkey (Firefox), JavaScriptCore (Safari) |
+| **Host / embedding** | The app that *owns* the engine and adds APIs | Chrome renderer, Node + libuv, a [Web Worker](/blog/web-worker) thread |
+
+Your `.js` file is language. V8 turns it into machine code. Chromium (or Node) decides what `fetch`, `setTimeout`, and `fs.readFile` mean, then uses OS syscalls, other processes, and C++ libraries to do the work. When the work finishes, the host **calls back into** the engine: run this function, here is the result.
+
+## The engine: source to machine code
+
+Take Chrome / Node: **V8**. Firefox is SpiderMonkey; Safari is JavaScriptCore. The pipeline is the same idea.
+
+### Parse, bytecode, then JIT
+
+```js
+function add(a, b) {
+  return a + b;
+}
+
+add(1, 2);
+add("1", "2");
+```
+
+Roughly:
+
+1. **Parse** the text into an AST (functions, scopes, `const` vs `var`).
+2. **Ignition** (V8’s interpreter) emits **bytecode** and runs it. First calls are cheap to start; no wait for a compiler.
+3. If a function gets hot, **TurboFan** (the optimizing compiler) produces machine code for the **shapes it has seen**. `add` with two numbers is not the same machine code as `add` with two strings: `+` is addition vs concatenation.
+4. If later you pass a type the optimized code did not expect, V8 **deoptimizes** — throws away that machine code and falls back to bytecode, then may re-optimize.
+
+That is why “JS is interpreted” is half true. It starts interpreted. Hot paths become CPU instructions. Cold paths stay bytecode.
+
+```js
+function sum(list) {
+  let n = 0;
+  for (const x of list) n += x;
+  return n;
+}
+
+sum([1, 2, 3]);           // engine can specialize for packed integers
+sum([1, 2, "3"]);         // now `+=` is messier; optimized code may bail
+```
+
+You do not control this. You *feel* it: monomorphic call sites (always the same object shape) stay fast; megamorphic ones (random shapes every time) stay in slower code.
+
+### Values live on a heap; the stack is tiny
+
+```js
+function makeUser(name) {
+  const user = { name, seen: 0 };
+  return function greet() {
+    user.seen += 1;
+    return `hi ${user.name} (${user.seen})`;
+  };
+}
+
+const greet = makeUser("Ada");
+greet();
+```
+
+- **Stack**: the running `greet` frame — locals that do not escape, the return address. When `greet` returns, that frame is gone.
+- **Heap**: `{ name, seen }` and the function object `greet`. The closure keeps `user` alive after `makeUser` returns. The **garbage collector** later frees heap objects that nothing can reach.
+
+Engines use **hidden classes** (V8: maps): objects with the same property names in the same order share a layout, so `user.name` is “offset 16,” not a hash lookup every time.
+
+```js
+const a = { x: 1, y: 2 };
+const b = { x: 3, y: 4 }; // same hidden class as a — fast
+const c = { y: 2, x: 1 }; // different order → different layout
+a.z = 3;                  // transitions to a new hidden class
+```
+
+This is still JavaScript. The CPU never sees `{ x, y }`; it sees a pointer, a map pointer, and a handful of tagged values (V8 often steals a bit to mean “this word is a small integer”).
+
+### The engine still cannot talk to the OS
+
+V8 has **no** `socket()`, **no** `open()`, **no** `mmap` for your page. It exposes an embedding API (in C++): “here is a script, run it,” “here is a function the host registered as `fetch`,” “the host wants to drain microtasks.” Chromium links V8 and **implements** those host functions. Node does the same with a different set.
+
+If you only shipped V8, `console.log` would not exist until the embedder bound it.
+
+## The runtime: JS is single-threaded; the host is not
+
+One **isolate** (one engine instance) runs **one** JS call stack at a time on that thread. The browser’s **main thread** also paints, runs layout, and handles input. That is why a tight loop freezes the page: you never return to the host, so it cannot paint or run the next click.
+
+```js
+const t = Date.now();
+while (Date.now() - t < 3000) {
+  // three seconds of JS — no paint, no click handlers, no fetch callbacks
+}
+```
+
+Workers exist because they are **another isolate on another thread**, with no DOM. See [Web Workers](/blog/web-worker).
+
+### Call stack vs task queues
+
+The **event loop** is not part of ECMAScript. It is specified for browsers in HTML, and Node has its own (libuv). Mental model:
+
+```txt
+┌─────────────┐     ┌──────────────────┐
+│  Call stack │ ←── │  JS engine       │
+└─────────────┘     └──────────────────┘
+        ↑
+        │ host picks the next job
+┌───────┴────────┐   ┌─────────────────┐
+│  Task queue    │   │  Microtask queue│
+│  (timers, I/O, │   │  (promise then, │
+│   click, …)    │   │   queueMicrotask)│
+└────────────────┘   └─────────────────┘
+```
+
+1. Run JS until the stack is empty.
+2. Run **all** microtasks (Promise jobs).
+3. Maybe render (browser).
+4. Take **one** task (timer, I/O completion, click), run it, go to 1.
+
+```js
+console.log("a");
+
+setTimeout(() => console.log("timeout"), 0);
+
+Promise.resolve().then(() => console.log("then"));
+
+queueMicrotask(() => console.log("micro"));
+
+console.log("b");
+```
+
+Order: `a`, `b`, `then`, `micro`, `timeout`. Both `then` and `queueMicrotask` are microtasks; they drain before the timer task, even if the timer is `0`.
+
+That delay is the **host**. `setTimeout` does not live in V8. The embedder asks the OS (or a timer heap) to wake it, then later invokes the callback **as a task**.
+
+## How a browser API reaches the system
+
+A Web API is a **C++ (or Rust) implementation** plus a **binding** so it looks like a JS object. The glue is **Web IDL**: a contract that says `fetch` takes a `RequestInfo` and returns a `Promise<Response>`. The compiler generates the code that:
+
+- Converts JS strings/objects into C++ types (and back).
+- Enforces branding (`document.createElement` is not a plain function you can `call` on `{}` in the same way).
+- Hands work to another thread or process.
+
+JS never “calls the kernel.” JS calls a **bound function**. That function talks to Blink / Gecko / WebKit, which talks to the OS or to another Chromium process.
+
+### Example: `setTimeout`
+
+```js
+setTimeout(() => console.log("tick"), 1000);
+```
+
+1. JS calls the host function `setTimeout`.
+2. The renderer stores `{ callback, when: now+1000 }`.
+3. The event loop keeps spinning; your function has **returned**.
+4. After ~1000ms the host pushes a **timer task**.
+5. The engine runs the callback on the JS stack.
+
+There is no JS thread sleeping for a second. Sleeping would block paint. The sleep is in the host’s timer machinery.
+
+### Example: `fetch` — from `await` to a TCP packet
+
+```js
+const res = await fetch("https://example.com/api", {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ n: 1 }),
+});
+const data = await res.json();
+```
+
+What actually happens (Chromium-shaped, same idea everywhere):
+
+1. **Binding.** `fetch` in JS is a Web IDL operation. Arguments are converted: URL, method, headers, body bytes (from the string you built with `JSON.stringify` — that part *is* JS).
+2. **Renderer.** Blink creates a request object, applies CORS, mixed-content, CSP, cookies for that origin. This is still not the kernel. It is browser policy.
+3. **IPC.** The renderer is **sandboxed**. It cannot open a raw socket. It sends the request over **Mojo** (Chromium’s IPC) to the **network service** (often another process).
+4. **Network stack.** That process uses the OS: DNS (`getaddrinfo` or a DoH path), TLS (boringssl), TCP/QUIC. Packets leave through the kernel’s network stack, NIC, and the internet.
+5. **Response path.** Bytes come back the same tunnel: network process → renderer. Blink assembles HTTP headers and body.
+6. **Back into JS.** The host **resolves** the Promise V8 created. That queues a **microtask**. Your `await` resumes; `res.json()` parses bytes (host or JS) and resolves another Promise.
+
+If CORS fails, the network may have succeeded and JS still sees a failed `fetch`. The host filtered it. That is not the engine being “slow.” It is the **browser security model**.
+
+```js
+// this is JS (engine)
+const body = JSON.stringify({ n: 1 });
+
+// this is host: sockets, TLS, CORS — then a Promise the engine settles
+const res = await fetch("/api", { method: "POST", body });
+```
+
+### Example: `document.querySelector` — JS objects that wrap C++ nodes
+
+```js
+const el = document.querySelector("#main");
+el.textContent = "hi";
+el.addEventListener("click", () => console.log("clicked"));
+```
+
+The DOM is **not** a JS object graph the engine allocated. Blink owns a C++ tree (layout, style, accessibility). What you hold in JS is a **wrapper** (a binding object) whose internal slot points at that C++ node.
+
+- `querySelector` runs selector matching in C++ on that tree, then wraps the result.
+- `textContent = "hi"` writes into the C++ node, marks layout/paint dirty. The **next** frame, the compositor / GPU path draws pixels. Your assignment already returned.
+- `addEventListener` registers a JS function pointer with the host. On click, the OS delivers an event to the browser process → renderer → Blink hit-test → **task** that calls your listener on the JS stack.
+
+```js
+el.style.left = "10px";
+el.style.left = "20px";
+// one frame later you still typically see 20px — style is C++; paint is later
+```
+
+That is why layout thrashing is real: `el.offsetHeight` **forces** the host to compute layout now so it can return a number to JS. You pulled the CPU across the binding into the layout engine.
+
+### Example: `requestAnimationFrame` and canvas
+
+```js
+function frame(t) {
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillRect(x, 0, 20, 20);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+```
+
+`requestAnimationFrame` is a host callback aligned with the **display refresh** (often 60Hz). Canvas 2D drawing commands go into a buffer the graphics stack consumes. The GPU process (Chromium) talks to Metal / Vulkan / Direct3D / OpenGL — again **not** V8. JS only recorded “fill this rectangle.”
+
+## Process model: why JS is locked in a sandbox
+
+A modern browser is several processes. A sketch of Chromium:
+
+```txt
+Browser process     UI, bookmarks, owns the profile
+Renderer process    V8 + Blink + your page (sandboxed)
+GPU process         compositing, WebGL
+Network / utility   sockets, storage, audio
+```
+
+Your tab’s JS runs in the **renderer**. The sandbox blocks most syscalls. Need disk? IndexedDB / Cache Storage go through host APIs to a storage service. Need CPU without janking the page? A [worker](/blog/web-worker) is another renderer-side thread with its own V8 isolate, still sandboxed, still no DOM.
+
+`SharedArrayBuffer` and `Atomics` are still **memory in the engine**. They do not grant `write(/etc/passwd)`. Cross-origin isolation exists because shared memory is a side-channel risk, not because JS grew a syscall table.
+
+## Same language, different hosts
+
+Node uses V8 too. The host is **libuv** + Node bindings instead of Blink:
+
+```js
+import { readFile } from "node:fs/promises";
+
+const text = await readFile("./notes.md", "utf8");
+```
+
+`readFile` is not in ECMAScript. libuv asks the OS (`read` / `ReadFile`). When the kernel completes, libuv posts a task onto Node’s loop; the Promise resolves; V8 runs your continuation.
+
+```js
+// browser — no fs, has fetch + DOM
+await fetch("/notes.md");
+
+// node — no DOM, has fs + its own fetch (undici) talking to sockets
+await readFile("./notes.md", "utf8");
+```
+
+Deno and Bun are other embeddings: still JS-the-language, different host APIs and syscalls.
+
+## A picture you can keep
+
+```txt
+  your source
+      ↓ parse / bytecode / JIT
+  V8 (or JSC / SpiderMonkey)     ← language + memory + JIT
+      ↓ embedding API
+  Blink / Gecko / WebKit / Node  ← Web IDL, event loop, security
+      ↓ IPC / libuv / GPU
+  operating system               ← sockets, files, threads, display
+      ↓
+  hardware
+```
+
+When you write `await fetch(url)`:
+
+1. Engine runs your function until `fetch`, then **suspends** the async function (Promise).
+2. Host converts arguments, enforces origin policy, asks the network stack.
+3. OS sends packets.
+4. Host receives bytes, builds a `Response` wrapper, **resolves** the Promise.
+5. Engine runs the microtask: your function continues with `res`.
+
+JavaScript never left the isolate except through **bindings**. The system never ran your source except as **machine code the JIT emitted** or bytecode the interpreter stepped. Browser APIs are the contract between those two worlds.
+
+Related: [this](/blog/this-in-javascript), [Web Workers](/blog/web-worker), [Broadcast Channel](/blog/broadcast-channel), [when React re-renders](/blog/react-rerender-internals).

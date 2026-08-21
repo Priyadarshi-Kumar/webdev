@@ -1,0 +1,503 @@
+---
+title: Promises in JavaScript — internals, methods, and how to use them fast
+description: A promise is a state machine plus a microtask. How then chaining really works, every static method, async/await, a tiny implementation, and the patterns that keep async code fast and correct.
+slug: javascript-promises
+date: 2026-08-22
+subject: javascript
+tags:
+  - javascript
+  - tooling
+---
+
+A **Promise** is an object that represents a value you do not have yet. It is either **pending**, **fulfilled** (has a value), or **rejected** (has a reason). Those three states are the whole type. Everything else — `then`, `async`/`await`, `Promise.all` — is an API around that state machine plus the **microtask queue**.
+
+This note is how that machine works, every method you actually use, how to keep async work parallel, and a small `then` implementation you can read. The event loop that *runs* those microtasks is in [How JavaScript actually works](/blog/how-javascript-works).
+
+## A promise is a state machine
+
+```js
+const p = new Promise((resolve, reject) => {
+  // executor runs now, synchronously
+  resolve(1);
+});
+```
+
+Rules the spec enforces:
+
+- Starts **pending**.
+- `resolve(x)` moves it to **fulfilled** with value `x` — unless `x` is thenable (below).
+- `reject(e)` moves it to **rejected** with reason `e`.
+- After it settles, further `resolve` / `reject` are **no-ops**. There is no “unset.”
+- `then` callbacks run **after** the current stack clears, as jobs on the **microtask** queue — never in the same turn as `resolve()`.
+
+```js
+const p = Promise.resolve(1);
+p.then((v) => console.log("then", v));
+console.log("sync");
+// sync
+// then 1
+```
+
+That delay is not a timer. `Promise.resolve` is already settled; `then` still waits one microtask so chaining stays consistent.
+
+## How then is scheduled
+
+When you call `p.then(onFulfilled, onRejected)`:
+
+1. The engine allocates a **new** promise (the return value of `then`).
+2. It attaches your callbacks to `p`.
+3. If `p` is still pending, they wait.
+4. When `p` settles, a **PromiseReaction** job is queued. After the call stack is empty, the job runs your callback, then **resolves or rejects that new promise** with whatever you returned or threw.
+
+```js
+Promise.resolve(1)
+  .then((n) => {
+    console.log("a", n);
+    return n + 1;
+  })
+  .then((n) => {
+    console.log("b", n);
+  });
+console.log("sync");
+// sync
+// a 1
+// b 2
+```
+
+`a` and `b` are two microtasks, in order. `setTimeout(..., 0)` would still run *after* both, because timers are **tasks**, not microtasks.
+
+```js
+Promise.resolve().then(() => console.log("micro"));
+setTimeout(() => console.log("timeout"), 0);
+// micro
+// timeout
+```
+
+A long chain of `then` can starve rendering: the host drains **all** microtasks before the next paint. That is why a tight `Promise.resolve().then(loop)` can freeze the page as badly as a `while` loop.
+
+## Creating promises
+
+### `new Promise` — when you wrap a callback API
+
+```js
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function readFileNode(path) {
+  return new Promise((resolve, reject) => {
+    fs.readFile(path, "utf8", (err, data) => {
+      if (err) reject(err);
+      else resolve(data);
+    });
+  });
+}
+```
+
+The executor runs **immediately**. If you `throw` inside it, the promise rejects. If you never call `resolve` or `reject`, it stays pending forever (a leaked waiter).
+
+Do **not** wrap something that already returns a promise:
+
+```js
+// extra hop, extra bug surface
+new Promise((resolve) => resolve(fetch(url))); // no
+fetch(url); // yes
+```
+
+### `Promise.resolve` / `Promise.reject`
+
+```js
+Promise.resolve(1);           // fulfilled with 1
+Promise.resolve(fetch(url));  // adopts that promise (flatten)
+Promise.reject(new Error("no"));
+```
+
+`Promise.resolve(thenable)` unwraps a thenable (any `{ then }` method). That is how libraries before native promises still interoperate.
+
+### `Promise.withResolvers()` (ES2024)
+
+When you need `resolve` outside the executor (a queue, a lock, a test):
+
+```js
+function createGate() {
+  const { promise, resolve, reject } = Promise.withResolvers();
+  return { promise, open: resolve, fail: reject };
+}
+
+const gate = createGate();
+gate.promise.then(() => console.log("opened"));
+gate.open();
+```
+
+Same as the old deferred pattern, without a messy outer `let resolve`.
+
+### `Promise.try()` (ES2025)
+
+Run a function and always get a promise — whether it returns a value, returns a promise, or throws **synchronously**:
+
+```js
+Promise.try(() => JSON.parse(text))
+  .then(use)
+  .catch(handle); // catches throw and reject
+```
+
+The old `Promise.resolve().then(fn)` also catches throws, but it **always** waits a microtask. `Promise.try` still schedules async work as a promise; the point is one path for sync throw and async reject.
+
+## `then`, `catch`, `finally` — the real rules
+
+`p.catch(fn)` is `p.then(undefined, fn)`. `p.finally(fn)` runs `fn` on settle and **passes the original value or reason through**, unless `fn` throws or returns a rejected promise.
+
+### What you return becomes the next promise
+
+```js
+Promise.resolve(1)
+  .then((n) => n * 2)                    // fulfilled 2
+  .then((n) => Promise.resolve(n + 1))   // unwraps → 3
+  .then(() => {
+    throw new Error("boom");
+  })
+  .then(() => console.log("skip"))       // skipped
+  .catch((err) => {
+    console.log(err.message);            // boom
+    return "recovered";
+  })
+  .then((v) => console.log(v));          // recovered
+```
+
+- Return a value → next `then` fulfillment.
+- Return a promise → wait for it (flatten).
+- `throw` or return a rejected promise → next `catch` (or `then`’s second argument).
+- `catch` that returns a value **recovers**; the chain continues fulfilled.
+
+### Thenables
+
+Anything with a `.then` method can be adopted:
+
+```js
+const weird = {
+  then(resolve) {
+    resolve(42);
+  },
+};
+
+Promise.resolve(weird).then((n) => console.log(n)); // 42
+```
+
+That is why you should not put a `then` method on a random domain object. The promise algorithm will treat it as async.
+
+### `finally` does not get the value
+
+```js
+fetch(url)
+  .then((r) => r.json())
+  .finally(() => console.log("done regardless"))
+  .then((data) => use(data));
+```
+
+Use `finally` for cleanup (stop spinner). Do not expect the JSON there. If `finally` returns a pending promise, the chain waits for it; if it throws, the chain rejects.
+
+## Static combinators
+
+### `Promise.all` — fail fast, keep order
+
+```js
+const [user, posts] = await Promise.all([
+  fetch("/api/user").then((r) => r.json()),
+  fetch("/api/posts").then((r) => r.json()),
+]);
+```
+
+Fulfills with an **array in input order** when every input fulfills. **Rejects on the first rejection**; other fetches still complete in the background (you did not cancel them). Empty array fulfills immediately with `[]`.
+
+### `Promise.allSettled` — wait for everyone
+
+```js
+const results = await Promise.allSettled(urls.map(load));
+
+for (const r of results) {
+  if (r.status === "fulfilled") use(r.value);
+  else console.error(r.reason);
+}
+```
+
+Never rejects. Each item is `{ status: "fulfilled", value }` or `{ status: "rejected", reason }`. Use this for dashboards: one bad tile should not kill the page.
+
+### `Promise.race` — first settle wins
+
+```js
+function withTimeout(promise, ms) {
+  const timeout = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error("timeout")), ms);
+  });
+  return Promise.race([promise, timeout]);
+}
+
+await withTimeout(fetch(url), 5000);
+```
+
+First **fulfill or reject** wins. The loser is not cancelled. A timeout “loss” still lets `fetch` finish and hold a connection unless you use `AbortSignal`.
+
+```js
+async function withTimeoutAbort(url, ms) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { signal: ctrl.signal });
+  } finally {
+    clearTimeout(id);
+  }
+}
+```
+
+### `Promise.any` — first fulfill wins
+
+```js
+const res = await Promise.any([
+  fetch("https://cdn-a.example/x"),
+  fetch("https://cdn-b.example/x"),
+]);
+```
+
+Rejects only if **all** reject, with an `AggregateError` whose `.errors` is the list of reasons. Opposite of `all`’s fail-fast.
+
+| Method | Fulfills when | Rejects when |
+| --- | --- | --- |
+| `all` | every input fulfills | first rejection |
+| `allSettled` | every input settles | never |
+| `race` | first settle (either way) | that first rejection |
+| `any` | first fulfillment | every input rejected |
+
+`Promise.all` / `any` / `race` **throw** if you pass a non-iterable. They also adopt thenables, not only native promises.
+
+## `async` / `await` is `then` with a stack
+
+```js
+async function loadUser(id) {
+  const res = await fetch(`/api/users/${id}`);
+  if (!res.ok) throw new Error(res.status);
+  return res.json();
+}
+```
+
+- `async function` always returns a promise. `return x` fulfills with `x`. `throw` rejects.
+- `await p` pauses the function, subscribes like `then`, resumes with the value or throws the reason into a hidden `try`.
+- `await 1` is `await Promise.resolve(1)` — still a microtask.
+
+```js
+async function demo() {
+  console.log("inside");
+  return 1;
+}
+
+demo().then((v) => console.log("then", v));
+console.log("outside");
+// inside
+// outside
+// then 1
+```
+
+The body until the first `await` runs **synchronously**. That is why `async` constructors are illegal: `new` expects an object now, not a promise.
+
+You can `await` in `try/catch`. That is the readable form of `.catch`.
+
+```js
+try {
+  const data = await loadUser(1);
+} catch (err) {
+  show(err);
+} finally {
+  hideSpinner();
+}
+```
+
+## Optimising promise-heavy code
+
+### Stop awaiting in a loop when work is independent
+
+```js
+// slow: each fetch waits for the previous
+const pages = [];
+for (const id of ids) {
+  pages.push(await fetch(`/p/${id}`).then((r) => r.json()));
+}
+
+// fast: start all, wait once
+const pages = await Promise.all(
+  ids.map((id) => fetch(`/p/${id}`).then((r) => r.json())),
+);
+```
+
+The slow version is right when step *n+1* **needs** step *n* (each page’s cursor, a lock, a rate limit you must respect). Otherwise you left parallelism on the table.
+
+Cap concurrency if you will melt a server:
+
+```js
+async function mapPool(items, limit, fn) {
+  const ret = new Array(items.length);
+  let i = 0;
+  async function worker() {
+    while (i < items.length) {
+      const idx = i++;
+      ret[idx] = await fn(items[idx]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return ret;
+}
+
+await mapPool(ids, 4, (id) => fetch(`/p/${id}`).then((r) => r.json()));
+```
+
+### Kick off work as soon as you know you need it
+
+```js
+// bad: wait for user before even starting posts
+const user = await fetch("/user").then((r) => r.json());
+const posts = await fetch("/posts").then((r) => r.json());
+
+// better: both in flight, then join
+const userP = fetch("/user").then((r) => r.json());
+const postsP = fetch("/posts").then((r) => r.json());
+const [user, posts] = await Promise.all([userP, postsP]);
+```
+
+Assigning `userP` **starts** the fetch. `await` later only waits. That is the main “optimization”: **do not delay starting** independent I/O.
+
+### Deduplicate in-flight requests
+
+```js
+const inflight = new Map();
+
+function loadUser(id) {
+  const key = String(id);
+  if (!inflight.has(key)) {
+    const p = fetch(`/api/users/${id}`)
+      .then((r) => r.json())
+      .finally(() => inflight.delete(key));
+    inflight.set(key, p);
+  }
+  return inflight.get(key);
+}
+```
+
+Two components mounting together share one HTTP call. The `finally` clears the cache so the **next** click refetches; keep the promise if you want a longer memo.
+
+### Avoid extra ticks
+
+```js
+await Promise.resolve(await Promise.resolve(1)); // two extra jobs for nothing
+```
+
+Flatten: `return fetch(url)` from an `async` function instead of `return await fetch(url)` unless you need a `try/finally` around that await. `return await` in `try` is correct (so `finally` runs before the caller sees settle). Bare `return await p` is just an extra microtask.
+
+### Unhandled rejections
+
+A rejected promise with no `catch` (and not awaited) fires `unhandledrejection`. Always attach a handler or `void promise.catch(log)` if you intentionally fire-and-forget.
+
+```js
+window.addEventListener("unhandledrejection", (event) => {
+  console.error("unhandled", event.reason);
+});
+```
+
+Floating promises in React (`useEffect(() => { load(); }, [])`) should `load().catch(...)` or use an abort on cleanup.
+
+## A tiny Promise (teaching sketch)
+
+Enough to see **state, queue, microtask, flatten**. Not spec-complete (no `finally`, no species, no async-iterator).
+
+```js
+const PENDING = "pending";
+const FULFILLED = "fulfilled";
+const REJECTED = "rejected";
+
+function MiniPromise(executor) {
+  this.state = PENDING;
+  this.value = undefined;
+  this.ok = [];
+  this.bad = [];
+
+  const settle = (state, value) => {
+    if (this.state !== PENDING) return;
+    this.state = state;
+    this.value = value;
+    const q = state === FULFILLED ? this.ok : this.bad;
+    queueMicrotask(() => {
+      for (const fn of q) fn(value);
+    });
+  };
+
+  const resolve = (v) => settle(FULFILLED, v);
+  const reject = (e) => settle(REJECTED, e);
+
+  try {
+    executor(resolve, reject);
+  } catch (e) {
+    reject(e);
+  }
+}
+
+MiniPromise.prototype.then = function (onOk, onBad) {
+  return new MiniPromise((resolve, reject) => {
+    const runOk = (v) => {
+      if (typeof onOk !== "function") return resolve(v);
+      try {
+        resolve(onOk(v));
+      } catch (e) {
+        reject(e);
+      }
+    };
+    const runBad = (e) => {
+      if (typeof onBad !== "function") return reject(e);
+      try {
+        resolve(onBad(e));
+      } catch (err) {
+        reject(err);
+      }
+    };
+
+    if (this.state === FULFILLED) queueMicrotask(() => runOk(this.value));
+    else if (this.state === REJECTED) queueMicrotask(() => runBad(this.value));
+    else {
+      this.ok.push(runOk);
+      this.bad.push(runBad);
+    }
+  });
+};
+
+MiniPromise.resolve = (v) => new MiniPromise((res) => res(v));
+```
+
+Real `resolve` must **assimilate** thenables (`v.then(...)`) or you cannot `return fetch()` from `then`. Add that and you have the hard part of Promises/A+. The rest of the spec is edge cases around calling `then` twice and reentrancy.
+
+## Pitfalls worth burning in
+
+- **`then` is not the end of the work.** Forgetting `return` inside `then` fulfills with `undefined` and drops the inner promise.
+- **`new Promise(async (resolve) => { ... })`.** The async executor returns a promise the constructor ignores. Errors become unhandled rejections. Use an `async` function instead.
+- **Multiple `resolve` in the executor** — only the first counts; the rest are silent.
+- **`Promise.all` + missing `return` in `map`.** `ids.map(async (id) => { fetch(id); })` builds promises that fulfill with `undefined` immediately.
+- **Cancellation.** Promises do not cancel. Pass `AbortSignal` into `fetch`, or ignore stale results with a generation counter.
+- **Mixing callbacks and promises.** Convert at the boundary once (`promisify`), then stay in promise land.
+
+## A compact cheat sheet
+
+```js
+const p = fetch(url).then((r) => r.json());
+
+p.then(use, handle);          // both paths
+p.catch(handle);              // only reject
+p.finally(cleanup);           // keep value
+
+await Promise.all(tasks);     // parallel, fail fast
+await Promise.allSettled(t);  // parallel, never throws
+await Promise.race([p, t]);   // first settle
+await Promise.any(mirrors);   // first success
+
+const { promise, resolve } = Promise.withResolvers();
+```
+
+Start independent I/O immediately, join with `all` / `allSettled`, recover with `catch`, clean up with `finally` or `AbortController`. The object is simple. The queue it sits on is what makes it feel “async.”
+
+Related: [How JavaScript actually works](/blog/how-javascript-works), [this](/blog/this-in-javascript), [React `use` and promises](/blog/react-use).

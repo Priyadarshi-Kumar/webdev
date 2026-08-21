@@ -254,7 +254,7 @@ html {
     @apply prose-a:font-medium prose-a:text-sky-600 prose-a:no-underline hover:prose-a:underline dark:prose-a:text-sky-400;
     @apply prose-strong:text-zinc-950 dark:prose-strong:text-white;
     @apply prose-code:rounded-md prose-code:bg-zinc-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:font-mono prose-code:text-[0.85em] prose-code:font-medium prose-code:break-all prose-code:text-sky-700 prose-code:before:content-none prose-code:after:content-none dark:prose-code:bg-zinc-800 dark:prose-code:text-sky-300;
-    @apply prose-pre:my-0 prose-pre:max-w-full prose-pre:overflow-x-auto prose-pre:rounded-none prose-pre:border-0 prose-pre:bg-transparent prose-pre:p-0 prose-pre:text-[13px] prose-pre:text-zinc-100 sm:prose-pre:text-sm;
+    @apply prose-pre:my-0 prose-pre:max-w-full prose-pre:overflow-x-auto prose-pre:rounded-none prose-pre:border-0 prose-pre:bg-transparent prose-pre:p-0 prose-pre:text-[13px] prose-pre:text-zinc-800 sm:prose-pre:text-sm dark:prose-pre:text-zinc-100;
     @apply prose-blockquote:border-sky-400 prose-blockquote:text-zinc-600 dark:prose-blockquote:text-zinc-300;
     @apply prose-th:text-left prose-td:align-top;
     @apply prose-table:my-5 prose-table:block prose-table:max-w-full prose-table:overflow-x-auto;
@@ -276,7 +276,7 @@ html {
 
   .code-block,
   .code-panel {
-    @apply overflow-hidden rounded-2xl border border-zinc-200/90 bg-zinc-950 text-zinc-100 shadow-[0_12px_32px_-18px_rgba(15,23,42,0.45)] dark:border-white/10;
+    @apply overflow-hidden rounded-2xl border border-zinc-200/90 bg-zinc-50 text-zinc-800 shadow-[0_12px_32px_-18px_rgba(15,23,42,0.18)] dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-100 dark:shadow-[0_12px_32px_-18px_rgba(15,23,42,0.45)];
   }
 
   .code-panel {
@@ -284,15 +284,15 @@ html {
   }
 
   .code-block-bar {
-    @apply flex items-center justify-between gap-3 border-b border-white/10 bg-zinc-900/90 px-3 py-2;
+    @apply flex items-center justify-between gap-3 border-b border-zinc-200/80 bg-zinc-100/90 px-3 py-2 dark:border-white/10 dark:bg-zinc-900/90;
   }
 
   .code-block-lang {
-    @apply font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-300;
+    @apply font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-700 dark:text-sky-300;
   }
 
   .code-block-copy {
-    @apply inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium text-zinc-300 transition hover:bg-white/10 hover:text-white;
+    @apply inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium text-zinc-600 transition hover:bg-zinc-200/80 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white;
   }
 
   .code-block pre {
@@ -301,7 +301,7 @@ html {
 
   .code-block code,
   .code-block code span {
-    color: var(--shiki-light);
+    color: var(--shiki-light, inherit);
     background: transparent;
   }
 

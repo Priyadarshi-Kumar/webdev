@@ -1,0 +1,300 @@
+---
+title: Implement your own this in JavaScript
+description: this is not the function — it is an extra argument the engine sets at the call site. Walk the four bindings, then implement call, apply, bind, and new yourself.
+slug: this-in-javascript
+date: 2026-08-22
+subject: javascript
+tags:
+  - javascript
+  - tooling
+---
+
+`this` is not a variable you declare, and it is not “the object the function lives on.” It is an **extra argument** the engine fills in **at the moment you call** the function. The function body just reads that slot.
+
+If you treat `this` like Python’s `self` that you pass yourself, the language suddenly makes sense. The rest of this note is that model, then a small implementation of `call`, `apply`, `bind`, and `new`.
+
+## How the engine fills this
+
+### A call is more than a list of arguments
+
+When JavaScript runs `fn(a, b)`, the engine actually does something closer to:
+
+```js
+fn.call(thisArg, a, b);
+```
+
+You do not write `thisArg`. The engine picks it from **how** you wrote the call:
+
+| How you call | What `this` becomes (sloppy / non-strict) |
+| --- | --- |
+| `fn()` | `globalThis` (`window` in a browser) |
+| `obj.fn()` | `obj` |
+| `fn.call(x)` / `fn.apply(x)` | `x` (boxed if it is a primitive) |
+| `new Fn()` | a fresh object whose prototype is `Fn.prototype` |
+| `() => { this }` | whatever `this` was **outside** the arrow — arrows do not get their own slot |
+
+In **strict mode** (`"use strict"` or ES modules, which are strict), a bare `fn()` sets `this` to `undefined` instead of the global object. That is why `this.foo` in a module-level function throws instead of silently writing to `window`.
+
+### The function does not own this
+
+```js
+const user = {
+  name: "Ada",
+  greet() {
+    return `hi ${this.name}`;
+  },
+};
+
+const greet = user.greet;
+
+user.greet(); // "hi Ada"  — call site is user.greet
+greet();      // "hi undefined" (or throw in strict) — call site is greet()
+```
+
+Same function object. Different call site. Different `this`. Losing the `obj.` on the left is the classic bug: you passed the function, not the method.
+
+## The four bindings, as code
+
+Think of a tiny dispatcher the engine could run before entering the function. This is teaching code, not a real VM — but the rules match.
+
+```js
+function resolveThis({ kind, fn, object, explicit, isStrict }) {
+  if (fn.isArrow) {
+    return fn.capturedThis; // lexical — baked in when the arrow was created
+  }
+
+  if (kind === "new") {
+    const instance = Object.create(fn.prototype ?? null);
+    return instance;
+  }
+
+  if (kind === "explicit") {
+    if (explicit == null) return isStrict ? explicit : globalThis;
+    return typeof explicit === "object" ? explicit : Object(explicit);
+  }
+
+  if (kind === "method") {
+    return object;
+  }
+
+  // kind === "bare"
+  return isStrict ? undefined : globalThis;
+}
+```
+
+### Implicit: the object before the dot
+
+```js
+const counter = {
+  n: 0,
+  inc() {
+    this.n += 1;
+    return this.n;
+  },
+};
+
+counter.inc(); // this === counter
+```
+
+The lookup `counter.inc` finds the function. The **call** `counter.inc()` is what sets `this` to `counter`. Nested objects use the **receiver**, not the object that stored the function:
+
+```js
+const proto = {
+  kind: "proto",
+  label() {
+    return this.kind;
+  },
+};
+
+const child = Object.create(proto);
+child.kind = "child";
+child.label(); // "child" — this is the receiver
+```
+
+### Explicit: you pass thisArg
+
+```js
+function greet(punct) {
+  return `hi ${this.name}${punct}`;
+}
+
+const ada = { name: "Ada" };
+greet.call(ada, "!");   // "hi Ada!"
+greet.apply(ada, ["?"]); // "hi Ada?"
+const bound = greet.bind(ada, ".");
+bound(); // "hi Ada."
+```
+
+`bind` does not run the function. It returns a **new** function whose `this` (and any prefix arguments) are already filled in.
+
+### new: this is a fresh instance
+
+```js
+function Box(value) {
+  this.value = value;
+}
+
+const a = new Box(1);
+a.value; // 1
+a instanceof Box; // true
+```
+
+`new` does four jobs: create an object, set its `[[Prototype]]` to `Fn.prototype`, call `Fn` with `this` bound to that object, then return the object (unless the constructor returned a different object).
+
+### Arrows: no this slot
+
+```js
+const panel = {
+  id: "nav",
+  items: [1, 2],
+  broken() {
+    return this.items.map(function (n) {
+      return `${this.id}-${n}`; // this is undefined / global — not panel
+    });
+  },
+  ok() {
+    return this.items.map((n) => `${this.id}-${n}`); // arrow reads panel's this
+  },
+};
+```
+
+An arrow function does not have its own `this`, `arguments`, or `new.target`. Those names resolve in the enclosing environment. That is why `map` callbacks as arrows see the method’s `this`, and why you cannot `new` an arrow.
+
+## Implement call, apply, and bind
+
+You cannot replace the `this` **keyword**. You *can* implement the functions that **set** it, which is what interviews mean by “implement your own `this`.”
+
+The trick: temporarily hang the function on the target object, call it as a method (so implicit binding kicks in), then clean up.
+
+### myCall
+
+```js
+Function.prototype.myCall = function myCall(thisArg, ...args) {
+  if (typeof this !== "function") {
+    throw new TypeError("myCall must be called on a function");
+  }
+
+  const target =
+    thisArg == null ? globalThis : Object(thisArg);
+  const key = Symbol("myCall");
+  target[key] = this;
+
+  try {
+    return target[key](...args);
+  } finally {
+    delete target[key];
+  }
+};
+
+function intro(role) {
+  return `${this.name} · ${role}`;
+}
+
+intro.myCall({ name: "Ada" }, "engineer");
+// "Ada · engineer"
+```
+
+`Symbol` as the property name avoids clobbering `target.call` or anything the object already has. `Object(thisArg)` boxes primitives so `"hi".myCall` still has a wrapper with a place to put the function — close to what `call` does in sloppy mode.
+
+### myApply
+
+```js
+Function.prototype.myApply = function myApply(thisArg, argList) {
+  const args = argList == null ? [] : Array.from(argList);
+  return this.myCall(thisArg, ...args);
+};
+
+intro.myApply({ name: "Ada" }, ["engineer"]);
+```
+
+`apply` is `call` with the rest of the arguments in one array-like.
+
+### myBind
+
+```js
+Function.prototype.myBind = function myBind(thisArg, ...preset) {
+  if (typeof this !== "function") {
+    throw new TypeError("myBind must be called on a function");
+  }
+
+  const fn = this;
+
+  function bound(...later) {
+    const args = preset.concat(later);
+    if (new.target) {
+      return new fn(...args);
+    }
+    return fn.myCall(thisArg, ...args);
+  }
+
+  bound.prototype = Object.create(fn.prototype);
+  return bound;
+};
+
+const adaIntro = intro.myBind({ name: "Ada" });
+adaIntro("engineer"); // "Ada · engineer"
+```
+
+Real `bind` also handles `new bound()`: constructing a bound function ignores the bound `this` and uses the new instance instead. The `new.target` branch above copies that rule.
+
+## Implement new
+
+`new Fn(a, b)` is not magic either:
+
+```js
+function myNew(Fn, ...args) {
+  if (typeof Fn !== "function") {
+    throw new TypeError("myNew needs a constructor");
+  }
+
+  const instance = Object.create(Fn.prototype);
+  const result = Fn.myCall(instance, ...args);
+  return result !== null && (typeof result === "object" || typeof result === "function")
+    ? result
+    : instance;
+}
+
+function User(name) {
+  this.name = name;
+}
+
+const u = myNew(User, "Ada");
+u.name; // "Ada"
+Object.getPrototypeOf(u) === User.prototype; // true
+```
+
+If the constructor `return`s an object, that object wins. If it returns a primitive (or nothing), the engine keeps the instance it created. That is why `return this` in a constructor is redundant, and why `return { ok: true }` replaces the instance.
+
+## What “internally” means in the spec
+
+The spec names for this story:
+
+- **`this` environment slot** — a value sitting on the function’s execution context, set before the first line of the body runs.
+- **`[[ThisMode]]`** — `lexical` (arrows), `strict`, or `global`.
+- **`[[ThisValue]]`** — the actual value, after `ToObject` in sloppy mode when it was a primitive.
+- **Reference** — `obj.fn` is not just the function. It is a Reference record: `{ base: obj, name: "fn" }`. Calling a Reference uses `base` as `this`. Calling a bare identifier has no base, so you get `undefined` / global.
+
+You do not need to memorize those names. Remember one sentence: **`this` is chosen from the call expression, then stored on the running execution context, then the body reads it.**
+
+```js
+// these two are the same idea
+obj.fn(1);
+fn.call(obj, 1);
+```
+
+Methods, callbacks, and `setTimeout(obj.fn, 0)` all drop the Reference: you extracted the function, so there is no `base`. Bind it, wrap it in an arrow, or call it as `obj.fn()` if you need that object.
+
+## A compact cheat sheet
+
+```js
+obj.method();           // this → obj
+const f = obj.method;
+f();                    // this → undefined (strict) / global (sloppy)
+f.call(obj);            // this → obj
+const g = f.bind(obj);
+g();                    // this → obj
+new F();                // this → new instance
+() => this;             // this → enclosing this (not a new one)
+```
+
+Write `myCall` / `myBind` / `myNew` once. After that, `this` is just the argument you forgot you were passing.

@@ -7,15 +7,8 @@ import { SITE } from "./config";
 const nav = [
   { href: "/portfolio/experience", label: "Portfolio" },
   { href: "/blog", label: "Blog" },
+  { href: "/practice", label: "Practice" },
   { href: "/tools", label: "Tools" },
-];
-
-const footerNav = [
-  { href: "/portfolio/experience", label: "Experience" },
-  { href: "/portfolio/skills", label: "Skills" },
-  { href: "/blog", label: "Blog" },
-  { href: "/tools", label: "Tools" },
-  { href: "/settings", label: "Settings" },
 ];
 
 export function Header() {
@@ -126,80 +119,30 @@ export function ReadProgress() {
 }
 
 export function Footer() {
-  const year = new Date().getFullYear();
-
   return (
-    <footer className="site-footer mt-auto shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 sm:px-4 sm:pb-4">
-      <div className="site-footer-panel mx-auto max-w-6xl overflow-hidden rounded-3xl border border-zinc-200/80 bg-white/60 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/50">
-        <div className="site-footer-accent h-px w-full" aria-hidden />
-        <div className="grid gap-8 px-5 py-8 sm:px-8 sm:py-10 md:grid-cols-[minmax(0,1.4fr)_auto_auto] md:gap-10">
-          <div className="min-w-0">
-            <a href="/" className="inline-flex items-center gap-3">
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-zinc-950 to-zinc-800 font-display text-sm font-bold text-sky-300 dark:from-sky-400 dark:to-cyan-300 dark:text-zinc-950">
-                {SITE.shortName}
-              </span>
-              <span>
-                <span className="block font-display text-base font-semibold tracking-tight text-zinc-950 dark:text-white">
-                  {SITE.name}
-                </span>
-                <span className="block text-xs text-zinc-500 dark:text-zinc-400">{SITE.role}</span>
-              </span>
-            </a>
-            <p className="mt-4 max-w-sm text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{SITE.tagline}</p>
-          </div>
-
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
-              Explore
-            </p>
-            <ul className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-1">
-              {footerNav.map((item) => (
-                <li key={item.href}>
-                  <a
-                    href={item.href}
-                    className="inline-flex min-h-10 items-center text-sm font-medium text-zinc-700 transition hover:text-sky-700 dark:text-zinc-300 dark:hover:text-sky-300"
-                  >
-                    {item.label}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
-              Connect
-            </p>
-            <ul className="mt-3 space-y-2">
-              <li>
-                <a
-                  href={`mailto:${SITE.email}`}
-                  className="footer-link inline-flex min-h-10 items-center gap-2.5 text-sm font-medium"
-                >
-                  <Mail size={16} aria-hidden />
-                  <span className="truncate">{SITE.email}</span>
-                </a>
-              </li>
-              <li>
-                <a href={SITE.socials.linkedin} className="footer-link inline-flex min-h-10 items-center gap-2.5 text-sm font-medium">
-                  <Linkedin size={16} aria-hidden />
-                  LinkedIn
-                </a>
-              </li>
-              <li>
-                <a href={SITE.socials.github} className="footer-link inline-flex min-h-10 items-center gap-2.5 text-sm font-medium">
-                  <Github size={16} aria-hidden />
-                  GitHub
-                </a>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-2 border-t border-zinc-200/80 px-5 py-4 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between sm:px-8 dark:border-white/10 dark:text-zinc-400">
-          <p>© {year} {SITE.name}. Built with React, Vite, and care.</p>
-          <p>Open to interesting work — say hello anytime.</p>
-        </div>
+    <footer className="site-footer mt-auto shrink-0 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1 sm:px-4 sm:pb-3">
+      <div className="site-footer-panel mx-auto flex max-w-6xl items-center justify-center gap-1 overflow-hidden rounded-2xl border border-zinc-200/80 bg-white/60 px-3 py-1.5 backdrop-blur-xl sm:gap-2 sm:px-4 dark:border-white/10 dark:bg-zinc-950/50">
+        <a
+          href={`mailto:${SITE.email}`}
+          className="footer-link inline-flex min-h-8 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium sm:px-3"
+        >
+          <Mail size={14} aria-hidden />
+          Email
+        </a>
+        <a
+          href={SITE.socials.linkedin}
+          className="footer-link inline-flex min-h-8 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium sm:px-3"
+        >
+          <Linkedin size={14} aria-hidden />
+          LinkedIn
+        </a>
+        <a
+          href={SITE.socials.github}
+          className="footer-link inline-flex min-h-8 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium sm:px-3"
+        >
+          <Github size={14} aria-hidden />
+          GitHub
+        </a>
       </div>
     </footer>
   );

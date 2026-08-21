@@ -54,17 +54,17 @@ function AboutPhoto() {
   const showImage = Boolean(src) && !failed;
 
   return (
-    <div className="relative mx-auto w-52 shrink-0 sm:mx-0 sm:w-60 lg:w-64">
+    <div className="relative mx-auto w-44 shrink-0 sm:mx-0 sm:w-52 lg:w-56">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-3 rounded-full bg-sky-400/25 blur-3xl dark:bg-sky-400/20"
+        className="pointer-events-none absolute inset-2 rounded-full bg-sky-400/25 blur-3xl dark:bg-sky-400/20"
       />
-      <div className="portrait-frame relative aspect-[4/5] overflow-hidden">
+      <div className="relative aspect-square overflow-hidden rounded-full border border-zinc-200/80 shadow-[0_12px_32px_-18px_rgba(15,23,42,0.45)] dark:border-white/10">
         {showImage ? (
           <img
             src={src}
             alt={profile.name}
-            className="h-full w-full object-cover object-[center_18%] scale-[1.06]"
+            className="h-full w-full object-cover object-[center_22%]"
             onError={() => setFailed(true)}
           />
         ) : (

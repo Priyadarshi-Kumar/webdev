@@ -30,8 +30,20 @@ describe("resolveSubject", () => {
     expect(resolveSubject(["python", "fastapi", "api", "interview"])).toBe("backend");
   });
 
-  it("falls back to tooling", () => {
-    expect(resolveSubject(["interview"])).toBe("tooling");
+  it("maps javascript-only tags to javascript", () => {
+    expect(resolveSubject(["javascript"])).toBe("javascript");
+  });
+
+  it("keeps tooling posts in tooling even when they also have javascript", () => {
+    expect(resolveSubject(["javascript", "jest", "tooling", "interview"])).toBe("tooling");
+  });
+
+  it("lets an explicit subject win over tags", () => {
+    expect(resolveSubject(["browser", "web-apis", "javascript"], "javascript")).toBe("javascript");
+  });
+
+  it("ignores an unknown explicit subject", () => {
+    expect(resolveSubject(["react"], "not-a-bucket")).toBe("react");
   });
 });
 
@@ -41,9 +53,12 @@ describe("groupPostsBySubject", () => {
       { slug: "a", tags: ["nx"], title: "", description: "", date: "" },
       { slug: "b", tags: ["react"], title: "", description: "", date: "" },
       { slug: "c", tags: ["mcp", "ai"], title: "", description: "", date: "" },
+      { slug: "d", tags: ["javascript"], title: "", description: "", date: "" },
+      { slug: "e", tags: ["browser", "javascript"], title: "", description: "", date: "", subject: "javascript" },
     ]);
 
-    expect(groups.map((group) => group.id)).toEqual(["react", "llm", "nx"]);
+    expect(groups.map((group) => group.id)).toEqual(["react", "javascript", "llm", "nx"]);
     expect(groups[0]?.posts.map((post) => post.slug)).toEqual(["b"]);
+    expect(groups.find((group) => group.id === "javascript")?.posts.map((post) => post.slug)).toEqual(["d", "e"]);
   });
 });

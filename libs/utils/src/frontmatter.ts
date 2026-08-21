@@ -21,10 +21,11 @@ export function parseFrontmatter(src: string): PostFrontmatter {
   const description = unquote(block.match(/^description:\s*(.+)$/m)?.[1] ?? "");
   const slug = unquote(block.match(/^slug:\s*(.+)$/m)?.[1] ?? "");
   const date = unquote(block.match(/^date:\s*(.+)$/m)?.[1] ?? "");
+  const subject = unquote(block.match(/^subject:\s*(.+)$/m)?.[1] ?? "") || undefined;
   const tagsBlock = block.match(/^tags:\n((?:  - .+\n?)+)/m)?.[1] ?? "";
   const tags = tagsBlock
     .split("\n")
     .map((line) => line.replace(/^\s*-\s*/, "").trim())
     .filter(Boolean);
-  return { title, description, slug, date, tags };
+  return { title, description, slug, date, tags, subject };
 }

@@ -4,6 +4,8 @@ export type PostFrontmatter = {
   slug: string;
   date: string;
   tags: string[];
+  /** Rail bucket. When omitted, the first matching subject tag is used. */
+  subject?: string;
 };
 
 export type Project = {
@@ -52,6 +54,39 @@ export type Profile = {
   stack: string[];
   experience: Experience[];
   education: Education[];
+};
+
+export type PracticeGroup = "basics" | "arrays" | "objects" | "functions" | "async";
+
+export type PracticeDifficulty = "easy" | "medium";
+
+export type PracticeExample = {
+  call: string;
+  result: string;
+};
+
+export type PracticeTest = {
+  label: string;
+  expected: unknown;
+  args?: unknown[];
+  /** Body of `async () => { ... }` with `fn` bound to the user’s function. Must `return` the value to compare. */
+  run?: string;
+};
+
+export type PracticeQuestion = {
+  slug: string;
+  title: string;
+  description: string;
+  group: PracticeGroup;
+  difficulty: PracticeDifficulty;
+  fnName: string;
+  signature: string;
+  prompt: string;
+  examples: PracticeExample[];
+  notes: string[];
+  hint: string;
+  starter: string;
+  tests: PracticeTest[];
 };
 
 export type ToolGroup = "encode" | "format" | "generate" | "inspect";

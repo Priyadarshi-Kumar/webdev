@@ -24,6 +24,15 @@ function toolSlugs() {
     .sort();
 }
 
+function practiceSlugs() {
+  const practiceDir = path.join(root, "dist/client/practice");
+  if (!existsSync(practiceDir)) return ["sum"];
+  return readdirSync(practiceDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+}
+
 const paths = [
   "/",
   "/portfolio/about",
@@ -34,9 +43,13 @@ const paths = [
   "/portfolio/projects/this-site",
   "/portfolio/projects/add-your-work",
   "/blog",
+  "/blog/jargon",
+  "/blog/external",
   ...postSlugs().map((slug) => `/blog/${slug}`),
   "/tools",
   ...toolSlugs().map((slug) => `/tools/${slug}`),
+  "/practice",
+  ...practiceSlugs().map((slug) => `/practice/${slug}`),
 ];
 
 const xml = `<?xml version="1.0" encoding="UTF-8"?>

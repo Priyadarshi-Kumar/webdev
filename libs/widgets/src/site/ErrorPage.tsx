@@ -1,10 +1,11 @@
-import { ArrowLeft, BookOpen, Home, Sparkles, Wrench } from "lucide-react";
+import { ArrowLeft, BookOpen, Code2, Home, Sparkles, Wrench } from "lucide-react";
 import { usePageContext } from "vike-react/usePageContext";
 
 const shortcuts = [
   { href: "/", label: "Home", hint: "Start here", icon: Home },
   { href: "/portfolio/experience", label: "Portfolio", hint: "Resume and work", icon: Sparkles },
   { href: "/blog", label: "Blog", hint: "Notes and glossary", icon: BookOpen },
+  { href: "/practice", label: "Practice", hint: "JavaScript katas in the browser", icon: Code2 },
   { href: "/tools", label: "Tools", hint: "Browser utilities", icon: Wrench },
 ];
 

@@ -1,0 +1,396 @@
+---
+title: How a JavaScript compiler works — and how to write a tiny one
+description: Compilers turn source into another form. Walk tokens, AST, bytecode, and JIT the way V8 does, then build a small compiler for a JS-like expression language you can run in the browser.
+slug: javascript-compiler
+date: 2026-08-22
+subject: javascript
+tags:
+  - javascript
+  - tooling
+---
+
+A **compiler** is a program that reads source in one language and writes **another representation**: bytecode, machine code, or source in a different dialect. V8 compiles JavaScript to bytecode, then hot functions to CPU instructions. Babel compiles modern JS to older JS. TypeScript compiles `.ts` to `.js`. Same pipeline shape. Different **backend**.
+
+This note is that pipeline, how a JS *engine* compiler fits in, then a **Tiny** compiler you can type in from scratch. Tiny is not V8. It is the same *stages*, small enough to hold in your head. For how the engine talks to the browser and the OS after code is running, see [How JavaScript actually works](/blog/how-javascript-works).
+
+## What “compiler” means for JavaScript
+
+People use the word for three different machines:
+
+| Kind | Reads | Writes | Example |
+| --- | --- | --- | --- |
+| **Transpiler** | JS / TS source | Other JS source | Babel, TypeScript, SWC (as a TS/JS transformer) |
+| **Bytecode compiler** | JS source | Portable opcodes | V8 Ignition, SpiderMonkey bytecode |
+| **Optimizing JIT** | Bytecode + type feedback | Native machine code | V8 TurboFan, JSC FTL |
+
+An **interpreter** walks bytecode (or an AST) and executes it. A **JIT** is a compiler that runs **while the program runs**, using what it has observed (`add` was always called with numbers).
+
+You do not pick one. A browser does all of them: parse → bytecode → interpret → optimize → maybe deoptimize.
+
+## The pipeline every compiler shares
+
+Whether you emit x86 or ES5, the stages rhyme:
+
+```txt
+source text
+    → lexer (tokenizer)     characters → tokens
+    → parser                tokens → AST (tree)
+    → (optional) checker    types, scope, errors
+    → transformer           AST → AST  (desugar, optimize)
+    → code generator        AST → bytecode / JS / machine code
+```
+
+A **token** is a lump with a type: `NUMBER 42`, `IDENT add`, `LPAREN`. The **AST** is nested objects: “this is a call whose callee is `add` and whose arguments are a number and another call.”
+
+```js
+// source
+add(2, mul(3, 4))
+
+// tokens
+IDENT add, LPAREN, NUMBER 2, COMMA, IDENT mul, LPAREN, NUMBER 3, COMMA, NUMBER 4, RPAREN, RPAREN
+
+// AST
+{
+  type: "Call",
+  callee: "add",
+  args: [
+    { type: "Number", value: 2 },
+    {
+      type: "Call",
+      callee: "mul",
+      args: [
+        { type: "Number", value: 3 },
+        { type: "Number", value: 4 },
+      ],
+    },
+  ],
+}
+```
+
+The generator does not look at the original string. It walks the tree. That is why pretty-printers, minifiers, and Babel plugins all operate on ASTs: one parse, many backends.
+
+## How V8’s compilers use that pipeline
+
+V8 is not “an interpreter.” It is several compilers stacked.
+
+### Parse to a scope tree
+
+The parser produces an AST **and** scope information: which names are `const`, which are captured by closures, whether `eval` can see locals. Bad syntax dies here (`if (x) {` with no `}`).
+
+### Ignition: compile to bytecode
+
+A function is compiled to **bytecode** the first time you call it (lazy compilation). Opcodes look like a tiny stack machine:
+
+```txt
+LdaSmi [2]          // load small integer 2
+Star r0
+LdaSmi [3]
+Star r1
+CallProperty add, r0, r1
+```
+
+(Ignition’s real encoding is register-based, not a pure stack, but the idea is the same: **portable instructions**, not x86 yet.)
+
+The interpreter **Ignition** steps those opcodes. First run is fast to *start*. No wait for an optimizing compiler.
+
+### Type feedback, then TurboFan
+
+As bytecode runs, V8 records **feedback**: `+` saw two numbers; `obj.foo` saw hidden class *C*. When a function is hot, **TurboFan** compiles a specialized version: `+` becomes a CPU `add`, property load becomes “offset 16.”
+
+If you later pass a string, that machine code is **wrong**. V8 **deoptimizes**: jump back to bytecode, keep running, maybe compile again later.
+
+```js
+function add(a, b) {
+  return a + b;
+}
+
+add(1, 2);       // feedback: Number + Number → JIT can emit integer add
+add("a", "b");   // feedback lies now → deopt, then a more generic version
+```
+
+Writing “your own JS compiler” that matches TurboFan is a multi-year project (SSA, sea-of-nodes, register allocation, deopt tables). Writing **your own compiler** that uses the *same stages* as Ignition is a weekend.
+
+## Design a language small enough to finish
+
+Full JavaScript has ASI, `this`, prototypes, `eval`, generators, modules. For a first compiler, freeze a **subset**. Tiny here is:
+
+- decimal numbers
+- `+` `-` `*` `/` with parentheses
+- calls: `name(arg, arg, …)`
+- built-ins: `add`, `sub`, `mul`, `div` (you could add `print`)
+
+```txt
+mul(add(2, 3), 4)    → 20
+```
+
+That is enough to force a lexer, a recursive-descent parser, an AST, bytecode, and a VM. You can grow it: variables, `function`, `if`. Do not start with `class`.
+
+## Write the compiler: lexer
+
+A lexer is a cursor over the string. Skip spaces. If you see a digit, eat a number. If you see a letter, eat an identifier. Punctuation is one character.
+
+```js
+function tokenize(source) {
+  const tokens = [];
+  let i = 0;
+
+  const peek = () => source[i];
+  const take = () => source[i++];
+
+  while (i < source.length) {
+    const c = peek();
+    if (c === " " || c === "\n" || c === "\t") {
+      take();
+      continue;
+    }
+    if (c >= "0" && c <= "9") {
+      let n = "";
+      while (peek() >= "0" && peek() <= "9") n += take();
+      tokens.push({ type: "NUMBER", value: Number(n) });
+      continue;
+    }
+    if ((c >= "a" && c <= "z") || (c >= "A" && c <= "Z")) {
+      let id = "";
+      while (
+        (peek() >= "a" && peek() <= "z") ||
+        (peek() >= "A" && peek() <= "Z") ||
+        (peek() >= "0" && peek() <= "9")
+      ) {
+        id += take();
+      }
+      tokens.push({ type: "IDENT", value: id });
+      continue;
+    }
+    if ("()+-*/, ".includes(c)) {
+      const type = { "(": "LPAREN", ")": "RPAREN", ",": "COMMA", "+": "PLUS", "-": "MINUS", "*": "STAR", "/": "SLASH" }[c];
+      take();
+      tokens.push({ type });
+      continue;
+    }
+    throw new Error(`unexpected ${c} at ${i}`);
+  }
+
+  tokens.push({ type: "EOF" });
+  return tokens;
+}
+```
+
+Test it: `tokenize("add(1, 2)")` should give `IDENT, LPAREN, NUMBER, COMMA, NUMBER, RPAREN, EOF`. If the lexer is wrong, the parser will lie to you forever.
+
+## Write the parser (recursive descent)
+
+Each grammar rule is a function. `parseExpr` calls `parseTerm` for `+` `-`; `parseTerm` calls `parseFactor` for `*` `/`; `parseFactor` is a number, a `(expr)`, or a call.
+
+```js
+function parse(tokens) {
+  let i = 0;
+  const at = () => tokens[i];
+  const eat = (type) => {
+    if (at().type !== type) throw new Error(`expected ${type}, got ${at().type}`);
+    return tokens[i++];
+  };
+
+  function parseExpr() {
+    let node = parseTerm();
+    while (at().type === "PLUS" || at().type === "MINUS") {
+      const op = eat(at().type).type === "PLUS" ? "+" : "-";
+      node = { type: "Binary", op, left: node, right: parseTerm() };
+    }
+    return node;
+  }
+
+  function parseTerm() {
+    let node = parseFactor();
+    while (at().type === "STAR" || at().type === "SLASH") {
+      const op = eat(at().type).type === "STAR" ? "*" : "/";
+      node = { type: "Binary", op, left: node, right: parseFactor() };
+    }
+    return node;
+  }
+
+  function parseFactor() {
+    if (at().type === "NUMBER") {
+      return { type: "Number", value: eat("NUMBER").value };
+    }
+    if (at().type === "LPAREN") {
+      eat("LPAREN");
+      const inner = parseExpr();
+      eat("RPAREN");
+      return inner;
+    }
+    if (at().type === "IDENT") {
+      const name = eat("IDENT").value;
+      if (at().type !== "LPAREN") return { type: "Ident", name };
+      eat("LPAREN");
+      const args = [];
+      if (at().type !== "RPAREN") {
+        args.push(parseExpr());
+        while (at().type === "COMMA") {
+          eat("COMMA");
+          args.push(parseExpr());
+        }
+      }
+      eat("RPAREN");
+      return { type: "Call", callee: name, args };
+    }
+    throw new Error(`unexpected ${at().type}`);
+  }
+
+  const ast = parseExpr();
+  eat("EOF");
+  return ast;
+}
+```
+
+Precedence is **call order**: `*` binds tighter because `parseExpr` only eats `+` after `parseTerm` has already eaten `*`. That is the same trick JS parsers use (with many more levels: `??`, `&&`, `=` …).
+
+## Transform, then generate bytecode
+
+A transformer walks the tree and returns a new tree. Tiny does not need one. Babel’s job is almost *only* this: `optional chaining` AST → `if (x == null)` AST.
+
+Codegen walks the AST and **emits opcodes**. Stack machine:
+
+- number `2` → `PUSH 2`
+- `a + b` → code for `a`, code for `b`, `ADD`
+- `mul(x, y)` → code for each arg, `CALL mul, 2`
+
+```js
+function compile(ast, out = []) {
+  switch (ast.type) {
+    case "Number":
+      out.push({ op: "PUSH", value: ast.value });
+      break;
+    case "Binary": {
+      compile(ast.left, out);
+      compile(ast.right, out);
+      const ops = { "+": "ADD", "-": "SUB", "*": "MUL", "/": "DIV" };
+      out.push({ op: ops[ast.op] });
+      break;
+    }
+    case "Call":
+      for (const arg of ast.args) compile(arg, out);
+      out.push({ op: "CALL", name: ast.callee, argc: ast.args.length });
+      break;
+    default:
+      throw new Error(`cannot compile ${ast.type}`);
+  }
+  return out;
+}
+```
+
+`mul(add(2, 3), 4)` becomes:
+
+```txt
+PUSH 2
+PUSH 3
+CALL add, 2
+PUSH 4
+CALL mul, 2
+```
+
+That list **is** your compiler’s output. V8’s bytecode is denser and uses registers; the relationship “AST node → one or more ops” is the same.
+
+## A VM so you can run it
+
+A compiler you cannot execute is a pretty-printer. Ten lines of VM:
+
+```js
+const builtins = {
+  add: (a, b) => a + b,
+  sub: (a, b) => a - b,
+  mul: (a, b) => a * b,
+  div: (a, b) => a / b,
+};
+
+function run(code) {
+  const stack = [];
+  for (const inst of code) {
+    switch (inst.op) {
+      case "PUSH":
+        stack.push(inst.value);
+        break;
+      case "ADD":
+      case "SUB":
+      case "MUL":
+      case "DIV": {
+        const b = stack.pop();
+        const a = stack.pop();
+        const f = { ADD: (x, y) => x + y, SUB: (x, y) => x - y, MUL: (x, y) => x * y, DIV: (x, y) => x / y }[inst.op];
+        stack.push(f(a, b));
+        break;
+      }
+      case "CALL": {
+        const args = stack.splice(stack.length - inst.argc, inst.argc);
+        const fn = builtins[inst.name];
+        if (!fn) throw new Error(`unknown ${inst.name}`);
+        stack.push(fn(...args));
+        break;
+      }
+      default:
+        throw new Error(inst.op);
+    }
+  }
+  return stack.pop();
+}
+
+function evaluate(source) {
+  const tokens = tokenize(source);
+  const ast = parse(tokens);
+  const code = compile(ast);
+  return run(code);
+}
+
+evaluate("mul(add(2, 3), 4)"); // 20
+evaluate("1 + 2 * 3");         // 7
+```
+
+Put `tokenize`, `parse`, `compile`, `run` in one file. That file is a compiler + VM. Change `compile` to emit a JS string instead (`return (2 + 3) * 4`) and you have a **transpiler**. Change `run` to emit x86 and you have started a backend. The front half (lexer + parser) stays.
+
+## If you want to grow it toward real JS
+
+Do this in order. Each step is one weekend, not one hour.
+
+### Variables and assignment
+
+Add `IDENT` as a load (`LOAD name`) and `name = expr` as `STORE`. Give the VM an environment object. Then you can compile `x + 1` if `x` was stored.
+
+### Functions as values
+
+A `function` declaration compiles to a chunk of bytecode plus a constant “function object” (pointer to that chunk + a captured env). `CALL` looks up the callee on the stack, not only in `builtins`. Closures are “function object + env pointer” — the same story as [how JS works](/blog/how-javascript-works) on the heap.
+
+### A real JS subset
+
+Use an existing parser (`acorn`, `babel-parser`) so you do not re-litigate ASI and JSX. Your job becomes **AST → bytecode** for a subset: `function`, `return`, `if`, `const`, binary ops. That is how Babel plugins work: they never write a JS lexer.
+
+### Then stop competing with V8
+
+A hobby JIT needs: IR (three-address or SSA), a register allocator, and a deopt story when types change. Read V8’s Ignition bytecode listing and TurboFan’s “sea of nodes” *after* Tiny can run `fib(20)` in bytecode. The jump in complexity is the optimizing backend, not the lexer.
+
+## Transpilers you already use
+
+When you write JSX or TypeScript, a compiler still ran. It just **emitted JS**:
+
+```ts
+const n: number = 1;
+```
+
+```js
+const n = 1;
+```
+
+Types were erased in the transform stage. Babel’s `?.` plugin rewrites the AST before `@babel/generator` prints source. Same five stages. Backend = string of JavaScript, not opcodes.
+
+SWC and esbuild do the same job faster (Rust / Go, parallel parse). They are still lexer → AST → emit.
+
+## A checklist for your own compiler
+
+1. **Write the grammar down** (one page). If you cannot, you cannot parse it.
+2. **Lexer tests first.** Dump tokens until they bore you.
+3. **Parser returns trees, not values.** Evaluating in the parser mixes compiler and VM; you will not be able to emit code later.
+4. **Print the AST.** `JSON.stringify(ast, null, 2)` is your debugger.
+5. **Pick a backend:** JS source (easiest), bytecode + VM (best teacher), LLVM/WASM (when you care about speed).
+6. **Keep the language tiny** until every stage has tests: `evaluate("2+3") === 5`, `evaluate("2*3+4") === 10`.
+
+You will not replace V8. You *will* understand why `add(1, 2)` becomes a handful of opcodes, why `+` needs type feedback, and why Babel can rewrite `?.` without running your program. That is the whole point of writing a compiler.
+
+Related: [How JavaScript actually works](/blog/how-javascript-works), [implement your own this](/blog/this-in-javascript).

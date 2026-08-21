@@ -4,5 +4,5 @@
   "sourceRoot": "libs/widgets/src",
   "projectType": "library",
   "tags": ["type:lib"],
-  "implicitDependencies": ["components", "types", "utils"]
+  "implicitDependencies": ["components", "types", "utils", "store"]
 }

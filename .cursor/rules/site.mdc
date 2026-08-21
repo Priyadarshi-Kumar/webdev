@@ -18,6 +18,7 @@ Apps live in `apps/`. Libraries live in `libs/`. Pages import widgets directly. 
 
 - Create only `apps/web/content/topics/<slug>.mdx`
 - Required frontmatter: `title`, `description`, `slug`, `date` (YYYY-MM-DD), `tags`
+- Optional `subject`: rail bucket (`react`, `javascript`, `browser`, `llm`, `nx`, `packages`, `backend`, `tooling`). Use it when tags would put the post in the wrong group. Without it, the first matching subject tag wins (`javascript` only after the others).
 - Optional jargon: `<Term id="lockfile">lockfile</Term>` — hover preview **and** a link to `/blog/<slug>`
 - Every Term **must** have a matching glossary page. Add `id` to `libs/components/src/glossary.ts` (`explain` + `slug`) **and** `apps/web/content/topics/<slug>.mdx` with `tags` including `glossary`, a short explanation, and a code example. Do not add a dotted term without that page. The tooltip is a preview; the page is the full note.
 - Structure with markdown `##` topics and `###` subtopics. Do not skip heading levels. The post page builds an “On this page” nav from those headings (topic → nested subtopic links). Do not hand-write a table of contents in the MDX.
