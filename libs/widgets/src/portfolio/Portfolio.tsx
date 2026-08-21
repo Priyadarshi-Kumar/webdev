@@ -3,10 +3,9 @@ import {
   Briefcase,
   Download,
   FolderKanban,
-  Github,
+  Globe,
   GraduationCap,
   Linkedin,
-  Mail,
   Sparkles,
   UserRound,
 } from "lucide-react";
@@ -79,42 +78,47 @@ function AboutPhoto() {
   );
 }
 
+const nameLinks = [
+  { href: SITE.url, label: "Portfolio", Icon: Globe },
+  { href: SITE.socials.linkedin, label: "LinkedIn", Icon: Linkedin },
+] as const;
+
 function AboutPanel() {
   return (
     <div className="relative flex flex-col items-center gap-7 overflow-visible sm:flex-row-reverse sm:items-center sm:justify-between sm:gap-10">
       <AboutPhoto />
       <div className="min-w-0 flex-1">
-        <p className="eyebrow">{profile.availability}</p>
-        <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight text-zinc-950 sm:text-5xl dark:text-white">
-          {profile.name}
-        </h1>
-        <p className="mt-2 text-lg font-medium text-zinc-700 dark:text-zinc-200">{profile.headline}</p>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{profile.location}</p>
-        <div className="mt-5 space-y-3 text-[0.95rem] leading-relaxed text-zinc-600 dark:text-zinc-300">
-          {profile.bio.map((paragraph) => (
-            <p key={paragraph}>{paragraph}</p>
-          ))}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h1 className="font-display text-3xl font-semibold tracking-tight text-zinc-950 sm:text-5xl dark:text-white">
+            {profile.name}
+          </h1>
+          <ul className="flex items-center gap-2.5">
+            {nameLinks.map((item) => (
+              <li key={item.label}>
+                <a
+                  href={item.href}
+                  className="inline-flex h-7 w-7 items-center justify-center text-zinc-800 transition hover:text-sky-600 dark:text-zinc-100 dark:hover:text-sky-300"
+                  aria-label={item.label}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <item.Icon size={14} fill="currentColor" strokeWidth={0} aria-hidden />
+                </a>
+              </li>
+            ))}
+          </ul>
         </div>
-        <ul className="mt-6 flex flex-wrap gap-2">
-          <li>
-            <a href={`mailto:${SITE.email}`} className="chip">
-              <Mail size={14} aria-hidden />
-              Email
-            </a>
-          </li>
-          <li>
-            <a href={SITE.socials.linkedin} className="chip">
-              <Linkedin size={14} aria-hidden />
-              LinkedIn
-            </a>
-          </li>
-          <li>
-            <a href={SITE.socials.github} className="chip">
-              <Github size={14} aria-hidden />
-              GitHub
-            </a>
-          </li>
-        </ul>
+        <p className="mt-2 text-lg font-medium text-zinc-700 dark:text-zinc-200">{profile.headline}</p>
+        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+          <a href={`tel:+91${profile.phone}`} className="transition hover:text-sky-600 dark:hover:text-sky-300">
+            {profile.phone}
+          </a>
+          <span aria-hidden> · </span>
+          <a href={`mailto:${SITE.email}`} className="transition hover:text-sky-600 dark:hover:text-sky-300">
+            {SITE.email}
+          </a>
+        </p>
+        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{profile.location}</p>
       </div>
     </div>
   );

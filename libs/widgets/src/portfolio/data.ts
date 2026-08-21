@@ -4,7 +4,8 @@ import { findBySlug } from "@webdev/utils";
 export const profile: Profile = {
   name: "Priyadarshi Kumar",
   location: "Bangalore, Karnataka · open to remote",
-  headline: "Lead Software Engineer · Full-Stack",
+  headline: "Lead Software Engineer · Full-Stack · 7 years exp",
+  phone: "7764944858",
   availability: "Open to full-time & contract",
   photo: "/portrait.jpg",
   bio: [

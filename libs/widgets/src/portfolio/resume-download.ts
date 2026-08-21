@@ -128,30 +128,58 @@ function writeResumePdf(JsPDF: typeof jsPDF) {
     y += 1;
   }
 
-  function linked(text: string, url: string) {
-    const rows = linesOf(text, 10, CONTENT_W);
-    setType(10, "normal");
-    for (const [index, row] of rows.entries()) {
-      ensure(LINE);
-      if (index === 0) doc.textWithLink(row, MARGIN_X, y, { url });
-      else doc.text(row, MARGIN_X, y);
-      y += LINE;
-    }
+  function nameRowIcons(afterX: number, baseline: number) {
+    const size = 11;
+    const gap = 7;
+    const top = baseline - 9;
+    const white: [number, number, number] = [255, 255, 255];
+    const links = [
+      {
+        url: siteUrl,
+        mark: (x: number) => {
+          const cx = x + size / 2;
+          const cy = top + size / 2;
+          doc.setDrawColor(...white);
+          doc.setLineWidth(0.65);
+          doc.circle(cx, cy, 3.2, "S");
+          doc.ellipse(cx, cy, 1.3, 3.2, "S");
+          doc.line(cx - 3.2, cy, cx + 3.2, cy);
+        },
+      },
+      {
+        url: SITE.socials.linkedin,
+        mark: (x: number) => {
+          setType(7, "bold", white);
+          doc.text("in", x + size / 2, top + size * 0.74, { align: "center" });
+        },
+      },
+    ];
+
+    links.forEach((item, index) => {
+      const x = afterX + index * (size + gap);
+      doc.setFillColor(...INK);
+      doc.roundedRect(x, top, size, size, 2, 2, "F");
+      item.mark(x);
+      doc.link(x - 1, top - 1, size + 2, size + 2, { url: item.url });
+    });
   }
 
   setType(20, "bold");
-  doc.text(clean(profile.name), MARGIN_X, y);
+  const name = clean(profile.name);
+  doc.text(name, MARGIN_X, y);
+  nameRowIcons(MARGIN_X + doc.getTextWidth(name) + 10, y);
   y += 18;
   paragraph(profile.headline, 11);
-  paragraph(`${profile.location} | ${profile.availability}`, 10);
-  y += 2;
-  linked(SITE.email, `mailto:${SITE.email}`);
-  linked(siteUrl, siteUrl);
-  linked(SITE.socials.linkedin, SITE.socials.linkedin);
-  linked(SITE.socials.github, SITE.socials.github);
-  y += 4;
-
-  for (const item of profile.bio) paragraph(item, 10);
+  setType(10, "normal", MUTED);
+  ensure(LINE);
+  const phone = profile.phone;
+  const phoneSep = " | ";
+  doc.textWithLink(phone, MARGIN_X, y, { url: `tel:+91${phone}` });
+  const afterPhone = MARGIN_X + doc.getTextWidth(phone);
+  doc.text(phoneSep, afterPhone, y);
+  doc.textWithLink(SITE.email, afterPhone + doc.getTextWidth(phoneSep), y, { url: `mailto:${SITE.email}` });
+  y += LINE + 3;
+  paragraph(profile.location, 10);
 
   section("Experience");
   for (const [jobIndex, job] of profile.experience.entries()) {

@@ -41,6 +41,7 @@ export type Profile = {
   name: string;
   location: string;
   headline: string;
+  phone: string;
   availability: string;
   /** Public path, e.g. `/portrait.jpg` in `apps/web/public`. */
   photo?: string;
