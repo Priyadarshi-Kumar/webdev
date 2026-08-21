@@ -1,21 +1,28 @@
 import type { jsPDF } from "jspdf";
 import { SITE } from "../site/config";
 import { profile } from "./data";
+import { resumeContent } from "./resume-data";
 
 const PAGE_W = 612;
 const PAGE_H = 792;
 const MARGIN_X = 54;
-const MARGIN_Y = 50;
-const MAX_W = PAGE_W - MARGIN_X * 2;
-const LINE = 13;
+const MARGIN_TOP = 44;
+const MARGIN_BOTTOM = 48;
+const CONTENT_W = PAGE_W - MARGIN_X * 2;
+const LINE = 12;
+const BULLET_X = MARGIN_X + 2;
+const TEXT_X = MARGIN_X + 12;
+
 const INK: [number, number, number] = [24, 24, 27];
 const MUTED: [number, number, number] = [82, 82, 91];
+const ACCENT: [number, number, number] = [3, 105, 161];
+const RULE: [number, number, number] = [212, 212, 216];
 
 function clean(value: string) {
   return value
     .replace(/—/g, "-")
     .replace(/–/g, "-")
-    .replace(/·/g, "|")
+    .replace(/·/g, " | ")
     .replace(/×/g, "x")
     .replace(/’/g, "'")
     .replace(/“|”/g, '"')
@@ -37,145 +44,216 @@ export function downloadResume() {
 
 function writeResumePdf(JsPDF: typeof jsPDF) {
   const doc = new JsPDF({ unit: "pt", format: "letter" });
-  const bottom = PAGE_H - 48;
-  let y = MARGIN_Y;
   const siteUrl = SITE.url.replace(/\/$/, "");
-  const keywords = [
-    ...profile.stack,
-    ...profile.technicalSkills.flatMap((group) => group.skills),
-    "Full-Stack",
-    "Lead Software Engineer",
-  ]
-    .filter((item, index, list) => list.indexOf(item) === index)
-    .join(", ");
+  let y = MARGIN_TOP;
+  let page = 1;
 
   doc.setProperties({
-    title: `${profile.name} Resume`,
+    title: `${profile.name} - Resume`,
     author: profile.name,
     subject: "Resume",
-    keywords,
+    keywords: profile.stack.join(", "),
     creator: siteUrl,
   });
 
-  function ensure(space: number) {
-    if (y + space <= bottom) return;
-    doc.addPage();
-    y = MARGIN_Y;
+  function bottomLimit() {
+    return PAGE_H - MARGIN_BOTTOM;
   }
 
-  function setType(size: number, style: "normal" | "bold", color: [number, number, number] = INK) {
+  function ensure(space: number) {
+    if (y + space <= bottomLimit()) return;
+    drawFooter();
+    doc.addPage();
+    page += 1;
+    y = MARGIN_TOP;
+  }
+
+  function setType(size: number, style: "normal" | "bold" | "italic", color: [number, number, number] = INK) {
     doc.setFont("helvetica", style);
     doc.setFontSize(size);
     doc.setTextColor(...color);
   }
 
-  function wrap(text: string, size: number, width = MAX_W) {
+  function wrap(text: string, size: number, width = CONTENT_W) {
     doc.setFontSize(size);
     return doc.splitTextToSize(clean(text), width) as string[];
   }
 
-  function section(title: string) {
-    y += 12;
-    ensure(26);
-    setType(11, "bold");
-    doc.text(title.toUpperCase(), MARGIN_X, y);
-    y += 5;
-    doc.setDrawColor(...INK);
-    doc.setLineWidth(0.6);
+  function drawFooter() {
+    setType(8, "normal", MUTED);
+    doc.text(`${profile.name}  |  Page ${page}`, PAGE_W / 2, PAGE_H - 24, { align: "center" });
+  }
+
+  function drawRule(gapBefore = 8, gapAfter = 10) {
+    y += gapBefore;
+    ensure(gapAfter + 2);
+    doc.setDrawColor(...RULE);
+    doc.setLineWidth(0.5);
     doc.line(MARGIN_X, y, PAGE_W - MARGIN_X, y);
-    y += 14;
+    y += gapAfter;
   }
 
-  function linkedLine(label: string, url: string) {
-    const rows = wrap(label, 10);
-    setType(10, "normal");
-    for (const [index, row] of rows.entries()) {
-      ensure(LINE);
-      if (index === 0) doc.textWithLink(row, MARGIN_X, y, { url });
-      else doc.text(row, MARGIN_X, y);
-      y += LINE;
-    }
+  function section(title: string) {
+    drawRule();
+    setType(8.5, "bold", ACCENT);
+    doc.text(title.toUpperCase(), MARGIN_X, y);
+    y += 13;
   }
 
-  setType(20, "bold");
-  doc.text(clean(profile.name), MARGIN_X, y);
-  y += 16;
-  setType(11, "normal");
-  doc.text(clean(profile.headline), MARGIN_X, y);
-  y += 14;
-  setType(10, "normal", MUTED);
-  doc.text(clean(`${profile.location} | ${profile.availability}`), MARGIN_X, y);
-  y += 16;
-
-  linkedLine(SITE.email, `mailto:${SITE.email}`);
-  linkedLine(siteUrl, siteUrl);
-  linkedLine(SITE.socials.linkedin, SITE.socials.linkedin);
-  linkedLine(SITE.socials.github, SITE.socials.github);
-  y += 4;
-
-  for (const paragraph of profile.bio) {
-    const rows = wrap(paragraph, 10);
-    setType(10, "normal");
+  function textBlock(text: string, size = 10, width = CONTENT_W, gapAfter = 5) {
+    const rows = wrap(text, size, width);
+    setType(size, "normal");
     for (const row of rows) {
       ensure(LINE);
       doc.text(row, MARGIN_X, y);
       y += LINE;
     }
-    y += 4;
+    y += gapAfter;
   }
 
-  section("Experience");
-  for (const job of profile.experience) {
-    ensure(48);
-    setType(11, "bold");
-    doc.text(clean(job.company), MARGIN_X, y);
-    setType(10, "normal", MUTED);
-    doc.text(clean(job.period), PAGE_W - MARGIN_X, y, { align: "right" });
-    y += 14;
-    setType(10, "normal");
-    doc.text(clean(`${job.role} | ${job.location}`), MARGIN_X, y);
-    y += 13;
-    for (const item of job.highlights) {
-      const rows = wrap(`- ${item}`, 10, MAX_W);
-      setType(10, "normal");
-      for (const row of rows) {
-        ensure(LINE);
-        doc.text(row, MARGIN_X, y);
-        y += LINE;
+  function drawBullet(text: string) {
+    const rows = wrap(text, 9.5, CONTENT_W - 14);
+    setType(9.5, "normal");
+    for (let index = 0; index < rows.length; index += 1) {
+      ensure(LINE);
+      if (index === 0) {
+        doc.text("\u2022", BULLET_X, y);
+        doc.text(rows[index]!, TEXT_X, y);
+      } else {
+        doc.text(rows[index]!, TEXT_X, y);
       }
-      y += 2;
-    }
-    y += 8;
-  }
-
-  section("Skills");
-  const labelW = 150;
-  for (const group of profile.technicalSkills) {
-    const skillRows = wrap(group.skills.join(", "), 10, MAX_W - labelW);
-    ensure(skillRows.length * LINE + 4);
-    setType(10, "bold");
-    doc.text(`${clean(group.label)}:`, MARGIN_X, y);
-    setType(10, "normal");
-    for (const [index, row] of skillRows.entries()) {
-      if (index > 0) ensure(LINE);
-      doc.text(row, MARGIN_X + labelW, y);
       y += LINE;
     }
-    y += 4;
+    y += 2;
   }
 
+  function drawContactRow() {
+    const items = [
+      { label: SITE.email, url: `mailto:${SITE.email}` },
+      { label: "LinkedIn", url: SITE.socials.linkedin },
+      { label: "GitHub", url: SITE.socials.github },
+      { label: siteUrl.replace(/^https?:\/\//, ""), url: siteUrl },
+    ];
+
+    const separator = "  |  ";
+    let lineX = MARGIN_X;
+    let lineStarted = false;
+
+    setType(9, "normal", ACCENT);
+
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index]!;
+      const piece = (lineStarted ? separator : "") + item.label;
+      const pieceWidth = doc.getTextWidth(piece);
+
+      if (lineX + pieceWidth > PAGE_W - MARGIN_X && lineStarted) {
+        y += LINE;
+        ensure(LINE);
+        lineX = MARGIN_X;
+        lineStarted = false;
+      }
+
+      if (!lineStarted) {
+        doc.textWithLink(item.label, lineX, y, { url: item.url });
+        lineX += doc.getTextWidth(item.label);
+        lineStarted = true;
+      } else {
+        setType(9, "normal", MUTED);
+        doc.text(separator, lineX, y);
+        lineX += doc.getTextWidth(separator);
+        setType(9, "normal", ACCENT);
+        doc.textWithLink(item.label, lineX, y, { url: item.url });
+        lineX += doc.getTextWidth(item.label);
+      }
+    }
+
+    y += 16;
+  }
+
+  // Header
+  setType(20, "bold");
+  doc.text(clean(profile.name), MARGIN_X, y);
+  y += 18;
+
+  setType(10.5, "normal", MUTED);
+  doc.text(clean(profile.headline), MARGIN_X, y);
+  y += 14;
+
+  setType(9, "normal", MUTED);
+  doc.text(clean(`${profile.location}  |  ${profile.availability}`), MARGIN_X, y);
+  y += 13;
+
+  drawContactRow();
+  drawRule(0, 12);
+
+  // Summary
+  section("Summary");
+  textBlock(resumeContent.summary, 9.5);
+
+  // Highlights
+  section("Selected highlights");
+  for (const highlight of resumeContent.highlights) {
+    drawBullet(highlight);
+  }
+  y += 2;
+
+  // Experience
+  section("Experience");
+  for (const [jobIndex, job] of resumeContent.experience.entries()) {
+    ensure(36);
+    setType(10.5, "bold");
+    doc.text(clean(job.company), MARGIN_X, y);
+    setType(9, "normal", MUTED);
+    doc.text(clean(job.period), PAGE_W - MARGIN_X, y, { align: "right" });
+    y += 12;
+
+    setType(9.5, "normal");
+    doc.text(clean(`${job.role}  |  ${job.location}`), MARGIN_X, y);
+    y += 11;
+
+    for (const bullet of job.bullets) {
+      drawBullet(bullet);
+    }
+
+    y += jobIndex < resumeContent.experience.length - 1 ? 4 : 0;
+  }
+
+  // Skills
+  section("Technical skills");
+  for (const group of resumeContent.skills) {
+    ensure(LINE * 2);
+    setType(9.5, "bold");
+    const label = `${clean(group.label)}: `;
+    const labelWidth = doc.getTextWidth(label);
+    doc.text(label, MARGIN_X, y);
+
+    const rows = wrap(group.skills.join(", "), 9.5, CONTENT_W - labelWidth);
+    setType(9.5, "normal");
+    for (let index = 0; index < rows.length; index += 1) {
+      if (index > 0) {
+        ensure(LINE);
+        y += LINE;
+      }
+      doc.text(rows[index]!, MARGIN_X + (index === 0 ? labelWidth : 0), y);
+    }
+    y += LINE + 1;
+  }
+
+  // Education
   section("Education");
   for (const item of profile.education) {
-    ensure(36);
-    setType(11, "bold");
+    ensure(28);
+    setType(10.5, "bold");
     doc.text(clean(item.school), MARGIN_X, y);
-    setType(10, "normal", MUTED);
+    setType(9, "normal", MUTED);
     doc.text(clean(item.period), PAGE_W - MARGIN_X, y, { align: "right" });
-    y += 14;
-    setType(10, "normal");
-    doc.text(clean(`${item.degree} | ${item.location}`), MARGIN_X, y);
+    y += 12;
+
+    setType(9.5, "normal");
+    doc.text(clean(`${item.degree}  |  ${item.location}`), MARGIN_X, y);
     y += 8;
   }
 
+  drawFooter();
   doc.save(resumeFilename());
 }
