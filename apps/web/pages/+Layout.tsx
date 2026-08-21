@@ -14,7 +14,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         frameClassName="z-10 flex min-h-0 flex-1 flex-col"
         className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
       >
-        <main className="mx-auto w-full min-w-0 max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-10">{children}</main>
+        <main className="mx-auto w-full min-w-0 max-w-6xl flex-1 px-3 py-5 pb-6 sm:px-6 sm:py-10 sm:pb-8">{children}</main>
         <Footer />
       </ScrollHints>
     </div>

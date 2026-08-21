@@ -5,6 +5,7 @@ import { profile, projects } from "../portfolio/data";
 import { SITE, getSiteUrl } from "./config";
 import { SkillSphere } from "./SkillSphere";
 import { SkillsGrid } from "./SkillsGrid";
+import { ContactCta } from "./ContactCta";
 
 export function HomePage({
   posts,
@@ -46,7 +47,7 @@ export function HomePage({
         }}
       />
 
-      <section className="relative grid items-stretch gap-8 pb-10 pt-4 sm:pb-16 sm:pt-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:gap-6">
+      <section className="relative grid items-stretch gap-6 pb-8 pt-2 sm:gap-8 sm:pb-16 sm:pt-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:gap-6">
         <div className="max-w-3xl">
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
             <span className="font-medium text-emerald-700 dark:text-emerald-300">{profile.availability}</span>
@@ -63,12 +64,12 @@ export function HomePage({
           <p className="mt-3 max-w-xl text-base leading-relaxed text-zinc-600 sm:text-lg dark:text-zinc-400">
             {profile.bio[1]}
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <a href={`mailto:${SITE.email}`} className="btn-primary inline-flex items-center gap-2">
+          <div className="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:flex-wrap">
+            <a href={`mailto:${SITE.email}`} className="btn-primary inline-flex w-full items-center justify-center gap-2 sm:w-auto">
               <Mail size={16} aria-hidden />
               Email me
             </a>
-            <a href="/portfolio/experience" className="btn-ghost">
+            <a href="/portfolio/experience" className="btn-ghost w-full sm:w-auto">
               View resume
             </a>
           </div>
@@ -85,7 +86,9 @@ export function HomePage({
             ))}
           </dl>
         </div>
-        <SkillSphere skills={[...profile.stack, ...profile.skillGroups.flatMap((group) => group.skills)]} />
+        <div className="mx-auto w-full max-w-md lg:max-w-none lg:mx-0">
+          <SkillSphere skills={[...profile.stack, ...profile.skillGroups.flatMap((group) => group.skills)]} />
+        </div>
       </section>
 
       <section className="py-4 sm:py-8">
@@ -93,7 +96,7 @@ export function HomePage({
         <h2 className="section-title text-xl sm:text-3xl">What you get on day one</h2>
         <ul className="card mt-3 divide-y divide-zinc-200/80 p-0 sm:mt-6 dark:divide-white/10">
           {profile.highlights.map((item, index) => (
-            <li key={item} className="flex gap-3 px-3.5 py-3 text-[13px] leading-snug text-zinc-600 sm:gap-4 sm:px-5 sm:py-4 sm:text-sm sm:leading-relaxed dark:text-zinc-300">
+            <li key={item} className="flex gap-3 px-4 py-3.5 text-sm leading-relaxed text-zinc-600 sm:gap-4 sm:px-5 sm:py-4 dark:text-zinc-300">
               <span className="font-display text-sm font-semibold text-sky-500 sm:text-lg dark:text-sky-400">
                 {String(index + 1).padStart(2, "0")}
               </span>
@@ -197,26 +200,7 @@ export function HomePage({
         </section>
       ) : null}
 
-      <section className="card mt-2 border-sky-400/25 bg-gradient-to-br from-sky-400/15 via-transparent to-violet-400/15 px-4 py-5 sm:mt-4 sm:px-10 sm:py-10">
-        <Eyebrow>Let&apos;s talk</Eyebrow>
-        <h2 className="section-title text-xl sm:text-4xl">Ready to add a full-stack engineer who ships?</h2>
-        <p className="mt-2 max-w-2xl text-[13px] leading-snug text-zinc-600 sm:mt-3 sm:text-base sm:leading-relaxed dark:text-zinc-300">
-          I am looking for teams that value clear code, fast iteration, and engineers who document what they build. Send a
-          note — I reply within a day.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-2 sm:mt-6 sm:gap-3">
-          <a href={`mailto:${SITE.email}`} className="btn-primary inline-flex min-h-10 items-center gap-2 px-4 py-2 text-sm sm:min-h-11">
-            <Mail size={16} aria-hidden />
-            Email
-          </a>
-          <a href={SITE.socials.linkedin} className="btn-ghost min-h-10 px-4 py-2 text-sm sm:min-h-11">
-            LinkedIn
-          </a>
-          <a href={SITE.socials.github} className="btn-ghost min-h-10 px-4 py-2 text-sm sm:min-h-11">
-            GitHub
-          </a>
-        </div>
-      </section>
+      <ContactCta />
     </>
   );
 }

@@ -216,7 +216,7 @@ export function SkillSphere({ skills }: { skills: string[] }) {
     <div
       ref={rootRef}
       aria-hidden
-      className="skill-sphere group relative ml-auto h-[min(28rem,70vw)] min-h-[22rem] w-full max-w-[34rem] cursor-grab touch-none select-none self-stretch active:cursor-grabbing lg:h-full lg:min-h-full lg:max-w-none lg:translate-x-4"
+      className="skill-sphere group relative mx-auto ml-0 h-[min(16rem,62vw)] min-h-[14rem] w-full max-w-[34rem] cursor-grab touch-none select-none self-stretch active:cursor-grabbing sm:h-[min(22rem,70vw)] sm:min-h-[18rem] lg:ml-auto lg:h-full lg:min-h-full lg:max-w-none lg:translate-x-4"
     >
       <div className="skill-core pointer-events-none absolute inset-[12%] rounded-full blur-2xl transition-transform duration-500 group-hover:scale-105" />
       <div className="skill-orbit pointer-events-none absolute left-1/2 top-1/2 h-[78%] w-[78%] rounded-full" />

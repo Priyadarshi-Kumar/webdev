@@ -389,11 +389,91 @@ html {
   :where(.dark) .scroll-hint-fade-right {
     background: linear-gradient(to left, rgb(7 8 12 / 0.92), rgb(7 8 12 / 0.45), transparent);
   }
+
+  .contact-cta {
+    background:
+      linear-gradient(145deg, rgb(var(--theme-accent-rgb) / 0.12), transparent 42%),
+      linear-gradient(320deg, rgb(var(--theme-glow-rgb) / 0.14), transparent 48%),
+      rgb(255 255 255 / 0.72);
+    box-shadow:
+      0 1px 0 rgb(255 255 255 / 0.65) inset,
+      0 24px 48px -32px rgb(var(--theme-accent-rgb) / 0.55);
+  }
+
+  :where(.dark) .contact-cta {
+    background:
+      linear-gradient(145deg, rgb(var(--theme-accent-rgb) / 0.14), transparent 42%),
+      linear-gradient(320deg, rgb(var(--theme-glow-rgb) / 0.12), transparent 48%),
+      rgb(9 12 20 / 0.72);
+    box-shadow:
+      0 1px 0 rgb(255 255 255 / 0.05) inset,
+      0 24px 48px -32px rgb(var(--theme-accent-rgb) / 0.35);
+  }
+
+  .contact-cta-glow {
+    background: radial-gradient(ellipse 70% 80% at 100% 0%, rgb(var(--theme-accent-rgb) / 0.22), transparent 55%);
+  }
+
+  .contact-cta-primary {
+    border: 1px solid rgb(var(--theme-accent-rgb) / 0.35);
+    background: linear-gradient(135deg, rgb(255 255 255 / 0.92), rgb(var(--theme-accent-rgb) / 0.08));
+    box-shadow: 0 12px 28px -20px rgb(var(--theme-accent-rgb) / 0.8);
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .contact-cta-primary:hover {
+    border-color: rgb(var(--theme-accent-rgb) / 0.65);
+    box-shadow: 0 16px 32px -18px rgb(var(--theme-accent-rgb) / 0.9);
+    transform: translateY(-1px);
+  }
+
+  :where(.dark) .contact-cta-primary {
+    background: linear-gradient(135deg, rgb(255 255 255 / 0.06), rgb(var(--theme-accent-rgb) / 0.12));
+  }
+
+  .contact-cta-secondary {
+    border: 1px solid rgb(161 161 170 / 0.35);
+    background: rgb(255 255 255 / 0.55);
+    color: rgb(39 39 42);
+    transition: border-color 0.2s ease, color 0.2s ease, background-color 0.2s ease;
+  }
+
+  .contact-cta-secondary:hover {
+    border-color: rgb(var(--theme-accent-rgb) / 0.55);
+    color: rgb(3 105 161);
+    background: rgb(255 255 255 / 0.82);
+  }
+
+  :where(.dark) .contact-cta-secondary {
+    border-color: rgb(255 255 255 / 0.12);
+    background: rgb(255 255 255 / 0.04);
+    color: rgb(228 228 231);
+  }
+
+  :where(.dark) .contact-cta-secondary:hover {
+    color: rgb(125 211 252);
+    background: rgb(255 255 255 / 0.08);
+  }
+
+  .site-footer-accent {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(var(--theme-accent-rgb) / 0.85),
+      rgb(var(--theme-glow-rgb) / 0.75),
+      transparent
+    );
+  }
+
+  .footer-link {
+    @apply text-zinc-700 transition hover:text-sky-700 dark:text-zinc-300 dark:hover:text-sky-300;
+  }
 }
 
 #page-content {
   scroll-behavior: smooth;
   scroll-padding-top: 1rem;
+  scroll-padding-bottom: max(1rem, env(safe-area-inset-bottom));
   opacity: 1;
   transition: opacity 0.18s ease;
 }
