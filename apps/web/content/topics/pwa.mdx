@@ -1,0 +1,278 @@
+---
+title: Progressive Web Apps (PWA) — installable, offline-capable web apps
+description: What makes a PWA — web app manifest, service worker, install prompts, Lighthouse criteria, caching patterns, and how React/Vite sites ship as PWAs.
+slug: pwa
+date: 2026-08-21
+tags:
+  - javascript
+  - browser
+  - web-apis
+  - pwa
+  - interview
+---
+
+A **Progressive Web App (PWA)** is a web app that uses modern browser APIs to feel **installable**, **fast**, and **reliable** — even on flaky networks. There is no single `new PWA()` constructor. A PWA is a **checklist**: HTTPS, a **web app manifest**, a **service worker**, and responsive UI.
+
+The goal is not to rewrite your app in native code. It is to meet users where they already are — the browser — with app-like affordances: home screen icon, splash screen, offline shell, push (optional).
+
+## The three pillars
+
+### 1. Secure origin (HTTPS)
+
+Service workers and many PWA APIs require a **secure context**. Production must be HTTPS. `localhost` is treated as secure for development.
+
+### 2. Web App Manifest
+
+A JSON file linked from HTML tells the OS how to install and display your app:
+
+```html
+<link rel="manifest" href="/manifest.webmanifest" />
+```
+
+```json
+{
+  "name": "My Dashboard",
+  "short_name": "Dashboard",
+  "description": "Analytics for your team",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#38bdf8",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
+```
+
+| Field | Purpose |
+| --- | --- |
+| `name` / `short_name` | Install dialog and launcher label |
+| `start_url` | Opens when user taps the icon |
+| `scope` | Which URLs are “in” the app (navigation outside may open browser chrome) |
+| `display` | `standalone` hides browser UI; `browser` keeps the URL bar |
+| `theme_color` | Status bar / title bar tint |
+| `icons` | Launcher and splash; include **maskable** for Android adaptive icons |
+
+Serve `manifest.webmanifest` with `Content-Type: application/manifest+json` (or `application/json`).
+
+### 3. Service Worker
+
+A registered service worker enables **offline caching**, **precaching the app shell**, and optional **push**. Without it, you have a manifest bookmark — not a full PWA experience.
+
+```js
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js");
+  });
+}
+```
+
+See the dedicated service worker note for lifecycle and caching strategies. For PWAs, the usual pattern is **precache** HTML/CSS/JS shell on `install`, then **network-first** or **stale-while-revalidate** for API calls.
+
+## App shell architecture
+
+Split the UI into:
+
+- **Shell** — layout, router, CSS, core JS (cached aggressively)
+- **Content** — API-driven data (network-first with offline fallback)
+
+```
+┌─────────────────────────────────┐
+│  App shell (cached)             │
+│  ┌───────────────────────────┐  │
+│  │  Dynamic content (API)    │  │
+│  └───────────────────────────┘  │
+└─────────────────────────────────┘
+```
+
+User opens the app offline → shell loads from cache → show cached data or an offline message instead of a blank screen.
+
+**Minimal shell precache (service worker):**
+
+```js
+const SHELL = "shell-v1";
+const FILES = ["/", "/index.html", "/assets/main.css", "/assets/main.js"];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(caches.open(SHELL).then((c) => c.addAll(FILES)));
+});
+```
+
+Use hashed filenames from Vite/webpack builds and generate this list at build time (`vite-plugin-pwa` does this automatically).
+
+## Installability criteria
+
+Browsers decide when to show **“Install app”** (criteria vary slightly):
+
+- Valid manifest with `name`, `icons` (192 + 512), `start_url`
+- Registered service worker with a `fetch` handler
+- Served over HTTPS
+- User engagement heuristics (Chrome: visit twice, 5 minutes apart)
+
+**Listen for the install prompt (Chrome):**
+
+```js
+let deferredPrompt;
+
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  deferredPrompt = event;
+  showInstallButton();
+});
+
+async function installApp() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+  console.log(outcome); // "accepted" | "dismissed"
+  deferredPrompt = null;
+}
+```
+
+`beforeinstallprompt` is Chromium-specific. Safari uses **Add to Home Screen** from the share sheet — no programmatic prompt.
+
+**Detect standalone mode:**
+
+```js
+const isStandalone =
+  window.matchMedia("(display-mode: standalone)").matches ||
+  (navigator as Navigator & { standalone?: boolean }).standalone === true;
+```
+
+Use this to hide “Install” UI when already installed or to tweak navigation.
+
+## Vite + PWA (practical setup)
+
+`vite-plugin-pwa` generates the service worker and injects the manifest:
+
+```ts
+// vite.config.ts
+import { VitePWA } from "vite-plugin-pwa";
+
+export default defineConfig({
+  plugins: [
+    VitePWA({
+      registerType: "autoUpdate",
+      manifest: {
+        name: "My App",
+        short_name: "App",
+        theme_color: "#09090b",
+        icons: [
+          { src: "pwa-192.png", sizes: "192x192", type: "image/png" },
+          { src: "pwa-512.png", sizes: "512x512", type: "image/png" },
+        ],
+      },
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+      },
+    }),
+  ],
+});
+```
+
+`registerType: "autoUpdate"` registers the worker and reloads when a new version is ready — pair with a toast (“Update available”) for better UX.
+
+## Offline UX patterns
+
+Do not pretend the user is online when they are not.
+
+```js
+window.addEventListener("online", () => showToast("Back online"));
+window.addEventListener("offline", () => showBanner("You are offline — showing cached data"));
+```
+
+In React, combine `navigator.onLine` with a `fetch` failure handler — `onLine` can lie on captive portals.
+
+**Read-through cache for API:**
+
+```js
+// sw.js — network first, cache fallback
+event.respondWith(
+  fetch(request)
+    .then((response) => {
+      const copy = response.clone();
+      caches.open("api-v1").then((c) => c.put(request, copy));
+      return response;
+    })
+    .catch(() => caches.match(request)),
+);
+```
+
+Show **when data was last updated** so users trust stale cache.
+
+## Lighthouse PWA checklist (summary)
+
+Audits typically look for:
+
+- Manifest present and valid
+- Service worker registered
+- Works offline (start URL loads)
+- HTTPS
+- Responsive viewport
+- Themed address bar (`theme-color`)
+
+Run Lighthouse in Chrome DevTools → **Progressive Web App** category. Fix red items before calling the site a PWA in production.
+
+## What PWAs are not
+
+- **Not app store binaries** — unless you wrap with TWA (Android) or publish via PWABuilder / App Store rules for web apps
+- **Not full native API access** — Bluetooth, NFC, some sensors need native or limited web APIs
+- **Not “offline everything”** — you choose what to cache; mutations still need sync strategy
+- **Not a replacement for good performance** — a slow SPA with a manifest is still a slow PWA
+
+## PWA + workers map
+
+| Piece | Role in PWA |
+| --- | --- |
+| **Manifest** | Install metadata, icons, display mode |
+| **Service Worker** | Offline shell, caching, push |
+| **Web Worker** | Heavy work without janking the shell |
+| **SharedWorker** | Optional — one socket across tabs |
+| **IndexedDB** | Larger offline data than Cache API |
+
+## Interview answers
+
+<details>
+<summary>What makes a website a PWA?</summary>
+
+HTTPS, a web app manifest (name, icons, start URL, display), and a service worker that enables offline/load performance. “PWA” is a set of capabilities and quality bars, not a framework.
+
+</details>
+
+<details>
+<summary>What is the web app manifest for?</summary>
+
+It tells the browser/OS how to install the app: name, icons, start URL, scope, display mode, and theme colors. Linked via `<link rel="manifest">`.
+
+</details>
+
+<details>
+<summary>Why do PWAs need a service worker?</summary>
+
+Installability and offline reliability depend on controlling fetch and caching. The manifest alone only adds a home screen shortcut without offline behavior.
+
+</details>
+
+<details>
+<summary>What is app shell architecture?</summary>
+
+Cache the minimal HTML/CSS/JS frame separately from dynamic API content. Offline users still get UI chrome and can see cached or placeholder data instead of a network error page.
+
+</details>
+
+<details>
+<summary>How is PWA install different on iOS vs Chrome?</summary>
+
+Chrome can fire `beforeinstallprompt` for a custom install button. iOS Safari uses Share → Add to Home Screen; no standard install prompt API. Test both paths.
+
+</details>
+
+<details>
+<summary>cache first vs network first for a PWA?</summary>
+
+Cache first for hashed static assets and the app shell. Network first (with cache fallback) for API data that must be fresh but should survive brief offline periods.
+
+</details>

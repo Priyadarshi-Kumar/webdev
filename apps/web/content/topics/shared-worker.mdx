@@ -1,0 +1,251 @@
+---
+title: Shared Workers — one background thread for many tabs
+description: How SharedWorker keeps a single JS context across same-origin pages — ports, MessagePort, browser support, when to use it vs BroadcastChannel, and interview answers.
+slug: shared-worker
+date: 2026-08-20
+tags:
+  - javascript
+  - browser
+  - web-apis
+  - interview
+---
+
+A **SharedWorker** is a worker that **multiple browsing contexts share**. Open three tabs on the same origin, connect to the same SharedWorker URL, and they all talk to **one** JavaScript instance — one WebSocket, one in-memory cache, one coordination point.
+
+Dedicated Web Workers are **one worker per page**. SharedWorkers are **one worker per origin + script URL** (until the last connection closes).
+
+## Creating and connecting
+
+The page does not get the worker global directly. It gets a **`MessagePort`**:
+
+```js
+// main.js (every tab)
+const worker = new SharedWorker("/shared.js", { name: "app-hub" });
+
+worker.port.onmessage = (event) => {
+  console.log("from shared worker:", event.data);
+};
+
+worker.port.start(); // required when using onmessage instead of addEventListener
+worker.port.postMessage({ type: "HELLO", tabId: crypto.randomUUID() });
+```
+
+```js
+// shared.js
+const ports = new Set();
+
+self.onconnect = (event) => {
+  const port = event.ports[0];
+  ports.add(port);
+
+  port.onmessage = (event) => {
+    const msg = event.data;
+    if (msg.type === "HELLO") {
+      port.postMessage({ type: "WELCOME", peers: ports.size });
+      broadcast({ type: "PEER_JOINED", tabId: msg.tabId }, port);
+    }
+  };
+
+  port.onmessageerror = () => ports.delete(port);
+  port.start();
+};
+
+function broadcast(data, except) {
+  for (const port of ports) {
+    if (port !== except) port.postMessage(data);
+  }
+}
+```
+
+`onconnect` fires each time a new browsing context connects. `event.ports[0]` is the port for that connection. Track ports in a `Set` to fan out messages.
+
+## `port.start()` — easy to forget
+
+With `addEventListener("message", …)` on a port, the port is started implicitly. With `port.onmessage = …`, you must call **`port.start()`** on both sides or messages never flow. This trips up every team the first time.
+
+## What SharedWorker is good for
+
+| Use case | Why SharedWorker |
+| --- | --- |
+| Single WebSocket to server | One connection, many tabs |
+| Cross-tab leader election | Worker picks one “primary” tab |
+| Shared in-memory cache | Avoid refetching in every tab |
+| Coordinating BroadcastChannel | Worker aggregates, tabs subscribe |
+
+**Example: one socket, many tabs**
+
+```js
+// shared-socket.js
+let socket;
+
+self.onconnect = (event) => {
+  const port = event.ports[0];
+  if (!socket) {
+    socket = new WebSocket("wss://api.example.com/live");
+    socket.onmessage = (e) => {
+      for (const p of ports) p.postMessage({ type: "WS", data: e.data });
+    };
+  }
+  ports.add(port);
+  port.onmessage = (event) => {
+    if (event.data.type === "SEND") socket?.send(event.data.payload);
+  };
+  port.start();
+};
+
+const ports = new Set();
+```
+
+Each tab posts `{ type: "SEND", payload }` to the worker. Incoming socket messages fan out to every connected port.
+
+## SharedWorker vs dedicated Worker
+
+| | SharedWorker | Dedicated Worker |
+| --- | --- | --- |
+| Instances | One per script URL (shared) | One per `new Worker()` call |
+| Connection API | `MessagePort` via `onconnect` | `postMessage` on worker object |
+| Survives tab close | Yes, until last port closes | No — dies with the page |
+| Browser support | Chromium, Firefox (not Safari iOS) | Universal |
+
+## SharedWorker vs BroadcastChannel
+
+Both coordinate same-origin tabs. Different shapes:
+
+| | SharedWorker | BroadcastChannel |
+| --- | --- | --- |
+| Stateful singleton | Yes — one JS heap | No — fire-and-forget messages |
+| Setup | Heavier (`onconnect`, ports) | `new BroadcastChannel(name)` |
+| Safari | Limited / no SharedWorker on iOS | Supported |
+| Best for | Shared socket, shared state machine | Simple events (“logout”, “theme”) |
+
+If you only need to **notify** all tabs, BroadcastChannel is simpler. If you need **one shared resource** (connection, cache, scheduler), SharedWorker fits.
+
+## Module SharedWorkers
+
+```js
+const worker = new SharedWorker(new URL("./hub.js", import.meta.url), {
+  type: "module",
+  name: "hub",
+});
+```
+
+Module shared workers support `import` like dedicated module workers. Check bundler docs — Vite may need a dedicated entry.
+
+## Error handling and shutdown
+
+```js
+worker.onerror = (event) => {
+  console.error("SharedWorker error:", event.message);
+};
+```
+
+When the **last** tab disconnects (closes or navigates away), the browser may terminate the shared worker. Do not assume it lives forever — persist critical state to IndexedDB if needed.
+
+Inside the worker, remove dead ports when tabs close. There is no guaranteed `ondisconnect` — detect failed `postMessage` or use heartbeat pings.
+
+## Browser support reality
+
+SharedWorker works in **desktop Chrome and Firefox**. **Safari on iOS does not support SharedWorker** (as of common deployments). For mobile-heavy products:
+
+- Fall back to **BroadcastChannel** + **localStorage** / **IndexedDB** for sync
+- Or accept one WebSocket per tab on mobile
+
+Feature-detect:
+
+```js
+function connectHub() {
+  if (typeof SharedWorker === "undefined") {
+    return { postMessage: () => {}, onmessage: null }; // fallback stub
+  }
+  const worker = new SharedWorker("/shared.js");
+  worker.port.start();
+  return worker.port;
+}
+```
+
+## React pattern
+
+Keep the SharedWorker at module scope or in a context provider — not per component instance:
+
+```tsx
+// SharedHubProvider.tsx
+import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
+
+type Hub = { post: (data: unknown) => void };
+
+const HubContext = createContext<Hub | null>(null);
+
+let sharedPort: MessagePort | null = null;
+
+function getPort(): MessagePort | null {
+  if (typeof SharedWorker === "undefined") return null;
+  if (!sharedPort) {
+    const worker = new SharedWorker("/shared.js");
+    sharedPort = worker.port;
+    sharedPort.start();
+  }
+  return sharedPort;
+}
+
+export function SharedHubProvider({ children }: { children: ReactNode }) {
+  const listeners = useRef<Set<(data: unknown) => void>>(new Set());
+
+  useEffect(() => {
+    const port = getPort();
+    if (!port) return;
+
+    const onMessage = (event: MessageEvent) => {
+      listeners.current.forEach((fn) => fn(event.data));
+    };
+    port.addEventListener("message", onMessage);
+    return () => port.removeEventListener("message", onMessage);
+  }, []);
+
+  const hub: Hub = {
+    post: (data) => getPort()?.postMessage(data),
+  };
+
+  return <HubContext.Provider value={hub}>{children}</HubContext.Provider>;
+}
+
+export function useSharedHub() {
+  return useContext(HubContext);
+}
+```
+
+## Interview answers
+
+<details>
+<summary>What is a SharedWorker?</summary>
+
+A worker script shared by multiple same-origin browsing contexts. Each connection gets a MessagePort via `onconnect`. One instance handles all tabs until the last connection closes.
+
+</details>
+
+<details>
+<summary>Why use SharedWorker instead of a dedicated worker?</summary>
+
+When you need exactly one background context per origin — one WebSocket, one cache, one coordinator — instead of one worker per tab duplicating work.
+
+</details>
+
+<details>
+<summary>What is MessagePort?</summary>
+
+A channel for two-way messaging. SharedWorker connections use ports, not `worker.postMessage` on the page side — you use `worker.port.postMessage`. Both sides may need `port.start()` when using `onmessage`.
+
+</details>
+
+<details>
+<summary>SharedWorker vs BroadcastChannel?</summary>
+
+BroadcastChannel is stateless pub/sub between contexts. SharedWorker is a persistent singleton with its own memory and lifecycle — better for shared connections and state machines, heavier to set up.
+
+</details>
+
+<details>
+<summary>Does Safari support SharedWorker?</summary>
+
+Desktop Safari has had support in some versions; **iOS Safari generally does not**. Always feature-detect and provide a fallback for mobile Safari users.
+
+</details>

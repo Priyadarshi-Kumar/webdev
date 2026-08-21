@@ -1,0 +1,249 @@
+---
+title: Web Workers — run JavaScript off the main thread
+description: How dedicated Web Workers keep the UI responsive — creating workers, postMessage, transferable buffers, module workers, bundler setup, React patterns, and interview answers.
+slug: web-worker
+date: 2026-08-19
+tags:
+  - javascript
+  - browser
+  - web-apis
+  - interview
+---
+
+A **Web Worker** is a separate JavaScript thread that runs alongside your page. The main thread paints the UI and handles events. A worker runs CPU-heavy or long-running logic without blocking scroll, input, or React renders.
+
+Workers have **no DOM access**. They cannot read `document`, touch elements, or call most window-only APIs. They talk to the page through **`postMessage`** and receive messages the same way.
+
+## What a dedicated worker is
+
+`new Worker(url)` spins up a **dedicated** worker: one worker instance is owned by exactly one browsing context (one tab’s page, or one iframe). Close the tab and the worker dies.
+
+```js
+// main.js
+const worker = new Worker("/workers/hash.js");
+
+worker.postMessage({ text: "hello", rounds: 100_000 });
+
+worker.onmessage = (event) => {
+  console.log("hash:", event.data.digest);
+};
+
+worker.onerror = (event) => {
+  console.error("worker failed:", event.message);
+};
+```
+
+```js
+// workers/hash.js
+self.onmessage = (event) => {
+  const { text, rounds } = event.data;
+  let hash = text;
+  for (let i = 0; i < rounds; i += 1) {
+    hash = simpleHash(hash);
+  }
+  self.postMessage({ digest: hash });
+};
+
+function simpleHash(input) {
+  let h = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    h = (h * 31 + input.charCodeAt(i)) | 0;
+  }
+  return String(h);
+}
+```
+
+The page posts a job. The worker computes. The worker posts the result back. The main thread stays free to animate at 60fps.
+
+## The worker global: `self`, not `window`
+
+Inside a worker script, the global object is **`DedicatedWorkerGlobalScope`**, exposed as `self`. You get:
+
+- `self.onmessage` / `addEventListener("message", …)`
+- `self.postMessage(data, transfer?)`
+- `importScripts(...)` (classic workers only)
+- `fetch`, `setTimeout`, `indexedDB`, `crypto.subtle` (same origin rules apply)
+
+You do **not** get `document`, `window`, `localStorage` (use `postMessage` to ask the main thread), or direct access to parent `Window`.
+
+## Message passing and structured clone
+
+`postMessage` copies data using the **structured clone algorithm** — same rules as `BroadcastChannel` and `history.pushState` state. Plain objects, arrays, `Date`, `Map`, `Set`, typed arrays, and `ArrayBuffer` work. Functions, DOM nodes, and symbols do not.
+
+```js
+worker.postMessage({
+  type: "PARSE_CSV",
+  payload: { rows: largeCsvString },
+});
+```
+
+For very large binary data, **transfer** ownership instead of cloning:
+
+```js
+const buffer = new ArrayBuffer(8 * 1024 * 1024);
+worker.postMessage({ type: "PROCESS", buffer }, [buffer]);
+// buffer.byteLength is now 0 on the main thread — zero-copy handoff
+```
+
+The second argument is a list of **transferables**. After transfer, the sender’s buffer is detached. Use this for image decoding, audio buffers, or WASM memory.
+
+## Classic workers vs module workers
+
+### Classic worker (`type` defaults to classic)
+
+```js
+const worker = new Worker("/worker.js");
+```
+
+The script is loaded as a classic script. Use `importScripts("lib.js")` to pull in more files. No `import` / `export` unless you bundle into one file.
+
+### Module worker
+
+```js
+const worker = new Worker("/worker.mjs", { type: "module" });
+```
+
+```js
+// worker.mjs
+import { parse } from "./parser.js";
+
+self.onmessage = (event) => {
+  const ast = parse(event.data.source);
+  self.postMessage({ ast });
+};
+```
+
+Module workers support ES modules natively. Vite and webpack can emit separate worker chunks — check your bundler’s `?worker` or `new URL(..., import.meta.url)` pattern.
+
+**Vite example:**
+
+```ts
+import ParseWorker from "./parse.worker?worker";
+
+const worker = new ParseWorker();
+worker.postMessage({ source: code });
+```
+
+Vite bundles the worker, handles HMR in dev, and keeps the main bundle smaller.
+
+## Terminating and cleaning up
+
+Workers consume memory and a thread. Always terminate when done:
+
+```js
+worker.terminate();
+```
+
+In React, create the worker once per job or once per mount, and terminate on unmount:
+
+```tsx
+import { useEffect, useRef, useState } from "react";
+
+export function useHashWorker() {
+  const workerRef = useRef<Worker | null>(null);
+  const [digest, setDigest] = useState<string | null>(null);
+
+  useEffect(() => {
+    const worker = new Worker(new URL("./hash.worker.ts", import.meta.url), { type: "module" });
+    workerRef.current = worker;
+
+    worker.onmessage = (event) => setDigest(event.data.digest);
+
+    return () => {
+      worker.terminate();
+      workerRef.current = null;
+    };
+  }, []);
+
+  function hash(text: string) {
+    workerRef.current?.postMessage({ text });
+  }
+
+  return { digest, hash };
+}
+```
+
+Do not create a new `Worker` on every keystroke unless you terminate the old one — browsers cap concurrent workers per origin.
+
+## What belongs in a worker
+
+| Good fit | Poor fit |
+| --- | --- |
+| Parsing large JSON/CSV | Updating React state directly |
+| Image/audio processing | DOM measurements |
+| Cryptographic hashing | Reading `localStorage` |
+| Physics simulation | Opening modals |
+| Sorting/filtering huge lists | Routing |
+
+If the task touches the UI, the worker computes a result and the main thread applies it in `onmessage`.
+
+## Error handling
+
+Worker exceptions fire `error` on the worker object (main thread) and `error` on `self` (worker thread). Unhandled rejections in module workers may surface as `error` events too.
+
+```js
+worker.onerror = (event) => {
+  console.error(event.message, event.filename, event.lineno);
+  event.preventDefault(); // optional: suppress default console noise
+};
+```
+
+Post structured errors back for user-visible messages:
+
+```js
+// worker
+try {
+  const result = heavyWork(data);
+  self.postMessage({ ok: true, result });
+} catch (error) {
+  self.postMessage({ ok: false, message: error instanceof Error ? error.message : "Failed" });
+}
+```
+
+## Workers vs other threads
+
+| API | Scope | DOM | Typical use |
+| --- | --- | --- | --- |
+| **Dedicated Worker** | One page | No | Heavy compute for one tab |
+| **SharedWorker** | Multiple same-origin contexts | No | Shared connection/socket |
+| **Service Worker** | Origin-wide, event-driven | No | Offline, push, fetch proxy |
+| **Main thread** | One page | Yes | UI, layout, most APIs |
+
+Dedicated workers are the default choice when one tab needs background CPU.
+
+## Interview answers
+
+<details>
+<summary>Why use a Web Worker?</summary>
+
+The browser’s main thread runs JavaScript, layout, paint, and input. Long synchronous JS blocks input and drops frames. Workers move CPU work to another thread so the UI stays responsive. They do not make single-threaded JS faster — they parallelize work the main thread would otherwise block on.
+
+</details>
+
+<details>
+<summary>Can a worker access the DOM?</summary>
+
+No. Workers have no `document` or `window`. Pass serializable data via `postMessage` and let the main thread update the DOM or React state.
+
+</details>
+
+<details>
+<summary>What is the difference between clone and transfer?</summary>
+
+`postMessage(data)` clones `data` into the other thread — both sides keep their copy. `postMessage(data, [arrayBuffer])` **transfers** the buffer: the sender’s copy is detached, avoiding a large memcpy. Use transfer for big binary payloads.
+
+</details>
+
+<details>
+<summary>Classic worker vs module worker?</summary>
+
+Classic workers load one script and use `importScripts` for more files. Module workers (`{ type: "module" }`) use `import`/`export` like normal ES modules. Modern bundlers usually emit module workers with `import.meta.url` or a `?worker` suffix.
+
+</details>
+
+<details>
+<summary>How do you clean up a worker in React?</summary>
+
+Create the worker in `useEffect`, store it in a ref, call `terminate()` in the effect cleanup. Avoid spawning unbounded workers per render or per keystroke.
+
+</details>

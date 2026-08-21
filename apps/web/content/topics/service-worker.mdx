@@ -1,0 +1,237 @@
+---
+title: Service Workers — offline caching, fetch proxy, and push
+description: How service workers sit between your app and the network — install/activate lifecycle, caching strategies, fetch interception, updates, and interview answers.
+slug: service-worker
+date: 2026-08-20
+tags:
+  - javascript
+  - browser
+  - web-apis
+  - pwa
+  - interview
+---
+
+A **service worker** is a script the browser runs in the background, separate from any page. It can **intercept network requests**, **cache assets**, and handle **push notifications**. It is the backbone of offline-capable PWAs.
+
+Unlike a Web Worker tied to one tab, a service worker is **origin-scoped**: one registration can serve every page on `https://example.com` until it is replaced or unregistered.
+
+## Registration and scope
+
+Pages register a service worker. The worker’s **scope** defaults to the directory of the script URL.
+
+```js
+// main.js — only runs over HTTPS (or localhost)
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker
+    .register("/sw.js", { scope: "/" })
+    .then((registration) => console.log("registered", registration.scope))
+    .catch((error) => console.error("sw failed", error));
+}
+```
+
+`sw.js` at the site root with default scope `/` controls fetch for the whole origin. A worker at `/app/sw.js` defaults to scope `/app/` unless you widen it with the `Service-Worker-Allowed` header.
+
+**Requirements:**
+
+- **Secure context** — HTTPS or `localhost`
+- The registering page must be **same-origin** with the worker script
+- The worker file must be served with a JavaScript MIME type
+
+## Lifecycle: install → waiting → activate
+
+Service workers install once per version and stay until a new version takes over.
+
+```js
+// sw.js
+const CACHE = "app-v1";
+const ASSETS = ["/", "/index.html", "/styles.css", "/app.js"];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE).then((cache) => cache.addAll(ASSETS)),
+  );
+  self.skipWaiting(); // optional: activate immediately instead of waiting
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))),
+    ),
+  );
+  self.clients.claim(); // optional: control open pages without reload
+});
+```
+
+| Event | When | Typical work |
+| --- | --- | --- |
+| **install** | New worker version first loads | Precache shell assets |
+| **activate** | Old worker replaced | Delete stale caches |
+| **fetch** | Page requests a resource | Serve from cache or network |
+| **push** | Push server sends message | Show notification |
+| **message** | Page posts to worker | Skip waiting, cache bust |
+
+`event.waitUntil(promise)` extends the event until async work finishes. If the promise rejects, the browser may discard that worker version.
+
+### Why “waiting” exists
+
+When you ship `sw-v2.js`, the new worker installs but **waits** until all tabs using the old worker close. Otherwise half your users would get v1 caches and half v2. Patterns to update faster:
+
+- `self.skipWaiting()` in `install` + `clients.claim()` in `activate`
+- Page sends `{ type: "SKIP_WAITING" }` via `registration.waiting.postMessage`
+- Show a “New version available — reload” banner
+
+## Fetch interception
+
+The `fetch` event is where offline behavior lives:
+
+```js
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+
+  if (request.method !== "GET") return;
+
+  event.respondWith(
+    caches.match(request).then((cached) => {
+      if (cached) return cached;
+      return fetch(request).then((response) => {
+        if (!response.ok) return response;
+        const copy = response.clone();
+        caches.open(CACHE).then((cache) => cache.put(request, copy));
+        return response;
+      });
+    }),
+  );
+});
+```
+
+`event.respondWith(promise)` tells the browser “use this Response instead of the default network fetch.” You must call it synchronously during the event handler (start the promise synchronously).
+
+### Common caching strategies
+
+| Strategy | Flow | Best for |
+| --- | --- | --- |
+| **Cache first** | Cache → network fallback | App shell, fonts, hashed static assets |
+| **Network first** | Network → cache fallback | API JSON that should be fresh |
+| **Stale while revalidate** | Return cache immediately, update cache in background | Avatars, non-critical data |
+| **Network only** | Always fetch | Auth endpoints, mutations |
+| **Cache only** | Never hit network | Offline fallbacks you precached |
+
+**Stale-while-revalidate sketch:**
+
+```js
+event.respondWith(
+  caches.open(CACHE).then(async (cache) => {
+    const cached = await cache.match(request);
+    const network = fetch(request).then((response) => {
+      if (response.ok) cache.put(request, response.clone());
+      return response;
+    });
+    return cached ?? network;
+  }),
+);
+```
+
+Match strategy to data freshness requirements. Wrong strategy causes stale dashboards or broken offline shells.
+
+## Talking to pages
+
+The service worker and pages communicate with `postMessage`:
+
+```js
+// page
+navigator.serviceWorker.controller?.postMessage({ type: "CLEAR_CACHES" });
+
+navigator.serviceWorker.addEventListener("message", (event) => {
+  if (event.data?.type === "RELOAD") window.location.reload();
+});
+```
+
+```js
+// sw.js
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "CLEAR_CACHES") {
+    event.waitUntil(caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))));
+  }
+});
+```
+
+`navigator.serviceWorker.controller` is `null` until the page is **controlled** — after first load with an active worker, or after `clients.claim()`.
+
+## Push notifications (overview)
+
+With user permission, a push service sends events to your worker:
+
+```js
+self.addEventListener("push", (event) => {
+  const data = event.data?.json() ?? { title: "Hello", body: "Update available" };
+  event.waitUntil(
+    self.registration.showNotification(data.title, { body: data.body, icon: "/icon-192.png" }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(clients.openWindow("/"));
+});
+```
+
+Push requires a server (VAPID keys, subscription storage) and is separate from caching — but it is a common reason teams add a service worker.
+
+## Debugging
+
+- **Chrome DevTools → Application → Service Workers** — status, skip waiting, unregister
+- **Application → Cache Storage** — inspect cached entries
+- Check **Update on reload** during development to avoid stale workers
+- `navigator.serviceWorker.getRegistration()` from the console
+
+A stuck worker is the #1 “my deploy didn’t show up” bug. Version your cache names (`app-v3`) and delete old keys in `activate`.
+
+## Service worker vs Web Worker
+
+| | Service Worker | Web Worker |
+| --- | --- | --- |
+| Lifetime | Until replaced | While owning page lives |
+| `fetch` event | Yes | No |
+| Controls pages | Yes (after claim) | No |
+| DOM | No | No |
+| Use case | Offline, push, background sync | CPU offload per tab |
+
+Do not run heavy computation in a service worker — it shares the browser’s service-worker process pool. Use a dedicated Web Worker from the page for parsing and keep the service worker thin (cache + routing).
+
+## Interview answers
+
+<details>
+<summary>What does a service worker do?</summary>
+
+It is a background script registered per origin that can intercept `fetch`, manage caches, receive push events, and sync in the background. It enables offline shells and faster repeat visits without blocking the main thread on every network call.
+
+</details>
+
+<details>
+<summary>Why must service workers use HTTPS?</summary>
+
+A worker that can rewrite every request is a powerful MITM inside the browser. Secure contexts (HTTPS or localhost) ensure the worker script was not swapped in transit. Browsers refuse registration on plain HTTP except localhost.
+
+</details>
+
+<details>
+<summary>What is the install / activate / waiting lifecycle?</summary>
+
+`install` precaches or prepares. If an old worker is still controlling tabs, the new one stays in **waiting** until those tabs close (unless you `skipWaiting`). `activate` runs when the new worker takes over — delete old caches here. `fetch` runs for controlled pages.
+
+</details>
+
+<details>
+<summary>Cache first vs network first?</summary>
+
+Cache first serves offline shells and immutable hashed assets fast. Network first keeps API data fresh and falls back to cache when offline. Pick per URL pattern — one strategy rarely fits an entire app.
+
+</details>
+
+<details>
+<summary>How do users get a new service worker version?</summary>
+
+Change `sw.js` (byte change). Browser detects update, installs new worker, often waits for tabs to close. Use `skipWaiting` + `clients.claim` or a user prompt to reload so they do not run stale caches forever.
+
+</details>
