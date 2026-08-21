@@ -6,6 +6,9 @@ import { SITE, getSiteUrl } from "./config";
 import { SkillSphere } from "./SkillSphere";
 import { SkillsGrid } from "./SkillsGrid";
 import { ContactCta } from "./ContactCta";
+import { ExperienceSpotlight } from "./ExperienceSpotlight";
+import { HomeSectionHeader } from "./HomeSection";
+import { WritingSpotlight } from "./WritingSpotlight";
 
 export function HomePage({
   posts,
@@ -114,56 +117,22 @@ export function HomePage({
         </div>
       </section>
 
-      <div className="grid gap-4 py-4 sm:gap-6 sm:py-8 lg:grid-cols-2">
+      <div className="grid gap-6 py-4 sm:gap-8 sm:py-8 lg:grid-cols-2 lg:items-stretch">
         {currentRole ? (
-          <section>
-            <div className="mb-3 flex items-end justify-between gap-3 sm:mb-4">
-              <div>
-                <Eyebrow>Experience</Eyebrow>
-                <h2 className="section-title text-xl sm:text-3xl">Recent focus</h2>
-              </div>
-              <a
-                href="/portfolio/experience"
-                className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-sky-600 sm:text-sm dark:text-sky-400"
-              >
-                Resume <ArrowRight size={14} />
-              </a>
-            </div>
-            <Card className="block p-3.5 sm:p-5">
-              <p className="text-[11px] text-zinc-500 sm:text-xs">{currentRole.period}</p>
-              <h3 className="mt-1 text-sm font-semibold tracking-tight sm:mt-2 sm:text-lg">
-                {currentRole.role} · {currentRole.company}
-              </h3>
-              <p className="mt-2 line-clamp-3 text-[13px] leading-snug text-zinc-600 sm:line-clamp-none sm:text-sm sm:leading-relaxed dark:text-zinc-400">
-                {currentRole.highlights[0]}
-              </p>
-            </Card>
+          <section className="flex min-w-0 flex-col">
+            <HomeSectionHeader
+              eyebrow="Experience"
+              title="Recent focus"
+              href="/portfolio/experience"
+              linkLabel="Resume"
+            />
+            <ExperienceSpotlight role={currentRole} />
           </section>
         ) : null}
 
-        <section>
-          <div className="mb-3 flex items-end justify-between gap-3 sm:mb-4">
-            <div>
-              <Eyebrow>Writing</Eyebrow>
-              <h2 className="section-title text-xl sm:text-3xl">Technical depth</h2>
-            </div>
-            <a href="/blog" className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-sky-600 sm:text-sm dark:text-sky-400">
-              All <ArrowRight size={14} />
-            </a>
-          </div>
-          <ul className="card divide-y divide-zinc-200/80 p-0 dark:divide-white/10">
-            {posts.map((post) => (
-              <li key={post.slug}>
-                <a href={`/blog/${post.slug}`} className="block px-3.5 py-3 transition hover:bg-zinc-50 sm:px-5 sm:py-3.5 dark:hover:bg-white/5">
-                  <p className="text-[11px] text-zinc-500">{post.date}</p>
-                  <h3 className="mt-0.5 text-sm font-semibold tracking-tight sm:text-base">{post.title}</h3>
-                  <p className="mt-1 hidden text-sm leading-relaxed text-zinc-600 sm:block dark:text-zinc-400">
-                    {post.description}
-                  </p>
-                </a>
-              </li>
-            ))}
-          </ul>
+        <section className="flex min-w-0 flex-col">
+          <HomeSectionHeader eyebrow="Writing" title="Technical depth" href="/blog" linkLabel="All notes" />
+          <WritingSpotlight posts={posts} />
         </section>
       </div>
 
