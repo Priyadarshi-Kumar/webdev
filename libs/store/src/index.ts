@@ -12,6 +12,7 @@ export {
   useAppearanceStore,
 } from "./appearance";
 export type { ColorPalette, PaletteId } from "./appearance";
+export { CURSOR_BOOTSTRAP } from "./cursor-bootstrap";
 export {
   LAST_ARTICLE_STORAGE_KEY,
   readLastArticle,

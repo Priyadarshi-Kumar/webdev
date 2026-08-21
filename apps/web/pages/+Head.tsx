@@ -1,4 +1,4 @@
-import { APPEARANCE_BOOTSTRAP } from "@webdev/store";
+import { APPEARANCE_BOOTSTRAP, CURSOR_BOOTSTRAP } from "@webdev/store";
 import { usePageContext } from "vike-react/usePageContext";
 import { SITE, getSiteUrl } from "@webdev/widgets/config";
 
@@ -29,6 +29,7 @@ export function Head() {
         rel="stylesheet"
       />
       <script dangerouslySetInnerHTML={{ __html: APPEARANCE_BOOTSTRAP }} />
+      <script dangerouslySetInnerHTML={{ __html: CURSOR_BOOTSTRAP }} />
     </>
   );
 }
