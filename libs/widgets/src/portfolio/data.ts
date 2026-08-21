@@ -12,10 +12,16 @@ export const profile: Profile = {
     "I own features end to end: design, implementation, performance, release, and the docs that help the next engineer move faster.",
   ],
   highlights: [
-    "Ship EDA tooling today: multi-tab schematics, xterm.js terminals, and mai-ai chat over server-sent events.",
-    "Led analytics dashboards at Tekion adopted by dealer partners — Teams dashboard alone drove 20% of total visits.",
+    "Ship EDA tooling today: multi-tab schematics, xterm.js terminals, and mai-ai chat over server-sent events and MCP.",
+    "Led analytics dashboards at Tekion adopted by dealer partners — the Teams dashboard alone drove 20% of total visits.",
     "Scaled tenant capacity 10× with virtualization, infinite scroll, and pagination (15 → 200 dealers per tenant).",
-    "Write the docs I wish existed: {notesCount}+ technical articles on React, Zustand, Nx, and browser APIs.",
+    "Stabilized a high-traffic analytics product — cut monthly support issues from 8–10 to near zero and grew adoption 30% in one year.",
+    "Own features end to end: design, implementation, cross-functional handoffs, release, and the follow-up docs.",
+    "Full-stack on production systems — React and TypeScript on the client; Node.js, Python, FastAPI, Socket.io, and SQL on the server.",
+    "Invest in quality gates — Jest unit tests and Playwright E2E across fintech onboarding and dealer analytics so releases stay shippable.",
+    "Deployed on AWS (S3, CloudFront, Route 53) with Terraform; onboarded banking partners at Setu and cut time-to-go-live.",
+    "Shipped consumer web at scale at Yulu — 35K+ journeys through the browser app with a 4.4/5 average user rating.",
+    "Write the docs I wish existed: {notesCount}+ technical articles on React, testing, Nx, browser APIs, and backend patterns.",
   ],
   skillGroups: [
     {
