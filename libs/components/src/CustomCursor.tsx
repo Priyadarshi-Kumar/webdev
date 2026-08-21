@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 const INTERACTIVE_SELECTOR =
   'a, button, [role="button"], [role="link"], label, summary, .chip, .btn-primary, .btn-ghost, .btn-resume, a.card, input[type="checkbox"], input[type="radio"], select, [data-cursor="pointer"]';
@@ -20,14 +21,11 @@ function isGrabTarget(target: EventTarget | null) {
 
 function shouldUseCustomCursor() {
   if (typeof window === "undefined") return false;
-  return (
-    window.matchMedia("(pointer: fine)").matches &&
-    !window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
+  return window.matchMedia("(pointer: fine)").matches;
 }
 
 export function CustomCursor() {
-  const [active, setActive] = useState(false);
+  const [enabled, setEnabled] = useState(false);
   const ringRef = useRef<HTMLDivElement>(null);
   const dotRef = useRef<HTMLDivElement>(null);
   const target = useRef({ x: -100, y: -100 });
@@ -40,11 +38,14 @@ export function CustomCursor() {
   const visible = useRef(false);
 
   useEffect(() => {
-    if (!shouldUseCustomCursor()) return;
+    if (shouldUseCustomCursor()) setEnabled(true);
+  }, []);
+
+  useEffect(() => {
+    if (!enabled) return;
 
     const root = document.documentElement;
     root.classList.add("custom-cursor-active");
-    setActive(true);
 
     const ringEl = ringRef.current;
     const dotEl = dotRef.current;
@@ -85,12 +86,6 @@ export function CustomCursor() {
       setCursorState();
     };
 
-    const onPointerLeave = (event: PointerEvent) => {
-      if (event.pointerType !== "mouse") return;
-      visible.current = false;
-      setCursorState();
-    };
-
     const onDocumentOut = (event: MouseEvent) => {
       const next = event.relatedTarget;
       if (next && next instanceof Node && document.documentElement.contains(next)) return;
@@ -105,10 +100,12 @@ export function CustomCursor() {
       setCursorState();
     };
 
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
     const tick = () => {
-      const ringLerp = hovering.current ? 0.22 : 0.16;
-      const dotLerp = 0.38;
-      const dotScale = pressing.current ? 0.72 : 1;
+      const ringLerp = reducedMotion ? 1 : hovering.current ? 0.24 : 0.18;
+      const dotLerp = reducedMotion ? 1 : 0.42;
+      const dotScale = pressing.current ? 0.75 : 1;
 
       ring.current.x += (target.current.x - ring.current.x) * ringLerp;
       ring.current.y += (target.current.y - ring.current.y) * ringLerp;
@@ -126,9 +123,11 @@ export function CustomCursor() {
     window.addEventListener("pointermove", onPointerMove, { passive: true });
     window.addEventListener("pointerdown", onPointerDown, { passive: true });
     window.addEventListener("pointerup", onPointerUp, { passive: true });
-    window.addEventListener("pointerleave", onPointerLeave);
     document.addEventListener("mouseout", onDocumentOut);
     document.documentElement.addEventListener("pointerenter", onPointerEnter, { passive: true });
+
+    visible.current = true;
+    setCursorState();
 
     return () => {
       root.classList.remove("custom-cursor-active");
@@ -136,18 +135,18 @@ export function CustomCursor() {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("pointerleave", onPointerLeave);
       document.removeEventListener("mouseout", onDocumentOut);
       document.documentElement.removeEventListener("pointerenter", onPointerEnter);
     };
-  }, []);
+  }, [enabled]);
 
-  if (!active) return null;
+  if (!enabled) return null;
 
-  return (
+  return createPortal(
     <>
       <div ref={ringRef} className="site-cursor-ring" aria-hidden />
       <div ref={dotRef} className="site-cursor-dot" aria-hidden />
-    </>
+    </>,
+    document.body,
   );
 }
