@@ -1,0 +1,404 @@
+---
+title: Jest — unit testing for JavaScript and React
+description: How Jest runs tests, matchers, mocks, async patterns, React Testing Library setup, and how to structure a test suite that stays fast and trustworthy. With examples and interview Q&A.
+slug: jest
+date: 2026-08-21
+tags:
+  - javascript
+  - jest
+  - tooling
+  - interview
+---
+
+**Jest** is a JavaScript test runner and assertion library. It finds your test files, runs them in isolated processes, reports pass/fail, and ships **mocking**, **snapshot**, and **coverage** out of the box. Most React apps still reach for Jest (often with **React Testing Library**) even as Vite projects increasingly use Vitest — the mental model is the same.
+
+This note covers how Jest works, how to write useful unit tests, and where teams usually get stuck.
+
+## What Jest is (and is not)
+
+**Jest is a batteries-included test runner.** You write `test` or `it` blocks with `expect` assertions. Jest executes them, compares actual vs expected, and prints a readable diff on failure.
+
+```js
+// sum.js
+export function sum(a, b) {
+  return a + b;
+}
+```
+
+```js
+// sum.test.js
+import { sum } from "./sum";
+
+describe("sum", () => {
+  it("adds two numbers", () => {
+    expect(sum(2, 3)).toBe(5);
+  });
+});
+```
+
+Run:
+
+```bash
+npx jest
+# or package.json: "test": "jest"
+```
+
+**Jest is not:**
+
+- A browser. By default it runs in **Node** with **jsdom** when you test React components (simulated DOM).
+- An E2E tool. Use Playwright or Cypress for full browser flows across real pages.
+- A linter or type checker. TypeScript errors are caught by `tsc`; Jest runs the compiled or transformed JS.
+- Magic integration coverage. You still choose what to test and how to mock boundaries.
+
+Use Jest for **units** (pure functions, hooks with RTL, reducers, utilities) and **narrow integration** (a component + its immediate children). Keep the pyramid: many fast unit tests, fewer E2E tests.
+
+## Project layout
+
+Common conventions:
+
+| Pattern | Example |
+| --- | --- |
+| Colocated | `Button.tsx` + `Button.test.tsx` |
+| `__tests__` folder | `src/__tests__/auth.test.ts` |
+| Suffix | `*.test.js`, `*.spec.js` |
+
+Jest discovers files matching `testMatch` in config (default: `**/__tests__/**/*.?(*.)+(spec|test).?([mc])[jt]s?(x)`).
+
+**Minimal `jest.config.js` (ESM + TypeScript):**
+
+```js
+/** @type {import('jest').Config} */
+export default {
+  testEnvironment: "jsdom",
+  extensionsToTreatAsEsm: [".ts", ".tsx"],
+  transform: {
+    "^.+\\.(ts|tsx)$": ["ts-jest", { useESM: true }],
+  },
+  moduleNameMapper: {
+    "^@/(.*)$": "<rootDir>/src/$1",
+  },
+  setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
+};
+```
+
+**`jest.setup.ts`** — run once per test file after the environment loads:
+
+```ts
+import "@testing-library/jest-dom";
+```
+
+Monorepos often use **one Jest config per package** or **Nx** `jest` executor with shared presets.
+
+## `describe`, `it`, and `expect`
+
+```js
+describe("formatPrice", () => {
+  it("formats whole dollars", () => {
+    expect(formatPrice(10)).toBe("$10.00");
+  });
+
+  it("rounds to two decimals", () => {
+    expect(formatPrice(10.456)).toBe("$10.46");
+  });
+});
+```
+
+- **`describe`** groups related tests (optional but helps readability).
+- **`it` / `test`** are aliases — one behavior per case.
+- **`expect(actual).matcher(expected)`** asserts an outcome.
+
+### Common matchers
+
+| Matcher | Use when |
+| --- | --- |
+| `toBe(value)` | Primitives, same reference (`===`) |
+| `toEqual(object)` | Deep equality for objects/arrays |
+| `toBeNull()` / `toBeUndefined()` | Nullish checks |
+| `toBeTruthy()` / `toBeFalsy()` | Coerced boolean |
+| `toContain(item)` | Array or string includes value |
+| `toThrow()` / `toThrow(Error)` | Function throws |
+| `toMatchObject(partial)` | Subset of object fields |
+| `resolves` / `rejects` | Promise outcomes |
+
+```js
+expect({ a: 1, b: 2 }).toEqual({ a: 1, b: 2 });
+expect([1, 2, 3]).toContain(2);
+expect(() => parseJson("not json")).toThrow();
+await expect(fetchUser(99)).rejects.toThrow("Not found");
+```
+
+Prefer **`toEqual`** for objects; **`toBe`** only when you mean identity.
+
+### `beforeEach` / `afterEach`
+
+Reset shared state so tests do not leak:
+
+```js
+let cache;
+
+beforeEach(() => {
+  cache = new Map();
+});
+
+afterEach(() => {
+  jest.clearAllMocks();
+});
+```
+
+Use **`beforeAll` / `afterAll`** for expensive one-time setup (DB connection in integration tests), not for mutable state unit tests depend on.
+
+## Mocking
+
+Jest’s mock system is why many teams stay on it — `jest.fn`, `jest.spyOn`, and `jest.mock` cover most boundaries.
+
+### `jest.fn` — fake functions
+
+```js
+const onSave = jest.fn();
+saveButton.click();
+expect(onSave).toHaveBeenCalledTimes(1);
+expect(onSave).toHaveBeenCalledWith({ id: 1, name: "Ada" });
+```
+
+`mockReturnValue`, `mockResolvedValue`, and `mockImplementation` control behavior:
+
+```js
+const fetchJson = jest.fn().mockResolvedValue({ ok: true });
+await loadUser(fetchJson);
+expect(fetchJson).toHaveBeenCalledWith("/api/user/1");
+```
+
+### `jest.spyOn` — wrap real methods
+
+```js
+const spy = jest.spyOn(console, "error").mockImplementation(() => {});
+logFailure();
+expect(spy).toHaveBeenCalled();
+spy.mockRestore();
+```
+
+Spy when you want to **observe** a real module but suppress side effects (logs, `Date.now`).
+
+### `jest.mock` — replace a module
+
+```js
+jest.mock("./api", () => ({
+  fetchUser: jest.fn(() => Promise.resolve({ id: 1, name: "Ada" })),
+}));
+
+import { fetchUser } from "./api";
+import { renderProfile } from "./Profile";
+
+it("shows the user name", async () => {
+  renderProfile(1);
+  expect(await screen.findByText("Ada")).toBeInTheDocument();
+});
+```
+
+**Hoisting:** `jest.mock` calls are hoisted to the top of the file. Put them before imports or use the factory form above.
+
+**Manual mocks:** `__mocks__/api.js` next to `api.js` for shared fake implementations.
+
+### What to mock
+
+| Mock | Skip mock |
+| --- | --- |
+| HTTP (`fetch`, axios) | Pure math/formatting |
+| Clock (`Date`, `setTimeout`) | Simple components with props only |
+| Random IDs (`crypto.randomUUID`) | Reducers, selectors |
+| Third-party SDKs | Your own small utilities |
+
+Mock at the **boundary** (network, filesystem), not every internal function — over-mocking makes tests brittle.
+
+## Async tests
+
+### Promises
+
+```js
+it("loads data", () => {
+  return fetchData().then((data) => {
+    expect(data.items).toHaveLength(3);
+  });
+});
+
+it("loads data with async/await", async () => {
+  const data = await fetchData();
+  expect(data.items).toHaveLength(3);
+});
+```
+
+If you use `async/await`, Jest waits for the returned promise to settle. Forgotten `await` is a common source of false greens.
+
+### `waitFor` (React Testing Library)
+
+```tsx
+import { render, screen, waitFor } from "@testing-library/react";
+
+it("shows users after fetch", async () => {
+  render(<UserList />);
+  await waitFor(() => {
+    expect(screen.getByText("Ada")).toBeInTheDocument();
+  });
+});
+```
+
+`findBy*` queries are `waitFor` + `getBy*` combined:
+
+```tsx
+expect(await screen.findByText("Ada")).toBeInTheDocument();
+```
+
+## Testing React components
+
+**React Testing Library** encourages testing what users see, not implementation details:
+
+```tsx
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { Counter } from "./Counter";
+
+it("increments the count", async () => {
+  const user = userEvent.setup();
+  render(<Counter />);
+  await user.click(screen.getByRole("button", { name: /increment/i }));
+  expect(screen.getByText("Count: 1")).toBeInTheDocument();
+});
+```
+
+Prefer **roles and accessible names** (`getByRole`, `getByLabelText`) over `getByTestId` unless there is no better query.
+
+### Providers and context
+
+Wrap components that need context:
+
+```tsx
+function renderWithTheme(ui: React.ReactElement) {
+  return render(<ThemeProvider>{ui}</ThemeProvider>);
+}
+```
+
+Or a shared `render` helper that includes router, query client, and store.
+
+### Hooks
+
+`@testing-library/react` `renderHook`:
+
+```tsx
+import { renderHook, act } from "@testing-library/react";
+import { useCounter } from "./useCounter";
+
+it("increments", () => {
+  const { result } = renderHook(() => useCounter());
+  act(() => result.current.inc());
+  expect(result.current.count).toBe(1);
+});
+```
+
+## Snapshots — use sparingly
+
+```js
+expect(tree).toMatchSnapshot();
+```
+
+Snapshots store serialized output on disk. They are fast to write and painful to maintain when overused. Good for **stable serializations** (error messages, small JSON). Bad for entire component trees that change every design tweak.
+
+Prefer explicit assertions on text and roles. If snapshots drift constantly, delete them.
+
+## Coverage
+
+```bash
+npx jest --coverage
+```
+
+Jest uses Istanbul to report line/branch/function coverage. **100% coverage is not a goal** — focus on critical paths and edge cases. Use coverage to find **untested branches**, not as a vanity metric.
+
+`coverageThreshold` in config can enforce minimums on CI:
+
+```js
+coverageThreshold: {
+  global: { branches: 70, functions: 75, lines: 80, statements: 80 },
+},
+```
+
+## Fake timers
+
+```js
+jest.useFakeTimers();
+
+it("debounces save", () => {
+  const save = jest.fn();
+  const debounced = debounce(save, 500);
+  debounced();
+  debounced();
+  expect(save).not.toHaveBeenCalled();
+  jest.advanceTimersByTime(500);
+  expect(save).toHaveBeenCalledTimes(1);
+});
+
+jest.useRealTimers();
+```
+
+Use fake timers for `setTimeout`, `setInterval`, and debounce — not for `requestAnimationFrame` unless configured.
+
+## Jest vs Vitest
+
+| | Jest | Vitest |
+| --- | --- | --- |
+| Runner | Jest | Vite-native |
+| Config | `jest.config.js` | Extends `vite.config` |
+| API | `describe` / `it` / `expect` | Same Jest-compatible API |
+| Speed | Good; can feel slow at scale | Often faster with Vite transforms |
+| Ecosystem | Largest, CRA default | Growing in Vite/Nx repos |
+
+This monorepo uses **Vitest** in `libs/utils` with the same `describe` / `expect` style. Skills transfer directly — matchers and mocking patterns are nearly identical.
+
+## Interview answers
+
+<details>
+<summary>What is Jest?</summary>
+
+A JavaScript test runner that discovers test files, executes them in Node (or jsdom for DOM tests), and provides assertions (`expect`), mocks (`jest.fn`, `jest.mock`), and optional coverage and snapshots. It is the default choice for many React and Node projects.
+
+</details>
+
+<details>
+<summary>What is the difference between <code>toBe</code> and <code>toEqual</code>?</summary>
+
+`toBe` uses `Object.is` — best for primitives and when you need the same reference. `toEqual` recursively compares objects and arrays by value. Use `toEqual` for `{ a: 1 }` and `toBe` for `true`, `42`, or a specific object reference.
+
+</details>
+
+<details>
+<summary>How do you mock a module in Jest?</summary>
+
+Call `jest.mock("./path", () => ({ ...fake exports }))` before importing the module under test. Jest hoists mocks. Use `jest.fn()` for individual functions or place a manual mock in `__mocks__`.
+
+</details>
+
+<details>
+<summary>Why use React Testing Library with Jest?</summary>
+
+Jest runs tests and asserts outcomes. RTL renders components and queries the DOM the way users interact — roles, labels, text. Together you test behavior, not internal state or component instance methods.
+
+</details>
+
+<details>
+<summary>How do you test async code?</summary>
+
+Return a promise from the test, use `async/await`, or use `expect(promise).resolves` / `.rejects`. For UI, use `waitFor` or `findBy*` queries so the test waits for the async update to appear.
+
+</details>
+
+<details>
+<summary>When should you not use snapshot tests?</summary>
+
+When output changes frequently (large component trees, CSS-heavy markup) or when assertions should be explicit about user-visible behavior. Snapshots are easy to approve blindly and hide real regressions.
+
+</details>
+
+<details>
+<summary>Jest vs Vitest — when would you pick each?</summary>
+
+Jest: mature ecosystem, existing CRA/Jest configs, teams already standardized on it. Vitest: Vite-based repos where you want faster feedback and shared transform config with the app. The test API is largely compatible.
+
+</details>
