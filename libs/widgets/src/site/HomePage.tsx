@@ -3,7 +3,7 @@ import { Card, Eyebrow, JsonLd, Tag } from "@webdev/components";
 import type { PostFrontmatter } from "@webdev/types";
 import { profile, projects } from "../portfolio/data";
 import { SITE, getSiteUrl } from "./config";
-import { SkillSphere } from "./SkillSphere";
+import { SkillsGrid } from "./SkillsGrid";
 
 export function HomePage({
   posts,
@@ -84,7 +84,7 @@ export function HomePage({
             ))}
           </dl>
         </div>
-        <SkillSphere skills={[...profile.stack, ...profile.skillGroups.flatMap((group) => group.skills)]} />
+        <SkillsGrid groups={profile.skillGroups} variant="compact" />
       </section>
 
       <section className="py-4 sm:py-8">
@@ -105,27 +105,8 @@ export function HomePage({
       <section className="py-4 sm:py-8">
         <Eyebrow>Skills</Eyebrow>
         <h2 className="section-title text-xl sm:text-3xl">Stack I ship with</h2>
-        <div className="mt-3 grid gap-3 sm:mt-6 sm:grid-cols-2 lg:grid-cols-3">
-          {profile.skillGroups.map((group) => (
-            <div
-              key={group.label}
-              className={`card p-4 sm:p-5 ${group.label === "Frontend" ? "sm:col-span-2 lg:col-span-2" : ""}`}
-            >
-              <h3 className="text-sm font-semibold tracking-tight text-zinc-950 sm:text-base dark:text-white">
-                {group.label}
-              </h3>
-              <ul className="mt-3 flex flex-wrap gap-2">
-                {group.skills.map((skill) => (
-                  <li
-                    key={skill}
-                    className="rounded-full border border-zinc-200/90 bg-zinc-50 px-3 py-1 text-sm leading-snug text-zinc-800 dark:border-white/10 dark:bg-zinc-950/70 dark:text-zinc-200"
-                  >
-                    {skill}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+        <div className="mt-3 sm:mt-6">
+          <SkillsGrid groups={profile.skillGroups} />
         </div>
       </section>
 

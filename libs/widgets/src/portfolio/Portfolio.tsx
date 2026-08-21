@@ -15,6 +15,7 @@ import type { Project } from "@webdev/types";
 import { SITE } from "../site/config";
 import { profile, projects } from "./data";
 import { downloadResume } from "./resume-download";
+import { SkillsGrid } from "../site/SkillsGrid";
 
 export const portfolioSections = [
   { id: "about", label: "About", href: "/portfolio/about", icon: UserRound },
@@ -147,25 +148,7 @@ function ExperiencePanel() {
 }
 
 function SkillsPanel() {
-  return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      {profile.technicalSkills.map((group) => (
-        <div key={group.label} className="rounded-2xl border border-zinc-200/80 bg-white/50 p-4 dark:border-white/10 dark:bg-zinc-950/40">
-          <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">{group.label}</p>
-          <ul className="mt-3 flex flex-wrap gap-1.5">
-            {group.skills.map((skill) => (
-              <li
-                key={skill}
-                className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-xs font-medium text-zinc-700 dark:border-white/10 dark:bg-zinc-950/60 dark:text-zinc-300"
-              >
-                {skill}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-    </div>
-  );
+  return <SkillsGrid groups={profile.technicalSkills} />;
 }
 
 function EducationPanel() {
