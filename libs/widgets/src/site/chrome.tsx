@@ -1,14 +1,14 @@
-import { BookOpen, Briefcase, Github, Linkedin, Mail, Menu, Settings, Wrench, X } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { Github, Linkedin, Mail, Settings } from "lucide-react";
+import { useEffect, useState } from "react";
 import { NavLink, ThemeToggle } from "@webdev/components";
 import { usePageContext } from "vike-react/usePageContext";
 import { SITE } from "./config";
 
 const nav = [
-  { href: "/portfolio/experience", label: "Portfolio", icon: Briefcase, match: (path: string) => path === "/portfolio" || path.startsWith("/portfolio/") },
-  { href: "/blog", label: "Blog", icon: BookOpen, match: (path: string) => path.startsWith("/blog") },
-  { href: "/tools", label: "Tools", icon: Wrench, match: (path: string) => path.startsWith("/tools") },
-] as const;
+  { href: "/portfolio/experience", label: "Portfolio" },
+  { href: "/blog", label: "Blog" },
+  { href: "/tools", label: "Tools" },
+];
 
 const footerNav = [
   { href: "/portfolio/experience", label: "Experience" },
@@ -18,185 +18,65 @@ const footerNav = [
   { href: "/settings", label: "Settings" },
 ];
 
-function isActive(path: string, match: (path: string) => boolean) {
-  return match(path);
-}
-
-function HeaderNavLink({
-  href,
-  active,
-  label,
-  icon: Icon,
-  onNavigate,
-  className = "",
-}: {
-  href: string;
-  active: boolean;
-  label: string;
-  icon?: typeof Briefcase;
-  onNavigate?: () => void;
-  className?: string;
-}) {
-  return (
-    <NavLink
-      href={href}
-      active={active}
-      onClick={onNavigate}
-      className={`site-header-link ${active ? "site-header-link-active" : ""} ${className}`.trim()}
-    >
-      {Icon ? <Icon size={16} strokeWidth={active ? 2.25 : 1.9} aria-hidden /> : null}
-      <span>{label}</span>
-    </NavLink>
-  );
-}
-
-function SettingsButton({ active, onNavigate, className = "" }: { active: boolean; onNavigate?: () => void; className?: string }) {
-  return (
-    <NavLink
-      href="/settings"
-      active={active}
-      onClick={onNavigate}
-      className={`site-header-icon-btn ${active ? "site-header-icon-btn-active" : ""} ${className}`.trim()}
-    >
-      <span className="sr-only">Settings</span>
-      <Settings size={16} aria-hidden />
-    </NavLink>
-  );
-}
-
 export function Header() {
   const { urlPathname } = usePageContext();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuId = useId();
   const settingsActive = urlPathname.startsWith("/settings");
 
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [urlPathname]);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMenuOpen(false);
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [menuOpen]);
-
-  const closeMenu = () => setMenuOpen(false);
-
   return (
-    <header className="site-header relative z-30 shrink-0 px-3 pt-3 pb-1 sm:px-4 sm:pt-4 sm:pb-0">
-      <div className="site-header-shell mx-auto max-w-6xl">
-        <div className="site-header-bar flex items-center justify-between gap-2 sm:gap-3">
-          <NavLink
-            href="/"
-            active={urlPathname === "/"}
-            className="site-header-brand group flex min-w-0 shrink items-center gap-2.5 sm:gap-3"
-          >
-            <span className="site-header-mark inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl font-display text-[13px] font-bold tracking-tight">
-              {SITE.shortName}
-            </span>
-            <span className="hidden min-w-0 sm:block">
-              <span className="block truncate font-display text-[15px] font-semibold leading-tight tracking-tight text-zinc-950 sm:text-base dark:text-white">
-                {SITE.name}
-              </span>
-              <span className="hidden text-[11px] font-medium tracking-wide text-zinc-500 sm:block dark:text-zinc-400">
-                {SITE.role}
-              </span>
-            </span>
-          </NavLink>
-
-          <nav aria-label="Primary" className="site-header-nav hidden items-center gap-1 md:flex">
-            {nav.map((item) => (
-              <HeaderNavLink
-                key={item.href}
-                href={item.href}
-                label={item.label}
-                active={isActive(urlPathname, item.match)}
-              />
-            ))}
-          </nav>
-
-          <div className="hidden items-center gap-1.5 md:flex">
-            <a href={`mailto:${SITE.email}`} className="site-header-cta">
-              <Mail size={14} aria-hidden />
-              <span>Let's talk</span>
-            </a>
-            <SettingsButton active={settingsActive} />
-            <ThemeToggle />
-          </div>
-
-          <div className="flex items-center gap-1 md:hidden">
-            <ThemeToggle />
-            <button
-              type="button"
-              className="site-header-menu-btn"
-              aria-expanded={menuOpen}
-              aria-controls={menuId}
-              onClick={() => setMenuOpen((open) => !open)}
-            >
-              <span className="sr-only">{menuOpen ? "Close menu" : "Open menu"}</span>
-              {menuOpen ? <X size={18} aria-hidden /> : <Menu size={18} aria-hidden />}
-            </button>
-          </div>
-        </div>
-
-        {menuOpen ? (
-          <button
-            type="button"
-            className="site-header-backdrop md:hidden"
-            aria-label="Close menu"
-            onClick={closeMenu}
-          />
-        ) : null}
-
-        <div
-          id={menuId}
-          className={`site-header-drawer md:hidden ${menuOpen ? "site-header-drawer-open" : ""}`}
-          hidden={!menuOpen}
+    <header className="relative z-20 shrink-0 px-3 pt-3 pb-1 sm:px-4 sm:pt-4 sm:pb-0">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 rounded-2xl border border-zinc-200/80 bg-white/70 px-3 py-2 shadow-[0_8px_30px_-18px_rgba(15,23,42,0.35)] backdrop-blur-xl sm:gap-4 sm:px-4 sm:py-2.5 dark:border-white/10 dark:bg-zinc-950/55">
+        <NavLink
+          href="/"
+          active={urlPathname === "/"}
+          className="group flex min-w-0 shrink items-center gap-2.5 sm:gap-3"
         >
-          <nav aria-label="Mobile primary" className="flex flex-col gap-1">
-            {nav.map((item) => (
-              <HeaderNavLink
+          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-zinc-950 to-zinc-800 font-display text-[13px] font-bold tracking-tight text-sky-300 shadow-[0_0_0_1px_rgba(56,189,248,0.35),0_8px_20px_-10px_rgba(56,189,248,0.8)] transition group-hover:shadow-[0_0_0_1px_rgba(56,189,248,0.7)] dark:from-sky-400 dark:to-cyan-300 dark:text-zinc-950 dark:shadow-none">
+            {SITE.shortName}
+          </span>
+          <span className="hidden min-w-0 sm:block">
+            <span className="block truncate font-display text-[15px] font-semibold leading-tight tracking-tight text-zinc-950 sm:text-base dark:text-white">
+              {SITE.name}
+            </span>
+            <span className="hidden text-[11px] font-medium tracking-wide text-zinc-500 sm:block dark:text-zinc-400">
+              {SITE.role}
+            </span>
+          </span>
+        </NavLink>
+        <nav className="flex min-w-0 max-w-[58vw] items-center gap-1 overflow-x-auto text-[13px] text-zinc-600 [-ms-overflow-style:none] [scrollbar-width:none] sm:max-w-none sm:overflow-visible sm:rounded-full sm:bg-zinc-100/80 sm:p-1 sm:text-sm dark:text-zinc-300 sm:dark:bg-white/5 [&::-webkit-scrollbar]:hidden">
+          {nav.map((item) => {
+            const active =
+              item.href === "/portfolio/experience"
+                ? urlPathname === "/portfolio" || urlPathname.startsWith("/portfolio/")
+                : urlPathname.startsWith(item.href);
+            return (
+              <NavLink
                 key={item.href}
                 href={item.href}
-                label={item.label}
-                icon={item.icon}
-                active={isActive(urlPathname, item.match)}
-                onNavigate={closeMenu}
-                className="site-header-drawer-link"
-              />
-            ))}
-            <HeaderNavLink
-              href="/settings"
-              label="Settings"
-              icon={Settings}
-              active={settingsActive}
-              onNavigate={closeMenu}
-              className="site-header-drawer-link"
-            />
-          </nav>
-
-          <div className="site-header-drawer-footer">
-            <a href={`mailto:${SITE.email}`} className="site-header-drawer-cta" onClick={closeMenu}>
-              <Mail size={16} aria-hidden />
-              Email me
-            </a>
-            <div className="flex flex-wrap gap-2">
-              <a href={SITE.socials.linkedin} className="site-header-drawer-chip" onClick={closeMenu}>
-                <Linkedin size={14} aria-hidden />
-                LinkedIn
-              </a>
-              <a href={SITE.socials.github} className="site-header-drawer-chip" onClick={closeMenu}>
-                <Github size={14} aria-hidden />
-                GitHub
-              </a>
-            </div>
-          </div>
-        </div>
+                active={active}
+                className={`min-h-10 rounded-full px-2.5 py-2 transition sm:min-h-0 sm:px-3.5 sm:py-1.5 ${
+                  active
+                    ? "bg-zinc-950 text-white shadow-sm dark:bg-white dark:text-zinc-950"
+                    : "hover:bg-zinc-200/80 hover:text-zinc-900 dark:hover:bg-white/10 dark:hover:text-white"
+                }`}
+              >
+                {item.label}
+              </NavLink>
+            );
+          })}
+          <NavLink
+            href="/settings"
+            active={settingsActive}
+            className={`inline-flex min-h-10 min-w-10 items-center justify-center rounded-full border p-2 transition sm:min-h-9 sm:min-w-9 ${
+              settingsActive
+                ? "border-sky-400/70 bg-sky-400/15 text-sky-700 dark:text-sky-300"
+                : "border-zinc-200/80 bg-white/70 text-zinc-600 hover:border-sky-400/70 hover:text-sky-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:text-sky-300"
+            }`}
+          >
+            <span className="sr-only">Settings</span>
+            <Settings size={16} aria-hidden />
+          </NavLink>
+          <ThemeToggle />
+        </nav>
       </div>
     </header>
   );
@@ -255,7 +135,7 @@ export function Footer() {
         <div className="grid gap-8 px-5 py-8 sm:px-8 sm:py-10 md:grid-cols-[minmax(0,1.4fr)_auto_auto] md:gap-10">
           <div className="min-w-0">
             <a href="/" className="inline-flex items-center gap-3">
-              <span className="site-header-mark inline-flex h-10 w-10 items-center justify-center rounded-xl font-display text-sm font-bold">
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-zinc-950 to-zinc-800 font-display text-sm font-bold text-sky-300 dark:from-sky-400 dark:to-cyan-300 dark:text-zinc-950">
                 {SITE.shortName}
               </span>
               <span>

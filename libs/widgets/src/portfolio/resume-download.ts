@@ -1,7 +1,6 @@
 import type { jsPDF } from "jspdf";
 import { SITE } from "../site/config";
 import { profile } from "./data";
-import { resumeContent } from "./resume-data";
 
 const PAGE_W = 612;
 const PAGE_H = 792;
@@ -26,6 +25,7 @@ function clean(value: string) {
     .replace(/×/g, "x")
     .replace(/’/g, "'")
     .replace(/“|”/g, '"')
+    .replace(/\{notesCount\}/g, "30+")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -143,28 +143,24 @@ function writeResumePdf(JsPDF: typeof jsPDF) {
 
     for (let index = 0; index < items.length; index += 1) {
       const item = items[index]!;
-      const piece = (lineStarted ? separator : "") + item.label;
-      const pieceWidth = doc.getTextWidth(piece);
 
-      if (lineX + pieceWidth > PAGE_W - MARGIN_X && lineStarted) {
+      if (lineStarted && lineX + doc.getTextWidth(separator + item.label) > PAGE_W - MARGIN_X) {
         y += LINE;
         ensure(LINE);
         lineX = MARGIN_X;
         lineStarted = false;
       }
 
-      if (!lineStarted) {
-        doc.textWithLink(item.label, lineX, y, { url: item.url });
-        lineX += doc.getTextWidth(item.label);
-        lineStarted = true;
-      } else {
+      if (lineStarted) {
         setType(9, "normal", MUTED);
         doc.text(separator, lineX, y);
         lineX += doc.getTextWidth(separator);
         setType(9, "normal", ACCENT);
-        doc.textWithLink(item.label, lineX, y, { url: item.url });
-        lineX += doc.getTextWidth(item.label);
       }
+
+      doc.textWithLink(item.label, lineX, y, { url: item.url });
+      lineX += doc.getTextWidth(item.label);
+      lineStarted = true;
     }
 
     y += 16;
@@ -188,18 +184,14 @@ function writeResumePdf(JsPDF: typeof jsPDF) {
 
   // Summary
   section("Summary");
-  textBlock(resumeContent.summary, 9.5);
-
-  // Highlights
-  section("Selected highlights");
-  for (const highlight of resumeContent.highlights) {
-    drawBullet(highlight);
+  for (const paragraph of profile.bio) {
+    textBlock(paragraph, 9.5);
   }
-  y += 2;
+  textBlock(`Core stack: ${profile.stack.join(", ")}.`, 9.5, CONTENT_W, 2);
 
-  // Experience
+  // Experience — full details from profile
   section("Experience");
-  for (const [jobIndex, job] of resumeContent.experience.entries()) {
+  for (const [jobIndex, job] of profile.experience.entries()) {
     ensure(36);
     setType(10.5, "bold");
     doc.text(clean(job.company), MARGIN_X, y);
@@ -207,20 +199,24 @@ function writeResumePdf(JsPDF: typeof jsPDF) {
     doc.text(clean(job.period), PAGE_W - MARGIN_X, y, { align: "right" });
     y += 12;
 
-    setType(9.5, "normal");
-    doc.text(clean(`${job.role}  |  ${job.location}`), MARGIN_X, y);
+    setType(9.5, "bold");
+    doc.text(clean(job.role), MARGIN_X, y);
     y += 11;
 
-    for (const bullet of job.bullets) {
-      drawBullet(bullet);
+    setType(9, "italic", MUTED);
+    doc.text(clean(job.location), MARGIN_X, y);
+    y += 11;
+
+    for (const highlight of job.highlights) {
+      drawBullet(highlight);
     }
 
-    y += jobIndex < resumeContent.experience.length - 1 ? 4 : 0;
+    y += jobIndex < profile.experience.length - 1 ? 4 : 0;
   }
 
   // Skills
   section("Technical skills");
-  for (const group of resumeContent.skills) {
+  for (const group of profile.skillGroups) {
     ensure(LINE * 2);
     setType(9.5, "bold");
     const label = `${clean(group.label)}: `;
