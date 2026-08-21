@@ -484,11 +484,122 @@ html {
   .home-writing-featured {
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35);
   }
+
+  .site-header-shell {
+    position: relative;
+  }
+
+  .site-header-bar {
+    @apply rounded-2xl border border-zinc-200/80 bg-white/75 px-3 py-2 shadow-[0_8px_30px_-18px_rgba(15,23,42,0.35)] backdrop-blur-xl sm:px-4 sm:py-2.5 dark:border-white/10 dark:bg-zinc-950/60;
+  }
+
+  .site-header-mark {
+    @apply bg-gradient-to-br from-zinc-950 to-zinc-800 text-sky-300 shadow-[0_0_0_1px_rgba(56,189,248,0.35),0_8px_20px_-10px_rgba(56,189,248,0.8)] transition dark:from-sky-400 dark:to-cyan-300 dark:text-zinc-950 dark:shadow-none;
+  }
+
+  .site-header-brand:hover .site-header-mark {
+    box-shadow: 0 0 0 1px rgb(56 189 248 / 0.7), 0 8px 20px -10px rgb(56 189 248 / 0.8);
+  }
+
+  .site-header-nav {
+    @apply rounded-full border border-zinc-200/70 bg-zinc-100/70 p-1 dark:border-white/10 dark:bg-white/5;
+  }
+
+  .site-header-link {
+    @apply inline-flex min-h-9 items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium text-zinc-600 transition dark:text-zinc-300;
+  }
+
+  .site-header-link:hover {
+    @apply text-zinc-950 dark:text-white;
+    background: rgb(255 255 255 / 0.55);
+  }
+
+  :where(.dark) .site-header-link:hover {
+    background: rgb(255 255 255 / 0.08);
+  }
+
+  .site-header-link-active {
+    @apply bg-zinc-950 text-white shadow-sm dark:bg-white dark:text-zinc-950;
+  }
+
+  .site-header-link-active:hover {
+    @apply bg-zinc-950 text-white dark:bg-white dark:text-zinc-950;
+  }
+
+  .site-header-cta {
+    @apply inline-flex min-h-9 items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-semibold text-zinc-950 transition active:scale-[0.98];
+    background-image: linear-gradient(to right, var(--theme-accent), var(--theme-accent-soft));
+    box-shadow: 0 8px 20px -12px rgb(var(--theme-accent-rgb) / 0.85);
+  }
+
+  .site-header-cta:hover {
+    background-image: linear-gradient(to right, var(--theme-accent-soft), color-mix(in srgb, var(--theme-accent-soft) 70%, white));
+  }
+
+  .site-header-icon-btn {
+    @apply inline-flex min-h-9 min-w-9 items-center justify-center rounded-full border border-zinc-200/80 bg-white/70 p-2 text-zinc-600 transition dark:border-white/10 dark:bg-white/5 dark:text-zinc-300;
+  }
+
+  .site-header-icon-btn:hover {
+    @apply border-sky-400/70 text-sky-600 dark:text-sky-300;
+  }
+
+  .site-header-icon-btn-active {
+    @apply border-sky-400/70 bg-sky-400/15 text-sky-700 dark:text-sky-300;
+  }
+
+  .site-header-menu-btn {
+    @apply inline-flex min-h-10 min-w-10 items-center justify-center rounded-full border border-zinc-200/80 bg-white/70 text-zinc-700 transition dark:border-white/10 dark:bg-white/5 dark:text-zinc-200;
+  }
+
+  .site-header-menu-btn:hover {
+    @apply border-sky-400/70 text-sky-700 dark:text-sky-300;
+  }
+
+  .site-header-backdrop {
+    @apply fixed inset-0 top-[4.25rem] z-[-1] bg-zinc-950/25 backdrop-blur-[2px] dark:bg-black/45;
+  }
+
+  .site-header-drawer {
+    @apply absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-2xl border border-zinc-200/80 bg-white/95 p-3 shadow-[0_20px_50px_-24px_rgba(15,23,42,0.55)] backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/95;
+    transform-origin: top center;
+    transform: scale(0.98) translateY(-4px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+
+  .site-header-drawer-open {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .site-header-drawer-link {
+    @apply min-h-11 w-full justify-start px-3 py-2.5 text-[15px];
+  }
+
+  .site-header-drawer-footer {
+    @apply mt-3 space-y-3 border-t border-zinc-200/80 pt-3 dark:border-white/10;
+  }
+
+  .site-header-drawer-cta {
+    @apply inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold text-zinc-950 transition active:scale-[0.98];
+    background-image: linear-gradient(to right, var(--theme-accent), var(--theme-accent-soft));
+  }
+
+  .site-header-drawer-chip {
+    @apply inline-flex min-h-10 items-center gap-2 rounded-full border border-zinc-200/80 bg-white/70 px-3 py-1.5 text-sm font-medium text-zinc-700 transition dark:border-white/10 dark:bg-white/5 dark:text-zinc-300;
+  }
+
+  .site-header-drawer-chip:hover {
+    @apply border-sky-400/60 text-sky-700 dark:text-sky-300;
+  }
 }
 
 #page-content {
   scroll-behavior: smooth;
-  scroll-padding-top: 1rem;
+  scroll-padding-top: 5.5rem;
   scroll-padding-bottom: max(1rem, env(safe-area-inset-bottom));
   opacity: 1;
   transition: opacity 0.18s ease;
