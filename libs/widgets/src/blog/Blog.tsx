@@ -502,7 +502,7 @@ export function BlogWorkspace({
               ← Back to {browseLabel}
             </a>
           </div>
-          <aside className="blog-rail relative z-20 hidden lg:-ml-6 lg:flex lg:h-[calc(100svh-14rem)] lg:max-h-[calc(100svh-14rem)] lg:w-56 lg:shrink-0 lg:flex-col lg:overflow-hidden lg:self-start">
+          <aside className="blog-rail sticky top-0 z-20 hidden lg:-ml-6 lg:flex lg:h-[calc(100svh-14rem)] lg:max-h-[calc(100svh-14rem)] lg:w-56 lg:shrink-0 lg:flex-col lg:overflow-hidden lg:self-start">
             <SearchField query={query} onQueryChange={setQuery} />
             <ScrollHints
               frameClassName="mt-4 min-h-0 lg:flex-1"
