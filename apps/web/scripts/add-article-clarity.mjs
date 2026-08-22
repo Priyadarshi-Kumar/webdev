@@ -32,6 +32,8 @@ function describeSection(heading, isGlossaryNote) {
   const rules = [
     [/roadmap|at a glance|cheat sheet|checklist|interview/, () => `Quick map of the whole note — skim first or review last.`],
     [/normal form|^1nf|^2nf|^3nf|^bcnf|^4nf|^5nf/, () => `What this normal form means and how to spot violations.`],
+    [/^step \d|^step 0/, () => `The example schema at this stage of the walkthrough.`],
+    [/^what problem|^why /, () => `The mess we are fixing — anomalies and duplicated data.`],
     [/vocabulary|mental model|cast|pipeline|layers/, () => `Terms and mental model before the examples.`],
     [/^what .+ is|^what is|^what are|^what's/, () => `Clear definition, then a minimal example.`],
     [/^how to|^how do|^how /, () => `Practical steps you can follow in order.`],
