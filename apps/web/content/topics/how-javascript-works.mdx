@@ -11,9 +11,16 @@ tags:
   - tooling
 ---
 
-JavaScript cannot open a file, draw a pixel, or send a packet **by itself**. The language spec (ECMAScript) only defines values, functions, objects, and how to evaluate source. Everything that touches the machine — DOM, network, timers, disks, GPUs — is a **host** capability. The engine evaluates JS. The host implements the APIs and talks to the operating system.
+## Read this in order
 
-If you keep those three layers separate, “how does `fetch` work?” stops being magic.
+- **Intro below** — Split language, engine, and host so later sections click.
+- **Engine** — How source becomes bytecode and machine code (parse, JIT, heap).
+- **Runtime** — Why one JS thread blocks the page, and how the event loop schedules work.
+- **APIs through the sandbox** — Trace `fetch`, DOM, and timers from JS to the OS; compare Node vs browser; finish with the summary diagram.
+
+JavaScript cannot open a file, draw a pixel, or send a packet **by itself**. ECMAScript only defines values, functions, objects, and how to run source. The DOM, network, timers, disks, and GPUs come from the **host** — the app that embeds the engine. The engine runs your JS. The host adds APIs and talks to the OS.
+
+Keep those three layers separate and "how does `fetch` work?" stops being magic.
 
 | Layer | What it is | Example |
 | --- | --- | --- |
@@ -21,9 +28,11 @@ If you keep those three layers separate, “how does `fetch` work?” stops bein
 | **Engine** | Program that parses and runs that language | V8 (Chrome, Node, Deno), SpiderMonkey (Firefox), JavaScriptCore (Safari) |
 | **Host / embedding** | The app that *owns* the engine and adds APIs | Chrome renderer, Node + libuv, a [Web Worker](/blog/web-worker) thread |
 
-Your `.js` file is language. V8 turns it into machine code. Chromium (or Node) decides what `fetch`, `setTimeout`, and `fs.readFile` mean, then uses OS syscalls, other processes, and C++ libraries to do the work. When the work finishes, the host **calls back into** the engine: run this function, here is the result.
+Your `.js` file is language. V8 compiles it to machine code. Chrome or Node defines what `fetch`, `setTimeout`, and `fs.readFile` do — using syscalls, other processes, and C++ libraries. When work finishes, the host **calls back into** the engine with the result.
 
 ## The engine: source to machine code
+
+This section walks through how a JS engine turns your source into bytecode and then into machine code on the CPU.
 
 Take Chrome / Node: **V8**. Firefox is SpiderMonkey; Safari is JavaScriptCore. The pipeline is the same idea.
 
@@ -97,6 +106,8 @@ If you only shipped V8, `console.log` would not exist until the embedder bound i
 
 ## The runtime: JS is single-threaded; the host is not
 
+Here you'll see why only one JS call stack runs at a time, and how the host's event loop schedules timers, promises, and clicks.
+
 One **isolate** (one engine instance) runs **one** JS call stack at a time on that thread. The browser’s **main thread** also paints, runs layout, and handles input. That is why a tight loop freezes the page: you never return to the host, so it cannot paint or run the next click.
 
 ```js
@@ -147,6 +158,8 @@ Order: `a`, `b`, `then`, `micro`, `timeout`. Both `then` and `queueMicrotask` ar
 That delay is the **host**. `setTimeout` does not live in V8. The embedder asks the OS (or a timer heap) to wake it, then later invokes the callback **as a task**.
 
 ## How a browser API reaches the system
+
+This section traces real Web APIs — timers, fetch, the DOM — from a JS call through C++ bindings to the operating system.
 
 A Web API is a **C++ (or Rust) implementation** plus a **binding** so it looks like a JS object. The glue is **Web IDL**: a contract that says `fetch` takes a `RequestInfo` and returns a `Promise<Response>`. The compiler generates the code that:
 
@@ -237,6 +250,8 @@ requestAnimationFrame(frame);
 
 ## Process model: why JS is locked in a sandbox
 
+You'll learn why the browser splits work across processes and why your tab's JavaScript cannot talk to the kernel directly.
+
 A modern browser is several processes. A sketch of Chromium:
 
 ```txt
@@ -251,6 +266,8 @@ Your tab’s JS runs in the **renderer**. The sandbox blocks most syscalls. Need
 `SharedArrayBuffer` and `Atomics` are still **memory in the engine**. They do not grant `write(/etc/passwd)`. Cross-origin isolation exists because shared memory is a side-channel risk, not because JS grew a syscall table.
 
 ## Same language, different hosts
+
+The same ECMAScript language shows up in Node, Deno, and Bun with different host APIs attached.
 
 Node uses V8 too. The host is **libuv** + Node bindings instead of Blink:
 
@@ -273,6 +290,8 @@ await readFile("./notes.md", "utf8");
 Deno and Bun are other embeddings: still JS-the-language, different host APIs and syscalls.
 
 ## A picture you can keep
+
+This section ties the whole stack together in one diagram you can remember.
 
 ```txt
   your source
