@@ -9,11 +9,27 @@ tags:
   - tooling
 ---
 
-A **Promise** is an object that represents a value you do not have yet. It is either **pending**, **fulfilled** (has a value), or **rejected** (has a reason). Those three states are the whole type. Everything else — `then`, `async`/`await`, `Promise.all` — is an API around that state machine plus the **microtask queue**.
+A **Promise** is an object for a value you do not have yet. It is **pending**, **fulfilled** (has a value), or **rejected** (has a reason). Those three states are the whole type. Everything else — `then`, `async`/`await`, `Promise.all` — is API built on that state machine and the **microtask queue**.
 
-This note is how that machine works, every method you actually use, how to keep async work parallel, and a small `then` implementation you can read. The event loop that *runs* those microtasks is in [How JavaScript actually works](/blog/how-javascript-works).
+This note walks through that machine, the methods you actually use, how to keep async work parallel, and a small `then` implementation you can read. The event loop that *runs* those microtasks is in [How JavaScript actually works](/blog/how-javascript-works).
+
+## Read this in order
+
+Read these sections in sequence — each one builds on the last.
+
+1. **[A promise is a state machine](#a-promise-is-a-state-machine)** — the three states every promise lives in
+2. **[How then is scheduled](#how-then-is-scheduled)** — what `then` does and why callbacks run later
+3. **[Microtasks in that section](#how-then-is-scheduled)** — why `then` beats `setTimeout(0)` and can block paint
+4. **[`then`, `catch`, `finally`](#then-catch-finally--the-real-rules)** — return values, errors, and chaining rules
+5. **[Creating promises](#creating-promises)** — `new Promise`, `Promise.resolve`, and newer helpers
+6. **[Static combinators](#static-combinators)** — `all`, `allSettled`, `race`, and `any`
+7. **[`async` / `await`](#async--await-is-then-with-a-stack)** — the same machinery with readable syntax
+
+After that, skim **[Optimising promise-heavy code](#optimising-promise-heavy-code)**, **[A tiny Promise](#a-tiny-promise-teaching-sketch)**, **[Pitfalls](#pitfalls-worth-burning-in)**, and the **[cheat sheet](#a-compact-cheat-sheet)** as reference.
 
 ## A promise is a state machine
+
+**In plain English:** every promise is pending, fulfilled, or rejected — and once it settles, it stays that way.
 
 ```js
 const p = new Promise((resolve, reject) => {
@@ -25,7 +41,7 @@ const p = new Promise((resolve, reject) => {
 Rules the spec enforces:
 
 - Starts **pending**.
-- `resolve(x)` moves it to **fulfilled** with value `x` — unless `x` is thenable (below).
+- `resolve(x)` moves it to **fulfilled** with value `x` — unless `x` is thenable (covered later).
 - `reject(e)` moves it to **rejected** with reason `e`.
 - After it settles, further `resolve` / `reject` are **no-ops**. There is no “unset.”
 - `then` callbacks run **after** the current stack clears, as jobs on the **microtask** queue — never in the same turn as `resolve()`.
@@ -41,6 +57,8 @@ console.log("sync");
 That delay is not a timer. `Promise.resolve` is already settled; `then` still waits one microtask so chaining stays consistent.
 
 ## How then is scheduled
+
+**In plain English:** each `then` creates a new promise and runs your callback later, on the microtask queue.
 
 When you call `p.then(onFulfilled, onRejected)`:
 
@@ -73,9 +91,66 @@ setTimeout(() => console.log("timeout"), 0);
 // timeout
 ```
 
-A long chain of `then` can starve rendering: the host drains **all** microtasks before the next paint. That is why a tight `Promise.resolve().then(loop)` can freeze the page as badly as a `while` loop.
+**Microtasks:** the host drains **all** microtasks before the next paint or the next task. A long chain of `then` can therefore starve rendering — a tight `Promise.resolve().then(loop)` can freeze the page as badly as a `while` loop.
+
+## `then`, `catch`, `finally` — the real rules
+
+**In plain English:** what you return or throw in a handler becomes the value or error for the next link in the chain.
+
+`p.catch(fn)` is `p.then(undefined, fn)`. `p.finally(fn)` runs `fn` on settle and **passes the original value or reason through**, unless `fn` throws or returns a rejected promise.
+
+### What you return becomes the next promise
+
+```js
+Promise.resolve(1)
+  .then((n) => n * 2)                    // fulfilled 2
+  .then((n) => Promise.resolve(n + 1))   // unwraps → 3
+  .then(() => {
+    throw new Error("boom");
+  })
+  .then(() => console.log("skip"))       // skipped
+  .catch((err) => {
+    console.log(err.message);            // boom
+    return "recovered";
+  })
+  .then((v) => console.log(v));          // recovered
+```
+
+- Return a value → next `then` fulfillment.
+- Return a promise → wait for it (flatten).
+- `throw` or return a rejected promise → next `catch` (or `then`’s second argument).
+- `catch` that returns a value **recovers**; the chain continues fulfilled.
+
+### Thenables
+
+Anything with a `.then` method can be adopted:
+
+```js
+const weird = {
+  then(resolve) {
+    resolve(42);
+  },
+};
+
+Promise.resolve(weird).then((n) => console.log(n)); // 42
+```
+
+That is why you should not put a `then` method on a random domain object. The promise algorithm will treat it as async.
+
+### `finally` does not get the value
+
+```js
+fetch(url)
+  .then((r) => r.json())
+  .finally(() => console.log("done regardless"))
+  .then((data) => use(data));
+```
+
+Use `finally` for cleanup (stop spinner). Do not expect the JSON there. If `finally` returns a pending promise, the chain waits for it; if it throws, the chain rejects.
 
 ## Creating promises
+
+**In plain English:** use these helpers when you need a promise without writing a full executor.
 
 ### `new Promise` — when you wrap a callback API
 
@@ -145,60 +220,9 @@ Promise.try(() => JSON.parse(text))
 
 The old `Promise.resolve().then(fn)` also catches throws, but it **always** waits a microtask. `Promise.try` still schedules async work as a promise; the point is one path for sync throw and async reject.
 
-## `then`, `catch`, `finally` — the real rules
-
-`p.catch(fn)` is `p.then(undefined, fn)`. `p.finally(fn)` runs `fn` on settle and **passes the original value or reason through**, unless `fn` throws or returns a rejected promise.
-
-### What you return becomes the next promise
-
-```js
-Promise.resolve(1)
-  .then((n) => n * 2)                    // fulfilled 2
-  .then((n) => Promise.resolve(n + 1))   // unwraps → 3
-  .then(() => {
-    throw new Error("boom");
-  })
-  .then(() => console.log("skip"))       // skipped
-  .catch((err) => {
-    console.log(err.message);            // boom
-    return "recovered";
-  })
-  .then((v) => console.log(v));          // recovered
-```
-
-- Return a value → next `then` fulfillment.
-- Return a promise → wait for it (flatten).
-- `throw` or return a rejected promise → next `catch` (or `then`’s second argument).
-- `catch` that returns a value **recovers**; the chain continues fulfilled.
-
-### Thenables
-
-Anything with a `.then` method can be adopted:
-
-```js
-const weird = {
-  then(resolve) {
-    resolve(42);
-  },
-};
-
-Promise.resolve(weird).then((n) => console.log(n)); // 42
-```
-
-That is why you should not put a `then` method on a random domain object. The promise algorithm will treat it as async.
-
-### `finally` does not get the value
-
-```js
-fetch(url)
-  .then((r) => r.json())
-  .finally(() => console.log("done regardless"))
-  .then((data) => use(data));
-```
-
-Use `finally` for cleanup (stop spinner). Do not expect the JSON there. If `finally` returns a pending promise, the chain waits for it; if it throws, the chain rejects.
-
 ## Static combinators
+
+**In plain English:** run several promises together — wait for all, wait for everyone to finish, or take the first result.
 
 ### `Promise.all` — fail fast, keep order
 
@@ -273,6 +297,8 @@ Rejects only if **all** reject, with an `AggregateError` whose `.errors` is the 
 
 ## `async` / `await` is `then` with a stack
 
+**In plain English:** `async`/`await` is the same `then` machinery — just easier to read line by line.
+
 ```js
 async function loadUser(id) {
   const res = await fetch(`/api/users/${id}`);
@@ -313,6 +339,8 @@ try {
 ```
 
 ## Optimising promise-heavy code
+
+**In plain English:** start independent work early, join with `all`, and avoid awaiting inside a loop when jobs do not depend on each other.
 
 ### Stop awaiting in a loop when work is independent
 
@@ -406,6 +434,8 @@ Floating promises in React (`useEffect(() => { load(); }, [])`) should `load().c
 
 ## A tiny Promise (teaching sketch)
 
+**In plain English:** a minimal implementation so you can see state, the queue, and flatten in code.
+
 Enough to see **state, queue, microtask, flatten**. Not spec-complete (no `finally`, no species, no async-iterator).
 
 ```js
@@ -474,6 +504,8 @@ Real `resolve` must **assimilate** thenables (`v.then(...)`) or you cannot `retu
 
 ## Pitfalls worth burning in
 
+**In plain English:** mistakes that look fine in a demo but bite in production.
+
 - **`then` is not the end of the work.** Forgetting `return` inside `then` fulfills with `undefined` and drops the inner promise.
 - **`new Promise(async (resolve) => { ... })`.** The async executor returns a promise the constructor ignores. Errors become unhandled rejections. Use an `async` function instead.
 - **Multiple `resolve` in the executor** — only the first counts; the rest are silent.
@@ -482,6 +514,8 @@ Real `resolve` must **assimilate** thenables (`v.then(...)`) or you cannot `retu
 - **Mixing callbacks and promises.** Convert at the boundary once (`promisify`), then stay in promise land.
 
 ## A compact cheat sheet
+
+**In plain English:** the methods you reach for most often, in one place.
 
 ```js
 const p = fetch(url).then((r) => r.json());
