@@ -9,13 +9,28 @@ tags:
   - hooks
 ---
 
-A React **component** is a function. A **render** is React calling that function and turning the object it returns into DOM. A **re-render** is the same call, again, with the same function, on the same “slot” in the tree — so <Term id="react-hook">hooks</Term> can line up with last time.
+A React **component** is a function. A **render** is React calling that function and turning the object it returns into DOM. A **re-render** is the same call again — same function, same slot in the tree — so <Term id="react-hook">hooks</Term> can line up with last time.
 
-React does not watch your JSX. It does not diff JavaScript source. It keeps a tree of **fibers** (one per component instance), and when something marks a fiber dirty, it runs that function again.
+React does not watch your JSX or diff your source code. It keeps a tree of **fibers** (one per component instance). When something marks a fiber dirty, React runs that function again.
 
-This note is when that happens, what the two phases do, then a **MiniReact** you can hold in your head. MiniReact is a teaching sketch: no <Term id="concurrent-rendering">concurrent rendering</Term>, no list keys, no <Term id="hydration">hydration</Term>. The real scheduler is more, the data model is the same.
+This note covers when that happens, what the two phases do, and a **MiniReact** you can hold in your head. MiniReact is a teaching sketch: no <Term id="concurrent-rendering">concurrent rendering</Term>, no list keys, no <Term id="hydration">hydration</Term>. The real scheduler does more; the data model is the same.
+
+## Read this in order
+
+**Plain English:** Start here if you want the whole story in one pass before diving into details.
+
+| Step | Section | What you will learn |
+| --- | --- | --- |
+| 1 | **A render is a function call** | What "render" actually means, and why `useState(0)` does not reset on every call |
+| 2 | **When React schedules another render** | The four reasons a component runs again (and what does *not* trigger one) |
+| 3 | **Internally: render, then commit** | Why React splits "figure out the UI" from "touch the DOM" |
+| 4 | **Hooks are a list on the fiber** | Where hook state lives, and why call order matters |
+| 5 | **MiniReact** | A tiny working React you can read in the browser |
+| 6 | **What real React adds** | The extra machinery on top of the sketch |
 
 ## A render is a function call
+
+**Plain English:** React calls your component like any other function. The difference is that React remembers the result and keeps hook state on the side.
 
 ```tsx
 function Counter({ label }: { label: string }) {
@@ -28,19 +43,19 @@ function Counter({ label }: { label: string }) {
 }
 ```
 
-First paint: React calls `Counter({ label: "Score" })`. `useState(0)` creates a box whose current value is `0`. The return value is a description of a button, not the button itself. React then **commits** that description to the DOM.
+**First paint:** React calls `Counter({ label: "Score" })`. `useState(0)` creates a box whose current value is `0`. The return value describes a button — it is not the button itself. React then **commits** that description to the DOM.
 
-Click: `setN` writes `1` into that same box and asks React to render `Counter` again. Second call: `useState(0)` does **not** reset to `0`. It returns the box that already holds `1`. The `0` is only the initial value for a box that does not exist yet.
+**Click:** `setN` writes `1` into that same box and asks React to render `Counter` again. On the second call, `useState(0)` does **not** reset to `0`. It returns the box that already holds `1`. The `0` is only the initial value for a box that does not exist yet.
 
 That is the whole trick: **the function is stateless; the fiber next to it is not.**
 
 ## When React schedules another render
 
-React re-renders a component when **its fiber is marked dirty**, then walks downward as needed.
+**Plain English:** React re-runs a component when its fiber is marked dirty. After that, it walks downward through the tree as needed.
 
 ### State or reducer on that fiber
 
-`setState`, `useReducer`’s `dispatch`, and the setters from `useSyncExternalStore` when the store emitted. This is the usual click / fetch / input path.
+`setState`, `useReducer`’s `dispatch`, and setters from `useSyncExternalStore` (when the store emitted) mark the fiber dirty. This is the usual click / fetch / input path.
 
 Updates in the same event are **batched**. Two `setN` calls in one click still produce **one** re-render.
 
@@ -53,7 +68,7 @@ function bump() {
 
 ### The parent rendered
 
-If `App` re-renders, React calls `App` again, then (by default) calls **every child function** `App` returned, even if that child’s props look the same. Props are just arguments. A new render of the parent is a new call of the child unless you skip it (`memo`, or the <Term id="react-compiler">React Compiler</Term> proving the output cannot change).
+If `App` re-renders, React calls `App` again, then (by default) calls **every child function** `App` returned — even when that child’s props look the same. Props are just arguments. A new parent render is a new child call unless you skip it (`memo`, or the <Term id="react-compiler">React Compiler</Term> proving the output cannot change).
 
 ```tsx
 function App() {
@@ -71,14 +86,16 @@ function App() {
 
 ### Context the component (or a hook it uses) reads
 
-`useContext(Theme)` subscribes that fiber to `Theme`. When the provider’s `value` is a new reference (React uses `Object.is`), every consumer re-renders. A parent that does not read the context can still re-render if it has state of its own; context does not skip parents.
+`useContext(Theme)` subscribes that fiber to `Theme`. When the provider’s `value` is a new reference (React uses `Object.is`), every consumer re-renders.
+
+A parent that does not read the context can still re-render if it has state of its own. Context does not skip parents.
 
 ### What does not, by itself, re-render a component
 
 - Mutating a field on an object already in state (`user.name = "Ada"`) — React never sees a `setState`.
 - Changing a ref (`ref.current = …`) — refs skip render on purpose.
-- Props changing **without** a parent render (they cannot: props arrive because the parent ran).
-- “The screen looks different” from CSS or DOM you edited by hand — React’s tree is unchanged.
+- Props changing **without** a parent render — they cannot; props arrive because the parent ran.
+- "The screen looks different" from CSS or DOM you edited by hand — React's tree is unchanged.
 
 `memo(Child)` skips the child function when props are `Object.is`-equal to last time. It does not skip the child if the child has its own state update, or if it reads a context that changed.
 
@@ -86,13 +103,15 @@ In development, Strict Mode may call your function **twice** for the same update
 
 ## Internally: render, then commit
 
-React 18+ still has two big phases. Concurrent features can **pause** the first one. The picture is the same.
+**Plain English:** React first calls your components and builds a new tree (render). Only when that tree is ready does it update the DOM (commit).
+
+React 18+ still has two big phases. Concurrent features can **pause** the first one, but the picture is the same.
 
 ### Render: call components, build a new tree
 
 For each dirty fiber, React:
 
-1. Sets “the current fiber” so hooks know which list to read.
+1. Sets "the current fiber" so hooks know which list to read.
 2. Calls `Component(props)`.
 3. Walks the returned element tree and **reconciles** it with the last tree: same `type` + same `key` → reuse the fiber and its hooks; different type → throw the old fiber away (state reset).
 4. Repeats for children.
@@ -101,11 +120,15 @@ This phase should be **pure**: compute the next UI. Touching the real DOM here f
 
 ### Commit: touch the DOM
 
-When the tree is ready, React applies the diffs: insert nodes, update attributes, remove nodes, then run layout effects, then paint, then `useEffect`. Effects are **not** the render. They run because a render committed.
+When the tree is ready, React applies the diffs: insert nodes, update attributes, remove nodes, then run layout effects, then paint, then `useEffect`.
 
-That split is why you can throw away a render (user typed again) without leaving half-updated DOM.
+Effects are **not** the render. They run because a render committed.
+
+That split is why React can throw away a render (user typed again) without leaving half-updated DOM.
 
 ## Hooks are a list on the fiber
+
+**Plain English:** Every hook call on a render reads or creates one cell in a list stored on the fiber. Same order every time, or things break.
 
 Each function component fiber has a linked list (or array) of hook cells: state, effect deps, memo, ref, …
 
@@ -117,11 +140,15 @@ fiber (Counter)
 
 On every render React walks that list in **call order**. `useState` #1 is always cell 0. That is why hooks cannot sit in `if` — the next render would read the wrong cell and you get a <Term id="stale-closure">stale</Term> or corrupted tree.
 
-`useState` is “read cell `i`, or create it with `initial`.” `setState` is “write the cell, mark this fiber dirty, schedule work.”
+`useState` is "read cell `i`, or create it with `initial`." `setState` is "write the cell, mark this fiber dirty, schedule work."
 
 ## MiniReact: enough to feel the internals
 
-The following runs in a browser. It supports function components, `useState`, host tags (`div`, `button`, `span`), strings as children, and **one** component root. No keys, no context, no fragments. That is enough to see: **hooks live on the instance, render is a call, commit patches the DOM.**
+**Plain English:** A small, runnable React in ~150 lines. Read it until "hooks live on the instance" and "same type, keep the fiber" feel obvious.
+
+The following runs in a browser. It supports function components, `useState`, host tags (`div`, `button`, `span`), strings as children, and **one** component root. No keys, no context, no fragments.
+
+That is enough to see: **hooks live on the instance, render is a call, commit patches the DOM.**
 
 ### createElement (what JSX becomes)
 
@@ -181,7 +208,7 @@ function flush() {
 }
 ```
 
-`queueMicrotask` is a toy batch: every `setState` in the same turn shares one `flush`. React’s batching is the same idea, with a real event / lane scheduler.
+`queueMicrotask` is a toy batch: every `setState` in the same turn shares one `flush`. React's batching is the same idea, with a real event / lane scheduler.
 
 ### Reconcile and commit
 
@@ -297,11 +324,13 @@ function App() {
 render(createElement(App, null), document.getElementById("root"));
 ```
 
-Click the button: `setState` writes the hook cell, `flush` calls `renderFiber` on **that** `Counter` fiber, `useState` returns `1`, `commitHost` updates the button text. `App` does not run. That matches React when only the child’s state changed.
+Click the button: `setState` writes the hook cell, `flush` calls `renderFiber` on **that** `Counter` fiber, `useState` returns `1`, `commitHost` updates the button text. `App` does not run. That matches React when only the child's state changed.
 
 If `App` had its own `useState` and you updated **App**, MiniReact would call `App` again, see `child.type === Counter`, **reuse** the child fiber, and `Counter` would re-render too — parent render pulls the child. Same as React without `memo`.
 
 ## What real React adds on top of this
+
+**Plain English:** MiniReact has the core idea. Production React adds scheduling, diffing, and effect timing on top.
 
 - **Fibers as a linked list** (`child`, `sibling`, `return`) so work can pause mid-tree.
 - **Lanes / priority** so a keystroke can jump ahead of a slow list.
@@ -309,6 +338,6 @@ If `App` had its own `useState` and you updated **App**, MiniReact would call `A
 - **Double buffering** (`current` vs `workInProgress`) so the screen keeps the last committed tree until commit.
 - **Effects** after commit, with dep arrays compared by `Object.is` on each item.
 
-Read MiniReact until the hook index and “same type, keep the fiber” feel obvious. Then the real source is the same story with a scheduler.
+Read MiniReact until the hook index and "same type, keep the fiber" feel obvious. Then the real source is the same story with a scheduler.
 
 Related: [React hook](/blog/react-hook), [stale closure](/blog/stale-closure), [concurrent rendering](/blog/concurrent-rendering), [React Compiler](/blog/react-compiler).
