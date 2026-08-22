@@ -9,11 +9,27 @@ tags:
   - tooling
 ---
 
-`this` is not a variable you declare, and it is not “the object the function lives on.” It is an **extra argument** the engine fills in **at the moment you call** the function. The function body just reads that slot.
+## Read this in order
 
-If you treat `this` like Python’s `self` that you pass yourself, the language suddenly makes sense. The rest of this note is that model, then a small implementation of `call`, `apply`, `bind`, and `new`.
+This note builds one idea at a time. Read the sections below in order — each one assumes the last.
 
-## How the engine fills this
+| Step | Section | What you learn |
+| --- | --- | --- |
+| 1 | **What this is** | `this` is not a variable you declare; the engine passes it when the function runs |
+| 2 | **The call site picks this** | How you write the call (`obj.fn()`, `fn()`, `new Fn()`) decides the value |
+| 3 | **The four bindings** | Implicit, explicit, `new`, and arrow — the four rules in one place |
+| 4 | **Implement call, apply, and bind** | Polyfill the helpers that set `this` for you |
+| 5 | **Implement new** | Polyfill construction — create an object and run the function on it |
+
+## What this is
+
+`this` is a hidden extra argument the engine fills in when your function runs — not a variable you declare, and not “the object the function lives on.”
+
+If you treat `this` like Python’s `self` that the caller passes in, the language suddenly makes sense. The function body just reads whatever value the engine put in that slot.
+
+## The call site picks this
+
+**Plain English:** The way you *call* the function — not where it was defined — decides what `this` is.
 
 ### A call is more than a list of arguments
 
@@ -53,7 +69,9 @@ greet();      // "hi undefined" (or throw in strict) — call site is greet()
 
 Same function object. Different call site. Different `this`. Losing the `obj.` on the left is the classic bug: you passed the function, not the method.
 
-## The four bindings, as code
+## The four bindings
+
+**Plain English:** Every call falls into one of four buckets. Here are the rules, then examples for each.
 
 Think of a tiny dispatcher the engine could run before entering the function. This is teaching code, not a real VM — but the rules match.
 
@@ -96,7 +114,7 @@ const counter = {
 counter.inc(); // this === counter
 ```
 
-The lookup `counter.inc` finds the function. The **call** `counter.inc()` is what sets `this` to `counter`. Nested objects use the **receiver**, not the object that stored the function:
+The lookup `counter.inc` finds the function. The **call** `counter.inc()` is what sets `this` to `counter`. Nested objects use the **receiver** — the object you actually called the method on — not necessarily the object that stored the function:
 
 ```js
 const proto = {
@@ -139,7 +157,7 @@ a.value; // 1
 a instanceof Box; // true
 ```
 
-`new` does four jobs: create an object, set its `[[Prototype]]` to `Fn.prototype`, call `Fn` with `this` bound to that object, then return the object (unless the constructor returned a different object).
+`new` does four jobs: create an object, wire its prototype to `Fn.prototype`, call `Fn` with `this` set to that object, then return the object (unless the constructor returned a different object).
 
 ### Arrows: no this slot
 
@@ -158,11 +176,11 @@ const panel = {
 };
 ```
 
-An arrow function does not have its own `this`, `arguments`, or `new.target`. Those names resolve in the enclosing environment. That is why `map` callbacks as arrows see the method’s `this`, and why you cannot `new` an arrow.
+An arrow function does not get its own `this`. It reuses whatever `this` meant in the surrounding code. That is why `map` callbacks as arrows see the method’s `this`, and why you cannot `new` an arrow.
 
 ## Implement call, apply, and bind
 
-You cannot replace the `this` **keyword**. You *can* implement the functions that **set** it, which is what interviews mean by “implement your own `this`.”
+**Plain English:** You cannot replace the `this` keyword, but you can write the functions that set it — which is what “implement your own `this`” usually means in interviews.
 
 The trick: temporarily hang the function on the target object, call it as a method (so implicit binding kicks in), then clean up.
 
@@ -194,7 +212,7 @@ intro.myCall({ name: "Ada" }, "engineer");
 // "Ada · engineer"
 ```
 
-`Symbol` as the property name avoids clobbering `target.call` or anything the object already has. `Object(thisArg)` boxes primitives so `"hi".myCall` still has a wrapper with a place to put the function — close to what `call` does in sloppy mode.
+`Symbol` as the property name avoids clobbering `target.call` or anything the object already has. `Object(thisArg)` wraps primitives so `"hi".myCall` still has a place to put the function — close to what `call` does in sloppy mode.
 
 ### myApply
 
@@ -239,7 +257,7 @@ Real `bind` also handles `new bound()`: constructing a bound function ignores th
 
 ## Implement new
 
-`new Fn(a, b)` is not magic either:
+**Plain English:** `new Fn(a, b)` is not magic — create an object, run the function with `this` pointing at it, then return the result.
 
 ```js
 function myNew(Fn, ...args) {
@@ -265,16 +283,18 @@ Object.getPrototypeOf(u) === User.prototype; // true
 
 If the constructor `return`s an object, that object wins. If it returns a primitive (or nothing), the engine keeps the instance it created. That is why `return this` in a constructor is redundant, and why `return { ok: true }` replaces the instance.
 
-## What “internally” means in the spec
+## What the spec adds (optional)
 
-The spec names for this story:
+**Plain English:** Under the hood, the engine stores `this` on the running function context before the first line of the body runs. You do not need these names day to day.
 
-- **`this` environment slot** — a value sitting on the function’s execution context, set before the first line of the body runs.
-- **`[[ThisMode]]`** — `lexical` (arrows), `strict`, or `global`.
-- **`[[ThisValue]]`** — the actual value, after `ToObject` in sloppy mode when it was a primitive.
-- **Reference** — `obj.fn` is not just the function. It is a Reference record: `{ base: obj, name: "fn" }`. Calling a Reference uses `base` as `this`. Calling a bare identifier has no base, so you get `undefined` / global.
+The spec uses a few labels for the same story:
 
-You do not need to memorize those names. Remember one sentence: **`this` is chosen from the call expression, then stored on the running execution context, then the body reads it.**
+- **`this` environment slot** — where the value lives for the duration of the call
+- **`[[ThisMode]]`** — `lexical` (arrows), `strict`, or `global`
+- **`[[ThisValue]]`** — the actual value (primitives get wrapped in sloppy mode)
+- **Reference** — `obj.fn` is not just the function; it carries `{ base: obj, name: "fn" }`. Calling a Reference uses `base` as `this`. A bare identifier has no base, so you get `undefined` / global.
+
+One sentence to remember: **`this` is chosen from the call expression, stored on the running context, then read by the body.**
 
 ```js
 // these two are the same idea
@@ -285,6 +305,8 @@ fn.call(obj, 1);
 Methods, callbacks, and `setTimeout(obj.fn, 0)` all drop the Reference: you extracted the function, so there is no `base`. Bind it, wrap it in an arrow, or call it as `obj.fn()` if you need that object.
 
 ## A compact cheat sheet
+
+**Plain English:** Quick lookup for the five call shapes you will see most often.
 
 ```js
 obj.method();           // this → obj
