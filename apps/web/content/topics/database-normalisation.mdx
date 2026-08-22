@@ -1,6 +1,6 @@
 ---
-title: Database normalisation — 1NF through BCNF (and beyond)
-description: Functional dependencies, anomalies, and a single bookstore example walked through 1NF, 2NF, 3NF, BCNF, 4NF, and 5NF — plus when denormalising is the right call.
+title: Database normalisation — 1NF through BCNF (plain English)
+description: Learn database normalisation step by step with one bookstore example. What 1NF, 2NF, 3NF, and BCNF mean, why they matter, and when to denormalise on purpose.
 slug: database-normalisation
 date: 2026-08-22
 tags:
@@ -11,54 +11,13 @@ tags:
 subject: backend
 ---
 
-**Normalisation** (US: *normalization*) is a set of tests you run on a relational table so each fact is stored **once**, in **one place**, for a **reason**. You do not “make tables smaller for fun.” You remove **update, insert, and delete anomalies** that come from mixing independent facts in the same row.
+**Database normalisation** means organising tables so each fact is stored **once**, in the **right** table. You are not “making more tables for fun.” You are fixing a messy spreadsheet before it causes bugs.
 
-The stages are ordered. **2NF assumes 1NF. 3NF assumes 2NF. BCNF is a stricter 3NF.** 4NF and 5NF show up less in day-to-day CRUD apps, but interviews still ask for the difference.
+This note walks one example — a **campus bookstore** — from a bad export to a clean schema. Read the sections in order: each normal form builds on the previous one.
 
-This note uses one running domain — a **campus bookstore** — then a second tiny schema where 3NF is not enough.
+## What problem are we solving?
 
-## Vocabulary you need first
-
-### Functional dependency
-
-Write `A → B` to mean: if two rows agree on `A`, they **must** agree on `B`. `A` **determines** `B`.
-
-```txt
-isbn → title          -- one ISBN, one title
-isbn → publisher_id
-publisher_id → publisher_name
-```
-
-`A` and `B` can be sets of columns: `{student_id, isbn} → purchased_at`.
-
-A **superkey** is any set of columns that determines **every** column in the table. A **candidate key** is a superkey with no spare column. You pick one candidate key as the **primary key**; the others stay **alternate keys**.
-
-A column is **prime** if it belongs to *any* candidate key, not only the primary key.
-
-### The three anomalies
-
-Suppose every sale row also copies the book title and the publisher’s phone:
-
-| sale_id | isbn | title | publisher_phone | qty |
-| --- | --- | --- | --- | --- |
-| 1 | 111 | SQL Internals | 555-0100 | 2 |
-| 2 | 111 | SQL Internals | 555-0100 | 1 |
-
-- **Update:** change the publisher phone in one sale, forget the other → two phones for one publisher.
-- **Insert:** you cannot record a new book until someone buys it (if `sale_id` is required).
-- **Delete:** the last sale of a book disappears and you lose the title too.
-
-Normal forms are a checklist that make those accidents structurally hard.
-
-### What “normal form” is *not*
-
-It is not “more tables = better.” A warehouse fact table that repeats `product_name` on purpose is **denormalised** for scan speed. You still *know* the dependency; you chose to violate 3NF. Normalisation is the default for **OLTP**. Analytics often undo it.
-
-## Unnormalised starting point
-
-### A spreadsheet that “works” until it does not
-
-Someone exports orders into one sheet. Repeating groups sit in the same cell:
+Imagine one Excel sheet for orders:
 
 ```txt
 order_id | customer           | books
@@ -66,25 +25,50 @@ order_id | customer           | books
 2        | Ada, ada@uni.edu   | 111 SQL Internals x1
 ```
 
-Problems stacked on problems: two facts in `customer`, a list in `books`, Ada’s email copied, titles copied next to ISBNs.
+Three things go wrong when you keep everything in one place:
 
-SQL has no honest type for “list of books in a cell.” You either split rows or you store JSON and give up relational integrity. First normal form is the split.
+| Problem | What happens |
+| --- | --- |
+| **Update anomaly** | Change Ada’s email in one row, forget another → two emails for one person |
+| **Insert anomaly** | You cannot add a new book until someone buys it |
+| **Delete anomaly** | Delete the last sale of a book → you lose the book title too |
 
-## 1NF — First normal form
+Normalisation is a **checklist** that makes those mistakes hard to repeat.
 
-### The rule
+## The roadmap (read in this order)
 
-A relation is in **1NF** if:
+| Step | Name | Plain English |
+| --- | --- | --- |
+| 1 | **1NF** | One value per cell. No lists like “book1, book2” in a single cell |
+| 2 | **2NF** | Every column depends on the **whole** primary key (important when the key has multiple columns) |
+| 3 | **3NF** | No column should depend on another **non-key** column |
+| 4 | **BCNF** | Every rule “X determines Y” must have X as a key (stricter 3NF) |
+| 5 | **4NF / 5NF** | Rare in day-to-day apps; mostly interview extras |
 
-1. Every intersection of row and column holds a **single** value (atomic for this model).
-2. There are **no repeating groups** (`book1`, `book2`, `book3` columns, or a comma list meant as several tuples).
-3. Rows are distinct; columns have unique names.
+**Mnemonic for 1NF–3NF:** “The key, the **whole** key, and **nothing but** the key.”
 
-“Atomic” is relative. `2026-08-22` is one date, not three columns, unless you query year/month/day independently as keys. A JSON array of ISBNs is **not** 1NF if you still mean “several order lines.”
+## Vocabulary (only what you need)
 
-### The bookstore in 1NF
+### Functional dependency
 
-One row per **order line**. Customer fields still repeat. That is allowed in 1NF.
+Write `A → B` to mean: **if two rows have the same `A`, they must have the same `B`.**
+
+```txt
+isbn → title           -- one ISBN always has one title
+customer_id → email    -- one customer id, one email
+```
+
+### Keys
+
+- **Primary key** — uniquely identifies a row (`order_id`, or `{order_id, line}`).
+- **Composite key** — primary key made of **two or more** columns.
+- **Candidate key** — any column set that could be the primary key.
+
+You need composite keys to understand **2NF**. Single-column keys automatically pass 2NF.
+
+## Step 0 — The messy table
+
+Someone flattened an order into one wide row per line item. Lists are gone, but facts are duplicated:
 
 | order_id | line | customer_id | customer_name | email | isbn | title | publisher | pub_city | qty | price |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -92,9 +76,28 @@ One row per **order line**. Customer fields still repeat. That is allowed in 1NF
 | 1 | 2 | C1 | Ada | ada@uni.edu | 222 | POSIX | O'Reilly | Sebastopol | 1 | 55 |
 | 2 | 1 | C1 | Ada | ada@uni.edu | 111 | SQL Internals | DataPress | Pune | 1 | 40 |
 
-Primary key: `{order_id, line}` (composite).
+Primary key: `{order_id, line}`.
+
+Problems still here:
+
+- Ada’s name and email repeat on every line.
+- Book title and publisher repeat whenever the same ISBN appears.
+- `pub_city` describes the **publisher**, not the book directly.
+
+We fix these one normal form at a time.
+
+## 1NF — First normal form
+
+### Rule
+
+1. **Atomic cells** — one value per column (no comma-separated lists).
+2. **No repeating groups** — no `book1`, `book2`, `book3` columns.
+3. **Unique column names**, distinct rows.
+
+Our table above is already in **1NF** (one row per order line). 1NF did not remove redundancy — it only stopped storing lists inside one cell.
 
 ```sql
+-- Still redundant, but valid 1NF
 CREATE TABLE order_line_1nf (
   order_id      int NOT NULL,
   line          int NOT NULL,
@@ -111,21 +114,25 @@ CREATE TABLE order_line_1nf (
 );
 ```
 
-Ada’s email lives in **every** line. `title` is determined by `isbn`, not by `{order_id, line}`. 1NF only killed the list. It did not kill redundancy.
+**Takeaway:** 1NF = “looks like a proper SQL table.” Redundancy can remain.
 
 ## 2NF — Second normal form
 
-### The rule
+### Rule
 
-A table is in **2NF** if it is in 1NF and **every non-prime column depends on the whole candidate key**, not a piece of it.
+Table is in 1NF **and** every non-key column depends on the **entire** primary key — not just part of it.
 
-Partial dependency is the 2NF sin: key is `(order_id, line)`, but `customer_name` depends only on something else, and `title` depends only on `isbn`.
+Our key is `{order_id, line}`. Some columns only depend on **part** of that key:
 
-If the primary key is a **single** column, 2NF is automatic (there is no “part” of the key). Composite keys are where people fail 2NF.
+| Column | Actually depends on | Problem |
+| --- | --- | --- |
+| `customer_name`, `email` | `customer_id` (via order) | Not on `{order_id, line}` directly |
+| `title`, `publisher`, `pub_city` | `isbn` | Not on `{order_id, line}` |
+| `qty`, `price` | `{order_id, line}` | OK — belongs on the line |
 
-### Split the bookstore
+That “depends on part of the key” issue is a **partial dependency**. 2NF removes it by splitting tables.
 
-Dependencies we actually have:
+### Dependencies we trust
 
 ```txt
 {order_id, line} → isbn, qty, price
@@ -134,29 +141,29 @@ customer_id      → customer_name, email
 isbn             → title, publisher, pub_city
 ```
 
-2NF says: facts about `isbn` do not belong in a table keyed by `{order_id, line}`. Facts about the customer do not either — though some of those are **transitive** (3NF), not partial. In practice you split both while you are here.
+### After 2NF — four tables
 
-**book** — key `isbn`:
+**customer** (key: `customer_id`):
+
+| customer_id | customer_name | email |
+| --- | --- | --- |
+| C1 | Ada | ada@uni.edu |
+
+**book** (key: `isbn`):
 
 | isbn | title | publisher | pub_city |
 | --- | --- | --- | --- |
 | 111 | SQL Internals | DataPress | Pune |
 | 222 | POSIX | O'Reilly | Sebastopol |
 
-**customer** — key `customer_id`:
-
-| customer_id | customer_name | email |
-| --- | --- | --- |
-| C1 | Ada | ada@uni.edu |
-
-**orders** — key `order_id`:
+**orders** (key: `order_id`):
 
 | order_id | customer_id |
 | --- | --- |
 | 1 | C1 |
 | 2 | C1 |
 
-**order_line** — key `{order_id, line}`:
+**order_line** (key: `{order_id, line}`):
 
 | order_id | line | isbn | qty | price |
 | --- | --- | --- | --- | --- |
@@ -193,30 +200,34 @@ CREATE TABLE order_line (
 );
 ```
 
-`price` on the line is a **snapshot** of what Ada paid that day. It is *not* `isbn → price` if prices change. That is a real modelling choice: current catalogue price lives on `book`; historical charge lives on `order_line`.
+**Note on `price`:** it lives on `order_line` because it is what Ada **paid that day**. If catalogue prices change later, history stays correct.
 
-`book` is still not 3NF: `pub_city` is really a fact about `publisher`.
+**Takeaway:** 2NF matters when your primary key has **multiple columns**. Split facts that belong to `isbn`, `customer_id`, etc. into their own tables.
 
 ## 3NF — Third normal form
 
-### The rule
+### Rule
 
-In 3NF, the table is in 2NF and **no non-prime column depends on another non-prime column**. In Codd’s wording: every non-prime attribute depends **only** on candidate keys — not transitively through some other description column.
+Table is in 2NF **and** no non-key column depends on **another** non-key column.
 
-The pattern is `K → A → B` where `K` is a key, `A` and `B` are non-keys, and you stored both `A` and `B` next to `K`. Then `B` is redundant: it follows from `A`.
+On `book`, we still have:
 
-Classic: `isbn → publisher → pub_city`. `pub_city` does not describe the book; it describes the publisher.
+```txt
+isbn → publisher → pub_city
+```
 
-### Publisher pulled out
+`pub_city` is really about the **publisher**, not the ISBN. That chain `key → A → B` where both `A` and `B` are non-keys is a **transitive dependency**.
 
-**publisher**:
+### Fix — add a publisher table
+
+**publisher** (key: `publisher_id`):
 
 | publisher_id | name | city |
 | --- | --- | --- |
 | P1 | DataPress | Pune |
 | P2 | O'Reilly | Sebastopol |
 
-**book** after 3NF:
+**book** (after 3NF):
 
 | isbn | title | publisher_id |
 | --- | --- | --- |
@@ -231,43 +242,43 @@ CREATE TABLE publisher (
 );
 
 CREATE TABLE book (
-  isbn          text PRIMARY KEY,
-  title         text NOT NULL,
-  publisher_id  text NOT NULL REFERENCES publisher (publisher_id)
+  isbn         text PRIMARY KEY,
+  title        text NOT NULL,
+  publisher_id text NOT NULL REFERENCES publisher (publisher_id)
 );
 ```
 
-Change Pune → Bengaluru **once**. Every DataPress book follows.
+Move DataPress from Pune to Bengaluru **once** — every book follows.
 
-A common 3NF mnemonic: **“the key, the whole key, and nothing but the key.”** 1NF is “a table.” 2NF is “the whole key.” 3NF is “nothing but the key.” It is incomplete (BCNF exists) but it is the right instinct for CRUD schemas.
+### 2NF vs 3NF (quick compare)
 
-### Transitive vs partial
-
-| Kind | Example | Fixed by |
+| | Partial (2NF) | Transitive (3NF) |
 | --- | --- | --- |
-| Partial | `{order_id, line}` key, `title` from `isbn` only | 2NF |
-| Transitive | `isbn → publisher_id → city` | 3NF |
+| **Pattern** | Composite key, column follows one part of key | Column follows another non-key column |
+| **Example** | `title` depends on `isbn`, not `{order_id, line}` | `pub_city` depends on `publisher`, not `isbn` |
+| **Fix** | Split `book`, `customer` out of line items | Split `publisher` out of `book` |
 
-If you only remember one interview sentence: **2NF is composite keys; 3NF is facts that depend on other facts, not on the key.**
+**Takeaway:** For most CRUD apps, **3NF is the design you want**: `customer`, `publisher`, `book`, `orders`, `order_line`.
 
 ## BCNF — Boyce–Codd normal form
 
-### The rule
+### Rule (simpler wording)
 
-**Every determinant is a candidate key.** For every non-trivial `X → Y` in the table, `X` must be a superkey.
+For every rule `X → Y` in the table, **`X` must be a key** (or the rule is trivial).
 
-3NF still allows `X → Y` when `Y` is **prime** (part of some candidate key) and `X` is not a superkey. That leftover is rare and confusing. BCNF forbids it.
+3NF allows one edge case BCNF does not. You rarely design toward it — but interviews love it.
 
-### Where 3NF is not enough
+### Classic example — student, subject, teacher
 
-Drop the bookstore. A department assigns **one teacher per (student, subject)**, and **each teacher teaches only one subject**.
+Business rules:
+
+- Each `(student, subject)` pair has **one** teacher.
+- Each **teacher** teaches **one** subject only.
 
 ```txt
 {student, subject} → teacher
 teacher            → subject
 ```
-
-Candidate keys: `{student, subject}` **and** `{student, teacher}` (if you know the student and the teacher, the subject follows).
 
 | student | subject | teacher |
 | --- | --- | --- |
@@ -275,20 +286,23 @@ Candidate keys: `{student, subject}` **and** `{student, teacher}` (if you know t
 | Ada | Networks | Dr Sen |
 | Gus | Databases | Dr Rao |
 
-This table is in **3NF**: the only non-prime column is `teacher` if you pick `{student, subject}` as primary key… except `teacher` is also prime, because `{student, teacher}` is a candidate key. `teacher → subject` has a **prime** dependent, so 3NF is satisfied. BCNF is not: `teacher` determines `subject` but `teacher` is not a superkey (Dr Rao can teach many students).
+Pick `{student, subject}` as primary key. Column `teacher` is not a key, but `teacher → subject`. Table can still be **3NF** (textbook edge case). It is **not BCNF**.
 
-Anomalies: rename “Databases” for Dr Rao and you must touch every student row. You cannot record “Dr Rao teaches Databases” until a student enrols.
+**Anomalies:**
 
-BCNF decomposition:
+- Rename “Databases” → update every student row with Dr Rao.
+- Cannot record “Dr Rao teaches Databases” until a student enrols.
 
-**teaches** — key `teacher`:
+### BCNF split
+
+**teaches** (key: `teacher`):
 
 | teacher | subject |
 | --- | --- |
 | Dr Rao | Databases |
 | Dr Sen | Networks |
 
-**enrolment** — key `{student, teacher}` (or `{student, subject}` once subject is implied):
+**enrolment** (key: `{student, teacher}`):
 
 | student | teacher |
 | --- | --- |
@@ -309,19 +323,17 @@ CREATE TABLE enrolment (
 );
 ```
 
-Join them back on `teacher` and you recover the original relation. That is the point of a **lossless** decomposition.
+Join on `teacher` to recover the original rows. That join is **lossless** — you do not invent or lose data.
 
-### 3NF vs BCNF in one line
+**Takeaway:** New OLTP schemas → aim for **BCNF**. The student/teacher example is the “gotcha” to recognise in interviews.
 
-Keep 3NF if you must preserve **all** functional dependencies in one table and BCNF would split a dependency across tables. In new OLTP designs, **aim for BCNF**. The leftover 3NF-not-BCNF schemas are textbook traps, not a goal.
+## 4NF and 5NF (interview extras)
 
-## 4NF — Fourth normal form
+Most product backends stop at 3NF/BCNF. Skim these if an interviewer asks “what comes after BCNF?”
 
-### The rule
+### 4NF — independent lists
 
-The table is in BCNF, and it has **no independent multivalued dependencies**.
-
-A **multivalued dependency** `A →→ B` means: for a given `A`, the set of `B` values is independent of the other columns. If Ada has skills SQL and Git, and languages `en` and `hi`, storing them in one table forces a **Cartesian product**.
+Problem: one row stores **two independent lists** that multiply against each other.
 
 | employee | skill | language |
 | --- | --- | --- |
@@ -330,115 +342,54 @@ A **multivalued dependency** `A →→ B` means: for a given `A`, the set of `B`
 | Ada | Git | en |
 | Ada | Git | hi |
 
-That is BCNF (the whole row is the key; there are no non-trivial FDs). It is not 4NF. Add skill `Linux` and you must insert **two** rows (one per language) or the independence is lost.
+Ada’s skills and languages are **independent** — storing both in one table forces a Cartesian product (2 skills × 2 languages = 4 rows).
 
-`employee →→ skill` and `employee →→ language` are two independent facts.
+**Fix:** separate `employee_skill` and `employee_language` tables.
 
-### Two tables
+### 5NF — join dependencies
 
-| employee | skill |
+Even rarer. A row `(agent, product, company)` might always be reconstructible from three pairwise tables **only when** a specific three-way business rule exists. Without that rule, splitting loses information.
+
+**Interview one-liner:** “5NF is about join dependencies — if you cannot state the three-way rule, you are not in a 5NF problem.”
+
+## How to normalise in an interview
+
+Follow this sequence:
+
+1. **List columns** and pick candidate keys.
+2. **List dependencies** — ask the business; do not guess `city → zip` if multiple zips share a city.
+3. **1NF** — split lists; one value per cell.
+4. **2NF** — remove columns that depend on part of a composite key.
+5. **3NF** — remove columns that depend on other non-key columns.
+6. **BCNF** — check every `X → Y` has `X` as a key.
+7. **Stop** unless they ask for 4NF/5NF.
+
+## When denormalisation is OK
+
+Normalisation is the default for **OLTP** (orders, users, payments). Sometimes you **copy** data on purpose:
+
+| Good reason | Example |
 | --- | --- |
-| Ada | SQL |
-| Ada | Git |
+| Read-heavy dashboard | `orders_today` with customer name baked in |
+| Historical snapshot | `order_line.price` at purchase time |
+| Data warehouse | Star schema with fact + dimension tables |
 
-| employee | language |
+| Bad reason | Why |
 | --- | --- |
-| Ada | en |
-| Ada | hi |
+| “Joins are slow” with no profiling | Add indexes and `EXPLAIN` first |
+| Copy email onto every line “for the UI” | No sync story → stale data |
 
-```sql
-CREATE TABLE employee_skill (
-  employee text NOT NULL,
-  skill    text NOT NULL,
-  PRIMARY KEY (employee, skill)
-);
-
-CREATE TABLE employee_language (
-  employee text NOT NULL,
-  language text NOT NULL,
-  PRIMARY KEY (employee, language)
-);
-```
-
-If skill and language were **not** independent — “SQL is certified only in English” — that is a different dependency and you would **keep** a three-column table. 4NF is about independence, not about “never have three columns.”
-
-## 5NF — Fifth normal form
-
-### The rule
-
-Also called **project-join normal form (PJNF)**. After 4NF, the only remaining issue is a **join dependency**: reconstructing the table always needs a join of **three or more** projections, not two.
-
-Example: agents sell products for companies, and the constraint is:
-
-> If agent *A* sells product *P*, and *P* is made by company *C*, and *A* represents *C*, then *A* sells *P* for *C*.
-
-Storing the triple `(agent, product, company)` then repeats combinations that are already implied by the three pairwise tables. 5NF says: keep the pairwise relations if that constraint is real.
-
-| agent | product | company |
-| --- | --- | --- |
-| Ada | DBMS | DataPress |
-| Ada | POSIX | O'Reilly |
-| Gus | DBMS | DataPress |
-
-If the business also insists “Ada represents DataPress,” “Ada sells DBMS,” “DataPress makes DBMS,” the triple is a join of those three. Decompose only when that **cyclic** constraint is actually enforced. Most product schemas never reach this; inventing three tables without the constraint **loses** information (a **lossy** split).
-
-Interview-level takeaway: **5NF is about join dependencies. If you cannot name the three-way rule, you are not in a 5NF problem.**
-
-## Forms you will hear but rarely design toward
-
-### DKNF
-
-**Domain/key normal form:** every constraint is a logical consequence of domain constraints and key constraints. It is a cleanliness goal, not a mechanical “split this column” recipe. Check constraints and keys should imply the business rules you care about.
-
-### 6NF
-
-Used in some **temporal / anchor** models: a table is in 6NF if it is in 5NF and cannot be decomposed further except into keys plus **one** attribute (often with a time interval). Think “one fact per row” for bi-temporal warehouses, not for an orders API.
-
-### Elementary key normal form (EKNF)
-
-Sits between 3NF and BCNF. Almost nobody asks for it outside a theory paper. If you can explain BCNF, skip EKNF unless the interviewer names it.
-
-## Walking an interview
-
-### Order of attack
-
-1. List attributes and **keys**.
-2. List **functional dependencies** (ask the business; do not guess `city → zip` if one city has many zips).
-3. 1NF: no lists, no `phone1`/`phone2`.
-4. 2NF: no column that depends on **part** of a composite key.
-5. 3NF: no `key → a → b` for non-keys `a`, `b`.
-6. BCNF: every left-hand side of an FD is a key.
-7. 4NF: independent multi-valued facts get their own tables.
-8. Stop unless they explicitly want 5NF.
-
-### Lossless join and dependency preservation
-
-A split is **lossless** if joining the pieces can only produce rows that were legal in the original. BCNF decompositions can be made lossless; they do not always **preserve** every FD in a single table (you may need the join to check `teacher → subject`). That tradeoff is why textbooks keep 3NF around.
-
-### Denormalise on purpose
-
-Fine reasons:
-
-- A **read model** / cache table for a dashboard (`orders_today` with customer name baked in).
-- A data warehouse **star**: `dim_customer` still normalised-ish; `fact_sale` repeats `date_key` and degenerate IDs.
-- An event **snapshot** (`order_line.price` as of purchase).
-
-Bad reasons:
-
-- “Joins are slow” with no index, no `EXPLAIN`, no row counts.
-- Copying `customer.email` onto every line “so the UI is easier” without a sync story.
-
-If you denormalise, name the **source of truth** and how updates flow (trigger, job, application write).
+If you denormalise, document the **source of truth** and how updates propagate (trigger, job, app write).
 
 ## Cheat sheet
 
-| Form | Extra requirement beyond the previous | Smell it fixes |
+| Form | What it adds | What smell it fixes |
 | --- | --- | --- |
-| 1NF | Atomic cells, no repeating groups | Lists in a cell, `item1`/`item2` columns |
-| 2NF | Full dependence on the **whole** key | Composite key, some columns follow one part |
-| 3NF | No transitive dependence of non-keys | `zip` stored next to `city` next to `id` |
-| BCNF | Every FD’s left side is a key | 3NF table with overlapping candidate keys |
-| 4NF | No independent `→→` in one table | Skill × language explosion |
-| 5NF | No non-trivial join dependency | Triple that is always the join of three pairs |
+| **1NF** | Atomic cells, no repeating groups | Lists in one cell, `item1`/`item2` columns |
+| **2NF** | Full dependence on whole key | Title on line item when key is `{order_id, line}` |
+| **3NF** | No non-key → non-key chains | City stored on book when it belongs to publisher |
+| **BCNF** | Every determinant is a key | Teacher → subject edge case |
+| **4NF** | Split independent multi-valued facts | Skill × language row explosion |
+| **5NF** | Split join-dependent triples | Rare; needs explicit three-way rule |
 
-The bookstore ends in 3NF/BCNF for ordinary FDs: `customer`, `publisher`, `book`, `orders`, `order_line`. That is the design you want behind a FastAPI or Node orders service. 4NF and 5NF are the follow-up when someone asks “and after BCNF?” — answer with independence of facts, then stop.
+The bookstore ends at **`customer`, `publisher`, `book`, `orders`, `order_line`** — a solid schema behind a [FastAPI](/blog/fastapi) or Node orders API.

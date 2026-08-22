@@ -15,6 +15,14 @@ tags:
 
 It is not a template-heavy “full website” framework like Django. You still pick your own ORM, auth, and queue. What you get is a fast way to ship a JSON API that a React or Vite app can call, with types that stay honest.
 
+## Read this in order
+
+1. **Mental model** — a route is a typed Python function
+2. **Path and query params** — validation from type hints
+3. **Request bodies** — Pydantic models for JSON in/out
+4. **Depends and middleware** — shared DB sessions, auth, CORS
+5. **Async and deployment** — when to use `async def`, how a Vite frontend calls the API
+
 ## Mental model
 
 ### A path operation is just a function
