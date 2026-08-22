@@ -13,7 +13,17 @@ The **npm registry** is a huge public catalog of JavaScript packages. The websit
 
 A <Term id="package-manager">package manager</Term> is the *client*. The registry is the *store*.
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **Same package, three clients** — Same package, three clients — explained with a short example.
+2. **Scopes and private registries** — Scopes and private registries — explained with a short example.
+3. **What a registry entry contains** — What a registry entry contains — explained with a short example.
+
 ## Same package, three clients
+
+**Plain English:** Same package, three clients — definition, example, and where you will see it.
 
 ```bash
 npm install react
@@ -33,6 +43,8 @@ npm view lodash description
 
 ## Scopes and private registries
 
+**Plain English:** Scopes and private registries — definition, example, and where you will see it.
+
 A **scope** is the `@org/` prefix. `@types/react` is DefinitelyTyped’s React types. Companies often publish `@acme/ui` to a private registry (GitHub Packages, npm org, Verdaccio) and point `.npmrc` at it:
 
 ```ini
@@ -44,6 +56,8 @@ A **scope** is the `@org/` prefix. `@types/react` is DefinitelyTyped’s React t
 Public packages still come from npmjs. Only `@acme/*` goes to GitHub. Never commit a real token — use an env var in <Term id="ci">CI</Term>.
 
 ## What a registry entry contains
+
+**Plain English:** What a registry entry contains — definition, example, and where you will see it.
 
 Each version is a tarball plus metadata: name, version, `dependencies`, `peerDependencies`, and which file is the package entry (`main` / `exports`).
 

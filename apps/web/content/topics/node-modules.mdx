@@ -11,7 +11,17 @@ tags:
 
 `node_modules` is the folder of groceries. After install, `import "react"` resolves to a directory in here (or, with Yarn PnP, to a zip that plays the same role).
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **Layout after install** — Layout after install — explained with a short example.
+2. **Do not commit it** — Do not commit it — explained with a short example.
+3. **Layout differs by manager** — Layout differs by manager — explained with a short example.
+
 ## Layout after install
+
+**Plain English:** Layout after install — definition, example, and where you will see it.
 
 ```txt
 my-app/
@@ -32,6 +42,8 @@ Node’s algorithm: start in the current file’s folder, look for `node_modules
 
 ## Do not commit it
 
+**Plain English:** Do not commit it — definition, example, and where you will see it.
+
 You almost never commit this folder. `.gitignore` should list `node_modules`. CI and teammates recreate it from the <Term id="lockfile">lockfile</Term>.
 
 ```gitignore
@@ -43,6 +55,8 @@ dist
 A committed `node_modules` is huge, OS-specific (optional native addons), and fights the lockfile. The exception is a tiny “vendor” copy for air-gapped builds — still unusual.
 
 ## Layout differs by manager
+
+**Plain English:** Layout differs by manager — definition, example, and where you will see it.
 
 npm and Yarn Classic **<Term id="hoisting">hoist</Term>** (flatten) the tree so one `react` sits at the top. pnpm uses a nested `.pnpm` store plus <Term id="hard-links">hard links</Term>. Yarn Berry can skip the folder entirely (<Term id="yarn-plug-n-play">Plug’n’Play</Term>).
 

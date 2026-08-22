@@ -15,7 +15,25 @@ tags:
 
 This site uses Zustand for theme (`libs/store/src/theme.ts`). Today that is one tiny store. The pattern below is how you grow to cart, auth, UI chrome, and feature flags without one 2,000-line file.
 
+## Read this in order
+
+Work through these sections in order:
+
+1. **What Zustand is (and is not)** — Clear definition, then a minimal example.
+2. **Core API** — The main API or commands you will actually use.
+3. **Zustand vs Context vs Redux** — Side-by-side comparison so you can pick the right tool.
+4. **The problem with one big store** — The problem with one big store — concepts first, then code.
+5. **Slice architecture** — Structure that scales as the app grows.
+6. **Middleware at the root only** — Structure that scales as the app grows.
+7. **Growing the store without pain** — Growing the store without pain — concepts first, then code.
+8. **This site today** — How this repo uses the idea today.
+9. **Testing slices** — How to test this behaviour in code.
+10. **Pitfalls** — What goes wrong and how to avoid it.
+11. **Interview questions** — Quick map of the whole note — skim first or review last.
+
 ## What Zustand is (and is not)
+
+**Plain English:** What Zustand is (and is not), explained simply with an example.
 
 **Zustand is an external store with a React hook.** State lives outside the component tree. Components subscribe to the pieces they need. When that piece changes, only those components re-render.
 
@@ -51,6 +69,8 @@ function Counter() {
 Reach for Zustand when **several unrelated components** need the same client state, or when state must be read **outside React** (router guards, imperative helpers, tests).
 
 ## Core API
+
+**Plain English:** The main API or commands you will actually use.
 
 | API | Job |
 | --- | --- |
@@ -104,6 +124,8 @@ This is exactly how `useThemeStore` works in `libs/store`.
 
 ## Zustand vs Context vs Redux
 
+**Plain English:** Side-by-side comparison so you can pick the right tool.
+
 | | Zustand | React Context | Redux Toolkit |
 | --- | --- | --- | --- |
 | Boilerplate | Low | Medium (provider + value memoization) | Higher |
@@ -121,6 +143,8 @@ This is exactly how `useThemeStore` works in `libs/store`.
 Under the hood, Zustand’s React bindings use <Term id="react-hook">hooks</Term> built on `useSyncExternalStore` — the same primitive React documents for subscribing to external stores without tearing.
 
 ## The problem with one big store
+
+**Plain English:** The problem with one big store — concepts first, then code.
 
 A single `create` call works until it does not:
 
@@ -149,6 +173,8 @@ Problems:
 The fix is **slices**: one module per domain, combined into one store (or a few stores).
 
 ## Slice architecture
+
+**Plain English:** Structure that scales as the app grows.
 
 A **slice** is a function that returns a piece of state + actions. TypeScript types each slice. A root file merges them.
 
@@ -293,6 +319,8 @@ export function logout() {
 
 ## Middleware at the root only
 
+**Plain English:** Structure that scales as the app grows.
+
 Add `persist`, `devtools`, and `immer` once when you create the store — not inside each slice.
 
 ```ts
@@ -344,6 +372,8 @@ updateQty: (id, qty) =>
 ```
 
 ## Growing the store without pain
+
+**Plain English:** Growing the store without pain — concepts first, then code.
 
 ### 1. Add a slice file, wire it once
 
@@ -412,6 +442,8 @@ Useful for Vike client hooks, router guards, or syncing to `document.documentEle
 
 ## This site today
 
+**Plain English:** How this repo uses the idea today.
+
 `libs/store/src/theme.ts` is a single-slice store in one file — appropriate for one concern:
 
 ```ts
@@ -438,6 +470,8 @@ export const useTheme = () => useAppStore((s) => s.theme);
 
 ## Testing slices
 
+**Plain English:** How to test this behaviour in code.
+
 Slices are plain functions — test without React:
 
 ```ts
@@ -461,6 +495,8 @@ beforeEach(() => {
 
 ## Pitfalls
 
+**Plain English:** Common mistakes and how to fix them.
+
 1. **Storing server data** — Zustand will not refetch when the tab refocuses. Pair with a data library; use Zustand for UI and session client state.
 2. **Wide selectors** — `useStore((s) => s)` subscribes to everything. Narrow or use `useShallow`.
 3. **Mutating state without Immer** — `set({ items: state.items.push(x) })` mutates in place. Return new arrays/objects.
@@ -468,6 +504,8 @@ beforeEach(() => {
 5. **Slice circular imports** — if `auth-slice` imports `cart-slice`, step back and use orchestration helpers.
 
 ## Interview questions
+
+**Plain English:** Short answers to reuse in interviews or reviews.
 
 ### Why Zustand over Context?
 

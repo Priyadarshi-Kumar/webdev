@@ -10,7 +10,17 @@ tags:
 
 A UI library often says: “I need React, but I will not ship my own.” That is `peerDependencies`. **You** install React once. Two Reacts in one page cause “Invalid hook call.”
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **Library vs app** — Side-by-side comparison so you can pick the right tool.
+2. **How managers treat peers** — Practical steps you can follow in order.
+3. **Example: the invalid hook call** — Runnable code or data to copy.
+
 ## Library vs app
+
+**Plain English:** Library vs app — definition, example, and where you will see it.
 
 ```json
 {
@@ -35,6 +45,8 @@ A UI library often says: “I need React, but I will not ship my own.” That is
 
 ## How managers treat peers
 
+**Plain English:** Follow these steps in order — each builds on the last.
+
 npm 7+ auto-installs peers (and can still duplicate in nested trees). pnpm prints `WARN` if a peer is missing and will not silently invent a second React at the root unless you allow it.
 
 ```bash
@@ -44,6 +56,8 @@ pnpm why react
 You want **one** `react` for `web` and every workspace that imports it. In Module Federation, the same idea is `shared: ["react", "react-dom"]`.
 
 ## Example: the invalid hook call
+
+**Plain English:** Example: the invalid hook call — definition, example, and where you will see it.
 
 ```tsx
 // fancy-button/src/Button.tsx

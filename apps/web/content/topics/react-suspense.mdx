@@ -10,7 +10,17 @@ tags:
 
 **Suspense** lets a parent declare “show this spinner until the child is ready.” Children can wait on `lazy()` code-splitting or on <Term id="react-use">`use(promise)`</Term>.
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **Code-splitting a heavy child** — Code-splitting a heavy child — explained with a short example.
+2. **Nested boundaries** — Nested boundaries — explained with a short example.
+3. **Errors are a different boundary** — Errors are a different boundary — explained with a short example.
+
 ## Code-splitting a heavy child
+
+**Plain English:** Code-splitting a heavy child — definition, example, and where you will see it.
 
 ```tsx
 import { lazy, Suspense } from "react";
@@ -29,6 +39,8 @@ export function Notes() {
 The browser downloads `Editor` only when `Notes` renders. Until the chunk arrives, users see the fallback — not a blank hole.
 
 ## Nested boundaries
+
+**Plain English:** Nested boundaries — definition, example, and where you will see it.
 
 Each boundary catches “wait” from **its** descendants. A slow widget should not block the whole page:
 
@@ -49,6 +61,8 @@ export function Dashboard() {
 ```
 
 ## Errors are a different boundary
+
+**Plain English:** Errors are a different boundary — definition, example, and where you will see it.
 
 You still need an **error** boundary for failures. Suspense is for “not ready yet,” not for “it threw.”
 

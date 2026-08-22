@@ -11,7 +11,17 @@ tags:
 
 In a <Term id="monorepo">monorepo</Term>, an app should depend on a sibling library **by workspace**, not by a published version you might forget to bump.
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **The `workspace:` specifier** — Why CI must install from the lockfile exactly.
+2. **Adding a workspace dependency** — Adding a workspace dependency — explained with a short example.
+3. **What goes wrong without it** — What goes wrong without it — explained with a short example.
+
 ## The `workspace:` specifier
+
+**Plain English:** The `workspace:` specifier — definition, example, and where you will see it.
 
 ```json
 {
@@ -33,6 +43,8 @@ import { HomePage } from "@webdev/widgets";
 
 ## Adding a workspace dependency
 
+**Plain English:** Adding a workspace dependency — definition, example, and where you will see it.
+
 ```bash
 pnpm --filter web add @webdev/utils --workspace
 ```
@@ -42,6 +54,8 @@ That writes `workspace:*` instead of downloading `@webdev/utils` from the public
 npm/Yarn workspaces also link local packages when the **name** matches a workspace; pnpm makes the protocol **explicit** in `package.json` so you cannot accidentally depend on a stale published copy.
 
 ## What goes wrong without it
+
+**Plain English:** What goes wrong without it — definition, example, and where you will see it.
 
 ```json
 {

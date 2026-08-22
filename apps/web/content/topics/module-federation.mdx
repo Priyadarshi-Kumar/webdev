@@ -12,7 +12,17 @@ tags:
 
 **Module Federation** is a bundler contract. A **remote** build writes a small entry file (`remoteEntry.js`) that lists what it **exposes** (`./MiniCart` → `src/MiniCart.tsx`). A **host** lists that file as a **remote**. At runtime the host `import("cart/MiniCart")` and the browser fetches that chunk from the remote’s origin.
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **Remote exposes, host consumes** — Remote exposes, host consumes — explained with a short example.
+2. **Shared React** — Shared React — explained with a short example.
+3. **Failure mode** — Failure mode — explained with a short example.
+
 ## Remote exposes, host consumes
+
+**Plain English:** Remote exposes, host consumes — definition, example, and where you will see it.
 
 ```ts
 // remote — exposes
@@ -47,11 +57,15 @@ In production, `entry` is a CDN URL (`https://cart.example.com/remoteEntry.js`).
 
 ## Shared React
 
+**Plain English:** Shared React — definition, example, and where you will see it.
+
 `shared` is how you avoid two Reacts (see <Term id="peer-dependency">peer dependency</Term>). Both apps must agree on a major. If the cart ships React 18 and the shell ships 19, federation cannot magically merge them.
 
 On Vite, use `@module-federation/vite` (the plugin Vite and VoidZero point at). Older tutorials use `@originjs/vite-plugin-federation`. Webpack has this built in as a plugin.
 
 ## Failure mode
+
+**Plain English:** Failure mode — definition, example, and where you will see it.
 
 If `remoteEntry.js` 404s, `import("cart/MiniCart")` rejects. Wrap in <Term id="react-suspense">Suspense</Term> **and** an error boundary so the shell still renders nav.
 

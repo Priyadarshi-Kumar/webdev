@@ -12,7 +12,16 @@ tags:
 
 **MCP** (Model Context Protocol) is how an AI app talks to *other programs* in a standard way: list what they can do, then call those capabilities with JSON.
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **The cast** — Terms and mental model before the examples.
+2. **A tiny tool call** — Runnable code or data to copy.
+
 ## The cast
+
+**Plain English:** The cast — definition, example, and where you will see it.
 
 ```txt
 you → host (Cursor, Claude, …) → MCP client → MCP server → files / APIs / DB
@@ -30,6 +39,8 @@ you → host (Cursor, Claude, …) → MCP client → MCP server → files / API
 It is not a model. It is not a replacement for REST in your product UI. It is the USB-C of **agent context**: one protocol, many servers.
 
 ## A tiny tool call
+
+**Plain English:** A tiny tool call — definition, example, and where you will see it.
 
 The host asks the server what exists (`tools/list`), then the model picks a name, and the host sends <Term id="json-rpc">JSON-RPC</Term>:
 

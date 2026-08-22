@@ -16,13 +16,23 @@ This note covers how Jest works, how to write useful unit tests, and where teams
 
 ## Read this in order
 
-1. **What Jest is** — runner, matchers, and how a test file runs
-2. **Matchers and structure** — `describe`, `it`, `expect`, common matchers
-3. **Mocks and modules** — isolate units without hitting the network
-4. **Async and React** — promises, timers, Testing Library patterns
-5. **Interview Q&A** — quick reference at the end
+Work through these sections in order:
+
+1. **What Jest is (and is not)** — Clear definition, then a minimal example.
+2. **Project layout** — Project layout — concepts first, then code.
+3. **`describe`, `it`, and `expect`** — `describe`, `it`, and `expect` — concepts first, then code.
+4. **Mocking** — Mocking — concepts first, then code.
+5. **Async tests** — How to test this behaviour in code.
+6. **Testing React components** — How to test this behaviour in code.
+7. **Snapshots — use sparingly** — Snapshots — use sparingly — concepts first, then code.
+8. **Coverage** — Coverage — concepts first, then code.
+9. **Fake timers** — How to test this behaviour in code.
+10. **Jest vs Vitest** — Side-by-side comparison so you can pick the right tool.
+11. **Interview answers** — Quick map of the whole note — skim first or review last.
 
 ## What Jest is (and is not)
+
+**Plain English:** What Jest is (and is not), explained simply with an example.
 
 **Jest is a batteries-included test runner.** You write `test` or `it` blocks with `expect` assertions. Jest executes them, compares actual vs expected, and prints a readable diff on failure.
 
@@ -62,6 +72,8 @@ Use Jest for **units** (pure functions, hooks with RTL, reducers, utilities) and
 
 ## Project layout
 
+**Plain English:** Project layout — concepts first, then code.
+
 Common conventions:
 
 | Pattern | Example |
@@ -98,6 +110,8 @@ import "@testing-library/jest-dom";
 Monorepos often use **one Jest config per package** or **Nx** `jest` executor with shared presets.
 
 ## `describe`, `it`, and `expect`
+
+**Plain English:** `describe`, `it`, and `expect` — concepts first, then code.
 
 ```js
 describe("formatPrice", () => {
@@ -156,6 +170,8 @@ afterEach(() => {
 Use **`beforeAll` / `afterAll`** for expensive one-time setup (DB connection in integration tests), not for mutable state unit tests depend on.
 
 ## Mocking
+
+**Plain English:** Mocking — concepts first, then code.
 
 Jest’s mock system is why many teams stay on it — `jest.fn`, `jest.spyOn`, and `jest.mock` cover most boundaries.
 
@@ -220,6 +236,8 @@ Mock at the **boundary** (network, filesystem), not every internal function — 
 
 ## Async tests
 
+**Plain English:** How to test this behaviour in code.
+
 ### Promises
 
 ```js
@@ -257,6 +275,8 @@ expect(await screen.findByText("Ada")).toBeInTheDocument();
 ```
 
 ## Testing React components
+
+**Plain English:** How to test this behaviour in code.
 
 **React Testing Library** encourages testing what users see, not implementation details:
 
@@ -304,6 +324,8 @@ it("increments", () => {
 
 ## Snapshots — use sparingly
 
+**Plain English:** Snapshots — use sparingly — concepts first, then code.
+
 ```js
 expect(tree).toMatchSnapshot();
 ```
@@ -313,6 +335,8 @@ Snapshots store serialized output on disk. They are fast to write and painful to
 Prefer explicit assertions on text and roles. If snapshots drift constantly, delete them.
 
 ## Coverage
+
+**Plain English:** Coverage — concepts first, then code.
 
 ```bash
 npx jest --coverage
@@ -329,6 +353,8 @@ coverageThreshold: {
 ```
 
 ## Fake timers
+
+**Plain English:** How to test this behaviour in code.
 
 ```js
 jest.useFakeTimers();
@@ -350,6 +376,8 @@ Use fake timers for `setTimeout`, `setInterval`, and debounce — not for `reque
 
 ## Jest vs Vitest
 
+**Plain English:** Side-by-side comparison so you can pick the right tool.
+
 | | Jest | Vitest |
 | --- | --- | --- |
 | Runner | Jest | Vite-native |
@@ -361,6 +389,8 @@ Use fake timers for `setTimeout`, `setInterval`, and debounce — not for `reque
 This monorepo uses **Vitest** in `libs/utils` with the same `describe` / `expect` style. Skills transfer directly — matchers and mocking patterns are nearly identical.
 
 ## Interview answers
+
+**Plain English:** Short answers to reuse in interviews or reviews.
 
 <details>
 <summary>What is Jest?</summary>

@@ -10,7 +10,17 @@ tags:
 
 **Affected** means: look at a git range, see which files changed, walk the <Term id="project-graph">project graph</Term> *upward*, and run the target only on that set.
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **Typical commands** — The main API or commands you will actually use.
+2. **How the git range works** — Practical steps you can follow in order.
+3. **Affected vs cache** — Side-by-side comparison so you can pick the right tool.
+
 ## Typical commands
+
+**Plain English:** Typical commands — definition, example, and where you will see it.
 
 ```bash
 pnpm nx affected -t test
@@ -21,6 +31,8 @@ pnpm nx print-affected -t test    # see the set without running
 Edit `libs/utils/src/json.ts` → `utils` tests run, and `web` build is affected because the app depends on utils. A change only in `README.md` (if it is not an input) may affect nothing.
 
 ## How the git range works
+
+**Plain English:** Follow these steps in order — each builds on the last.
 
 ```txt
 --base=origin/main   # the branch you will merge into
@@ -38,6 +50,8 @@ In <Term id="ci">CI</Term>, `--base` is usually the target branch of the PR so y
 On `main` itself after merge, there is no “PR diff.” Teams either run `run-many` on `main`, or compare to `HEAD~1`.
 
 ## Affected vs cache
+
+**Plain English:** Affected vs cache — definition, example, and where you will see it.
 
 **Affected** decides *who* to run. **Cache** decides *whether* that run is a no-op. Use both: skip unrelated projects, and skip identical rebuilds of the ones you still touch.
 

@@ -15,19 +15,22 @@ This note walks through that machine, the methods you actually use, how to keep 
 
 ## Read this in order
 
-Read these sections in sequence — each one builds on the last.
+Work through these sections in order:
 
-1. **[A promise is a state machine](#a-promise-is-a-state-machine)** — the three states every promise lives in
-2. **[How then is scheduled](#how-then-is-scheduled)** — what `then` does and why callbacks run later
-3. **[Microtasks in that section](#how-then-is-scheduled)** — why `then` beats `setTimeout(0)` and can block paint
-4. **[`then`, `catch`, `finally`](#then-catch-finally--the-real-rules)** — return values, errors, and chaining rules
-5. **[Creating promises](#creating-promises)** — `new Promise`, `Promise.resolve`, and newer helpers
-6. **[Static combinators](#static-combinators)** — `all`, `allSettled`, `race`, and `any`
-7. **[`async` / `await`](#async--await-is-then-with-a-stack)** — the same machinery with readable syntax
-
-After that, skim **[Optimising promise-heavy code](#optimising-promise-heavy-code)**, **[A tiny Promise](#a-tiny-promise-teaching-sketch)**, **[Pitfalls](#pitfalls-worth-burning-in)**, and the **[cheat sheet](#a-compact-cheat-sheet)** as reference.
+1. **A promise is a state machine** — A promise is a state machine — concepts first, then code.
+2. **How then is scheduled** — Practical steps you can follow in order.
+3. **`then`, `catch`, `finally` — the real rules** — `then`, `catch`, `finally` — the real rules — concepts first, then code.
+4. **Creating promises** — Creating promises — concepts first, then code.
+5. **Static combinators** — Static combinators — concepts first, then code.
+6. **`async` / `await` is `then` with a stack** — `async` / `await` is `then` with a stack — concepts first, then code.
+7. **Optimising promise-heavy code** — Optimising promise-heavy code — concepts first, then code.
+8. **A tiny Promise (teaching sketch)** — Runnable code or data to copy.
+9. **Pitfalls worth burning in** — What goes wrong and how to avoid it.
+10. **A compact cheat sheet** — Quick map of the whole note — skim first or review last.
 
 ## A promise is a state machine
+
+**Plain English:** A promise is a state machine — concepts first, then code.
 
 **In plain English:** every promise is pending, fulfilled, or rejected — and once it settles, it stays that way.
 
@@ -57,6 +60,8 @@ console.log("sync");
 That delay is not a timer. `Promise.resolve` is already settled; `then` still waits one microtask so chaining stays consistent.
 
 ## How then is scheduled
+
+**Plain English:** Follow these steps in order — each builds on the last.
 
 **In plain English:** each `then` creates a new promise and runs your callback later, on the microtask queue.
 
@@ -94,6 +99,8 @@ setTimeout(() => console.log("timeout"), 0);
 **Microtasks:** the host drains **all** microtasks before the next paint or the next task. A long chain of `then` can therefore starve rendering — a tight `Promise.resolve().then(loop)` can freeze the page as badly as a `while` loop.
 
 ## `then`, `catch`, `finally` — the real rules
+
+**Plain English:** `then`, `catch`, `finally` — the real rules — concepts first, then code.
 
 **In plain English:** what you return or throw in a handler becomes the value or error for the next link in the chain.
 
@@ -149,6 +156,8 @@ fetch(url)
 Use `finally` for cleanup (stop spinner). Do not expect the JSON there. If `finally` returns a pending promise, the chain waits for it; if it throws, the chain rejects.
 
 ## Creating promises
+
+**Plain English:** Creating promises — concepts first, then code.
 
 **In plain English:** use these helpers when you need a promise without writing a full executor.
 
@@ -221,6 +230,8 @@ Promise.try(() => JSON.parse(text))
 The old `Promise.resolve().then(fn)` also catches throws, but it **always** waits a microtask. `Promise.try` still schedules async work as a promise; the point is one path for sync throw and async reject.
 
 ## Static combinators
+
+**Plain English:** Static combinators — concepts first, then code.
 
 **In plain English:** run several promises together — wait for all, wait for everyone to finish, or take the first result.
 
@@ -297,6 +308,8 @@ Rejects only if **all** reject, with an `AggregateError` whose `.errors` is the 
 
 ## `async` / `await` is `then` with a stack
 
+**Plain English:** `async` / `await` is `then` with a stack — concepts first, then code.
+
 **In plain English:** `async`/`await` is the same `then` machinery — just easier to read line by line.
 
 ```js
@@ -339,6 +352,8 @@ try {
 ```
 
 ## Optimising promise-heavy code
+
+**Plain English:** Optimising promise-heavy code — concepts first, then code.
 
 **In plain English:** start independent work early, join with `all`, and avoid awaiting inside a loop when jobs do not depend on each other.
 
@@ -434,6 +449,8 @@ Floating promises in React (`useEffect(() => { load(); }, [])`) should `load().c
 
 ## A tiny Promise (teaching sketch)
 
+**Plain English:** Runnable code or data to copy.
+
 **In plain English:** a minimal implementation so you can see state, the queue, and flatten in code.
 
 Enough to see **state, queue, microtask, flatten**. Not spec-complete (no `finally`, no species, no async-iterator).
@@ -504,6 +521,8 @@ Real `resolve` must **assimilate** thenables (`v.then(...)`) or you cannot `retu
 
 ## Pitfalls worth burning in
 
+**Plain English:** Common mistakes and how to fix them.
+
 **In plain English:** mistakes that look fine in a demo but bite in production.
 
 - **`then` is not the end of the work.** Forgetting `return` inside `then` fulfills with `undefined` and drops the inner promise.
@@ -514,6 +533,8 @@ Real `resolve` must **assimilate** thenables (`v.then(...)`) or you cannot `retu
 - **Mixing callbacks and promises.** Convert at the boundary once (`promisify`), then stay in promise land.
 
 ## A compact cheat sheet
+
+**Plain English:** Short answers to reuse in interviews or reviews.
 
 **In plain English:** the methods you reach for most often, in one place.
 

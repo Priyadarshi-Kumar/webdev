@@ -9,19 +9,22 @@ tags:
   - tooling
 ---
 
+
 ## Read this in order
 
-This note builds one idea at a time. Read the sections below in order — each one assumes the last.
+Work through these sections in order:
 
-| Step | Section | What you learn |
-| --- | --- | --- |
-| 1 | **What this is** | `this` is not a variable you declare; the engine passes it when the function runs |
-| 2 | **The call site picks this** | How you write the call (`obj.fn()`, `fn()`, `new Fn()`) decides the value |
-| 3 | **The four bindings** | Implicit, explicit, `new`, and arrow — the four rules in one place |
-| 4 | **Implement call, apply, and bind** | Polyfill the helpers that set `this` for you |
-| 5 | **Implement new** | Polyfill construction — create an object and run the function on it |
+1. **What this is** — Clear definition, then a minimal example.
+2. **The call site picks this** — The call site picks this — concepts first, then code.
+3. **The four bindings** — The four bindings — concepts first, then code.
+4. **Implement call, apply, and bind** — Implement call, apply, and bind — concepts first, then code.
+5. **Implement new** — Implement new — concepts first, then code.
+6. **What the spec adds (optional)** — What the spec adds (optional) — concepts first, then code.
+7. **A compact cheat sheet** — Quick map of the whole note — skim first or review last.
 
 ## What this is
+
+**Plain English:** What this is, explained simply with an example.
 
 `this` is a hidden extra argument the engine fills in when your function runs — not a variable you declare, and not “the object the function lives on.”
 
@@ -29,7 +32,7 @@ If you treat `this` like Python’s `self` that the caller passes in, the langua
 
 ## The call site picks this
 
-**Plain English:** The way you *call* the function — not where it was defined — decides what `this` is.
+**Plain English:** The call site picks this — concepts first, then code.
 
 ### A call is more than a list of arguments
 
@@ -71,7 +74,7 @@ Same function object. Different call site. Different `this`. Losing the `obj.` o
 
 ## The four bindings
 
-**Plain English:** Every call falls into one of four buckets. Here are the rules, then examples for each.
+**Plain English:** The four bindings — concepts first, then code.
 
 Think of a tiny dispatcher the engine could run before entering the function. This is teaching code, not a real VM — but the rules match.
 
@@ -180,7 +183,7 @@ An arrow function does not get its own `this`. It reuses whatever `this` meant i
 
 ## Implement call, apply, and bind
 
-**Plain English:** You cannot replace the `this` keyword, but you can write the functions that set it — which is what “implement your own `this`” usually means in interviews.
+**Plain English:** Implement call, apply, and bind — concepts first, then code.
 
 The trick: temporarily hang the function on the target object, call it as a method (so implicit binding kicks in), then clean up.
 
@@ -257,7 +260,7 @@ Real `bind` also handles `new bound()`: constructing a bound function ignores th
 
 ## Implement new
 
-**Plain English:** `new Fn(a, b)` is not magic — create an object, run the function with `this` pointing at it, then return the result.
+**Plain English:** Implement new — concepts first, then code.
 
 ```js
 function myNew(Fn, ...args) {
@@ -285,7 +288,7 @@ If the constructor `return`s an object, that object wins. If it returns a primit
 
 ## What the spec adds (optional)
 
-**Plain English:** Under the hood, the engine stores `this` on the running function context before the first line of the body runs. You do not need these names day to day.
+**Plain English:** What the spec adds (optional) — concepts first, then code.
 
 The spec uses a few labels for the same story:
 
@@ -306,7 +309,7 @@ Methods, callbacks, and `setTimeout(obj.fn, 0)` all drop the Reference: you extr
 
 ## A compact cheat sheet
 
-**Plain English:** Quick lookup for the five call shapes you will see most often.
+**Plain English:** Short answers to reuse in interviews or reviews.
 
 ```js
 obj.method();           // this → obj

@@ -15,7 +15,22 @@ A **service worker** is a script the browser runs in the background, separate fr
 
 Unlike a Web Worker tied to one tab, a service worker is **origin-scoped**: one registration can serve every page on `https://example.com` until it is replaced or unregistered.
 
+## Read this in order
+
+Work through these sections in order:
+
+1. **Registration and scope** — Registration and scope — concepts first, then code.
+2. **Lifecycle: install → waiting → activate** — Lifecycle: install → waiting → activate — concepts first, then code.
+3. **Fetch interception** — Fetch interception — concepts first, then code.
+4. **Talking to pages** — Talking to pages — concepts first, then code.
+5. **Push notifications (overview)** — Push notifications (overview) — concepts first, then code.
+6. **Debugging** — Debugging — concepts first, then code.
+7. **Service worker vs Web Worker** — Side-by-side comparison so you can pick the right tool.
+8. **Interview answers** — Quick map of the whole note — skim first or review last.
+
 ## Registration and scope
+
+**Plain English:** Registration and scope — concepts first, then code.
 
 Pages register a service worker. The worker’s **scope** defaults to the directory of the script URL.
 
@@ -38,6 +53,8 @@ if ("serviceWorker" in navigator) {
 - The worker file must be served with a JavaScript MIME type
 
 ## Lifecycle: install → waiting → activate
+
+**Plain English:** Lifecycle: install → waiting → activate — concepts first, then code.
 
 Service workers install once per version and stay until a new version takes over.
 
@@ -82,6 +99,8 @@ When you ship `sw-v2.js`, the new worker installs but **waits** until all tabs u
 - Show a “New version available — reload” banner
 
 ## Fetch interception
+
+**Plain English:** Fetch interception — concepts first, then code.
 
 The `fetch` event is where offline behavior lives:
 
@@ -136,6 +155,8 @@ Match strategy to data freshness requirements. Wrong strategy causes stale dashb
 
 ## Talking to pages
 
+**Plain English:** Talking to pages — concepts first, then code.
+
 The service worker and pages communicate with `postMessage`:
 
 ```js
@@ -160,6 +181,8 @@ self.addEventListener("message", (event) => {
 
 ## Push notifications (overview)
 
+**Plain English:** Push notifications (overview) — concepts first, then code.
+
 With user permission, a push service sends events to your worker:
 
 ```js
@@ -180,6 +203,8 @@ Push requires a server (VAPID keys, subscription storage) and is separate from c
 
 ## Debugging
 
+**Plain English:** Debugging — concepts first, then code.
+
 - **Chrome DevTools → Application → Service Workers** — status, skip waiting, unregister
 - **Application → Cache Storage** — inspect cached entries
 - Check **Update on reload** during development to avoid stale workers
@@ -188,6 +213,8 @@ Push requires a server (VAPID keys, subscription storage) and is separate from c
 A stuck worker is the #1 “my deploy didn’t show up” bug. Version your cache names (`app-v3`) and delete old keys in `activate`.
 
 ## Service worker vs Web Worker
+
+**Plain English:** Side-by-side comparison so you can pick the right tool.
 
 | | Service Worker | Web Worker |
 | --- | --- | --- |
@@ -200,6 +227,8 @@ A stuck worker is the #1 “my deploy didn’t show up” bug. Version your cach
 Do not run heavy computation in a service worker — it shares the browser’s service-worker process pool. Use a dedicated Web Worker from the page for parsing and keep the service worker thin (cache + routing).
 
 ## Interview answers
+
+**Plain English:** Short answers to reuse in interviews or reviews.
 
 <details>
 <summary>What does a service worker do?</summary>

@@ -10,7 +10,17 @@ tags:
 
 A **hook** is a function whose name starts with `use`. You call it at the **top level** of a function component (or another hook). React matches calls by **order**, so do not put them in `if` or loops.
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **A minimal example** — Runnable code or data to copy.
+2. **The rules (why order matters)** — The rules (why order matters) — explained with a short example.
+3. **Built-in vs yours** — Side-by-side comparison so you can pick the right tool.
+
 ## A minimal example
+
+**Plain English:** A minimal example — definition, example, and where you will see it.
 
 ```tsx
 import { useState } from "react";
@@ -24,6 +34,8 @@ export function Counter() {
 `useState` is a hook. Each render, React returns the current `count` and a setter. The setter queues an update; React renders again with the new value.
 
 ## The rules (why order matters)
+
+**Plain English:** The rules (why order matters) — definition, example, and where you will see it.
 
 1. Top level only — not inside `if`, loops, or nested functions.
 2. React functions only (components and <Term id="custom-hook">custom hooks</Term>).
@@ -42,6 +54,8 @@ function Broken({ premium }: { premium: boolean }) {
 React stores hook state in a list. Skip a call, and `name` might read `bonus`’s slot. The linter (`eslint-plugin-react-hooks`) catches this.
 
 ## Built-in vs yours
+
+**Plain English:** Built-in vs yours — definition, example, and where you will see it.
 
 Built-ins you will meet: `useState`, `useEffect`, `useContext` / `use`, `useRef`, `useMemo`, `useCallback`, `useId`, `useSyncExternalStore`. A function you write that calls these is a custom hook — same rules, reusable logic.
 

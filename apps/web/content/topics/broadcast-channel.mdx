@@ -14,7 +14,22 @@ The **Broadcast Channel API** lets browsing contexts on the **same origin** send
 
 No `window.opener`. No `postMessage` target window. No polling `localStorage`. One string name, one event handler.
 
+## Read this in order
+
+Work through these sections in order:
+
+1. **What it is (and is not)** — Clear definition, then a minimal example.
+2. **API surface** — The main API or commands you will actually use.
+3. **What you can send** — What you can send — concepts first, then code.
+4. **Common patterns** — Structure that scales as the app grows.
+5. **React hook** — React hook — concepts first, then code.
+6. **Compared to other options** — Side-by-side comparison so you can pick the right tool.
+7. **Pitfalls** — What goes wrong and how to avoid it.
+8. **Interview questions** — Quick map of the whole note — skim first or review last.
+
 ## What it is (and is not)
+
+**Plain English:** What it is (and is not), explained simply with an example.
 
 **Broadcast Channel is a pub/sub bus scoped to one origin and one channel name.** Any `Window`, `Worker`, or `SharedWorker` on `https://mysite.com` can:
 
@@ -35,6 +50,8 @@ Every other context that opened the **same name** on the **same origin** receive
 If you only need one tab to tell an iframe it opened, `postMessage` is simpler. If every open tab should hear “user logged out” or “cart changed,” Broadcast Channel is the clean fit.
 
 ## API surface
+
+**Plain English:** The main API or commands you will actually use.
 
 | Member | What it does |
 | --- | --- |
@@ -76,6 +93,8 @@ Open both tabs. Each `postMessage` logs in the **other** tab (and in any additio
 
 ## What you can send
 
+**Plain English:** What you can send — concepts first, then code.
+
 `postMessage` accepts anything **structured-cloneable**:
 
 - Primitives, plain objects, arrays, `Date`, `Map`, `Set`, `ArrayBuffer`, typed arrays
@@ -97,6 +116,8 @@ channel.postMessage({
 Use a `type` field (or a small discriminated union in TypeScript) so receivers can switch on intent.
 
 ## Common patterns
+
+**Plain English:** Structure that scales as the app grows.
 
 ### Log out everywhere
 
@@ -162,6 +183,8 @@ Same API in both places. The worker does not need to know which tab exists.
 
 ## React hook
 
+**Plain English:** React hook — concepts first, then code.
+
 Wrap the channel in a hook so components subscribe and clean up on unmount.
 
 ```tsx
@@ -219,6 +242,8 @@ For a long-lived sender, keep one `BroadcastChannel` in a ref instead of opening
 
 ## Compared to other options
 
+**Plain English:** Side-by-side comparison so you can pick the right tool.
+
 | Approach | Same-origin tabs | Cross-origin | Server needed | Notes |
 | --- | --- | --- | --- | --- |
 | **Broadcast Channel** | Yes | No | No | Named bus; all subscribers hear every message |
@@ -230,6 +255,8 @@ For a long-lived sender, keep one `BroadcastChannel` in a ref instead of opening
 Reach for Broadcast Channel when the message is **ephemeral** and **every tab on the site** should hear it. Reach for `postMessage` when you opened a popup and need a direct reply. Reach for the server when devices or origins differ.
 
 ## Pitfalls
+
+**Plain English:** Common mistakes and how to fix them.
 
 1. **Forget `close()`** — Leaks listeners in SPAs that mount/unmount often. Always close in a `useEffect` cleanup (or `beforeunload` if you opened globally).
 2. **Same name, different meanings** — `"updates"` in one feature and another will collide. Prefix channel names: `"app:auth"`, `"app:cart"`.
@@ -245,6 +272,8 @@ function createChannel(name) {
 ```
 
 ## Interview questions
+
+**Plain English:** Short answers to reuse in interviews or reviews.
 
 ### What problem does Broadcast Channel solve?
 

@@ -12,7 +12,16 @@ tags:
 
 You opt in with `startTransition` / `useTransition` / `useDeferredValue`.
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **Keep the input fast** — Keep the input fast — explained with a short example.
+2. **Why tearing shows up** — The mess we are fixing — anomalies and duplicated data.
+
 ## Keep the input fast
+
+**Plain English:** Keep the input fast — definition, example, and where you will see it.
 
 ```tsx
 const [query, setQuery] = useState("");
@@ -45,6 +54,8 @@ const list = useMemo(() => filter(items, deferredQuery), [items, deferredQuery])
 ```
 
 ## Why tearing shows up
+
+**Plain English:** Why tearing shows up — definition, example, and where you will see it.
 
 Because a render can pause, reading `Date.now()` or `window.innerWidth` during render can <Term id="react-tearing">tear</Term>. Subscribe with `useSyncExternalStore` instead. Do not store “the current time” in a module-level variable and read it in two components during one pass.
 

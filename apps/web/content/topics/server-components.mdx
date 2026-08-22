@@ -10,7 +10,17 @@ tags:
 
 A **Server Component** runs on the server (or at build time). It can `await` a database or file. It sends UI to the client. It **cannot** use `useState`, `useEffect`, or browser APIs.
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **Fetch on the server** — Fetch on the server — explained with a short example.
+2. **Where hooks live** — Where hooks live — explained with a short example.
+3. **This site** — How this repo uses the idea today.
+
 ## Fetch on the server
+
+**Plain English:** Fetch on the server — definition, example, and where you will see it.
 
 ```tsx
 // Server Component (no "use client")
@@ -29,6 +39,8 @@ export async function PostList() {
 The browser never sees the database call — only HTML (or a compact RSC payload). Secrets stay on the server.
 
 ## Where hooks live
+
+**Plain English:** Where hooks live — definition, example, and where you will see it.
 
 A file with `"use client"` is a Client Component. That is where hooks live. Pass data down as props; do not fetch in `useEffect` if a Server Component can do it.
 
@@ -65,6 +77,8 @@ export async function Post({ id }: { id: string }) {
 You can pass a Server Component as `children` into a client wrapper. You cannot import a Server Component **into** a client file and call it as a function — the client bundle cannot run `db`.
 
 ## This site
+
+**Plain English:** This site — definition, example, and where you will see it.
 
 Pages here are prerendered (Vike). Interactive bits (theme toggle, tools) are client components. That is the same split: static tree on the server, hooks where the user clicks.
 

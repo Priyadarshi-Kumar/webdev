@@ -15,7 +15,30 @@ The browser is a machine that runs **other people’s code** next to **your user
 
 This note is a map of the attacks that show up in real web apps, **how they are built** (on a toy site you own, never on someone else’s), and **what to change** so they fail. Examples use `shop.example` (victim) and `evil.example` (attacker). Payloads are teaching sketches: they log a cookie or submit a form, they are not a kit.
 
+## Read this in order
+
+Work through these sections in order:
+
+1. **The browser’s default: same origin** — The browser’s default: same origin — concepts first, then code.
+2. **Cookies, sessions, and where secrets leak** — Cookies, sessions, and where secrets leak — concepts first, then code.
+3. **Cross-site scripting (XSS)** — Cross-site scripting (XSS) — concepts first, then code.
+4. **Cross-site request forgery (CSRF)** — Cross-site request forgery (CSRF) — concepts first, then code.
+5. **Clickjacking and iframes** — Clickjacking and iframes — concepts first, then code.
+6. **CORS is not a lock — it is a hole you cut** — CORS is not a lock — it is a hole you cut — concepts first, then code.
+7. **Open redirects and header injection** — Open redirects and header injection — concepts first, then code.
+8. **Injection: SQL, NoSQL, command, path** — Injection: SQL, NoSQL, command, path — concepts first, then code.
+9. **Prototype pollution (JavaScript)** — Prototype pollution (JavaScript) — concepts first, then code.
+10. **Mixed content and supply chain in the browser** — Mixed content and supply chain in the browser — concepts first, then code.
+11. **Content Security Policy (CSP)** — Content Security Policy (CSP) — concepts first, then code.
+12. **Other headers worth setting** — Other headers worth setting — concepts first, then code.
+13. **Authorization bugs the browser will not catch** — Authorization bugs the browser will not catch — concepts first, then code.
+14. **A short attacker playbook (defensive reading)** — A short attacker playbook (defensive reading) — concepts first, then code.
+15. **What to do in a React / Vite app** — What to do in a React / Vite app — concepts first, then code.
+16. **Interview questions** — Quick map of the whole note — skim first or review last.
+
 ## The browser’s default: same origin
+
+**Plain English:** The browser’s default: same origin — concepts first, then code.
 
 ### What an origin is
 
@@ -50,6 +73,8 @@ Attacks live in the gap: “I cannot *read* your page, but I can *make the user�
 
 ## Cookies, sessions, and where secrets leak
 
+**Plain English:** Cookies, sessions, and where secrets leak — concepts first, then code.
+
 ### How a session usually works
 
 The server sets a cookie after login. Every later request to that site includes it:
@@ -72,6 +97,8 @@ Set-Cookie: sid=abc123; Path=/; HttpOnly; Secure; SameSite=Lax
 If the app **keeps** the anonymous cookie after login, an attacker can plant `sid=known` first, then wait for the victim to log in. **Mitigate:** issue a **new** session id on every privilege change (login, password change, 2FA).
 
 ## Cross-site scripting (XSS)
+
+**Plain English:** Cross-site scripting (XSS) — concepts first, then code.
 
 XSS means **the attacker’s JavaScript runs as your origin**. Then they can act as the user: change the DOM, call your APIs, and — if the cookie is not `HttpOnly` — steal the session.
 
@@ -175,6 +202,8 @@ Also:
 
 ## Cross-site request forgery (CSRF)
 
+**Plain English:** Cross-site request forgery (CSRF) — concepts first, then code.
+
 The attacker **cannot read** your page. They **can** make the **user’s browser** send a request **to your origin**, with cookies attached (depending on `SameSite`).
 
 Classic setup: victim is logged into `shop.example`. They visit `evil.example`, which contains:
@@ -221,6 +250,8 @@ app.post("/transfer", (req, res) => {
 5. GET must be **safe**. Never `GET /delete?id=1`. Prefetch and `<img>` will fire it.
 
 ## Clickjacking and iframes
+
+**Plain English:** Clickjacking and iframes — concepts first, then code.
 
 An **iframe** is a nested browsing context: another document, often another origin, painted *inside* your page (or you painted inside theirs).
 
@@ -364,6 +395,8 @@ Modern browsers default `rel=noopener` for `target=_blank` in many cases. **Stil
 
 ## CORS is not a lock — it is a hole you cut
 
+**Plain English:** CORS is not a lock — it is a hole you cut — concepts first, then code.
+
 Browsers **block JS** on `evil.example` from **reading** `https://shop.example/api/me`. Your API can **opt in** with CORS headers.
 
 ```http
@@ -407,6 +440,8 @@ CORS does **not** protect a server from curl, Postman, or a malicious app. Those
 
 ## Open redirects and header injection
 
+**Plain English:** Open redirects and header injection — concepts first, then code.
+
 ### Open redirect
 
 ```js
@@ -436,6 +471,8 @@ function safeHttpUrl(raw) {
 If you put user input in a header without stripping `\r\n`, an attacker can add headers or a second response. Use frameworks that reject illegal header values; never `res.setHeader("Location", userString)` without validation.
 
 ## Injection: SQL, NoSQL, command, path
+
+**Plain English:** Injection: SQL, NoSQL, command, path — concepts first, then code.
 
 XSS injects **browser** languages. These inject **server** languages. The pattern is identical: untrusted string concatenated into a grammar.
 
@@ -496,6 +533,8 @@ Prefer storing files under random ids, not user-supplied names.
 
 ## Prototype pollution (JavaScript)
 
+**Plain English:** Prototype pollution (JavaScript) — concepts first, then code.
+
 Many apps merge JSON into objects:
 
 ```js
@@ -514,6 +553,8 @@ After a polluted `Object.prototype`, `({}).isAdmin` may be `true`. Gadgets in lo
 **Mitigate:** refuse keys `__proto__`, `constructor`, `prototype`; use `Object.create(null)`; keep merge libraries updated; do not `JSON.parse` into a merge that walks prototypes.
 
 ## Mixed content and supply chain in the browser
+
+**Plain English:** Mixed content and supply chain in the browser — concepts first, then code.
 
 ### Mixed content
 
@@ -540,6 +581,8 @@ If you load a CDN script, pin the hash so a hijacked CDN cannot change bytes:
 JSONP is `<script src="https://api.example/x?callback=foo">` — the response is **JavaScript**, not JSON. Anyone who can change that URL runs code as you. Do not add JSONP in 2026. Use CORS + JSON.
 
 ## Content Security Policy (CSP)
+
+**Plain English:** Content Security Policy (CSP) — concepts first, then code.
 
 CSP is a **second line** after encoding. It tells the browser which script, style, frame, and connect targets are allowed.
 
@@ -580,6 +623,8 @@ Content-Security-Policy-Report-Only: default-src 'self'; report-uri /csp-report
 
 ## Other headers worth setting
 
+**Plain English:** Other headers worth setting — concepts first, then code.
+
 ```http
 X-Content-Type-Options: nosniff
 Referrer-Policy: strict-origin-when-cross-origin
@@ -600,6 +645,8 @@ Set `Content-Type` correctly on APIs (`application/json`). A JSON document serve
 
 ## Authorization bugs the browser will not catch
 
+**Plain English:** Authorization bugs the browser will not catch — concepts first, then code.
+
 SOP and CSP do not notice **insecure direct object references**:
 
 ```js
@@ -614,6 +661,8 @@ app.get("/invoices/:id", requireUser, async (req, res) => {
 Mass assignment: `User.update(req.body)` with `role: "admin"` in the JSON. Pick an allowlist of fields.
 
 ## A short attacker playbook (defensive reading)
+
+**Plain English:** A short attacker playbook (defensive reading) — concepts first, then code.
 
 On a **site you are paid to test**, people often walk this list. Use it as a **review checklist**, not a recipe for other people’s apps.
 
@@ -630,6 +679,8 @@ On a **site you are paid to test**, people often walk this list. Use it as a **r
 
 ## What to do in a React / Vite app
 
+**Plain English:** What to do in a React / Vite app — concepts first, then code.
+
 - Default JSX encoding is your friend. Audit every `dangerouslySetInnerHTML`, `href={user}`, and `markdown` renderer.
 - Put the session in an `HttpOnly` cookie; send it with `credentials: "include"` only to your API origin.
 - Set security headers in the host (Netlify `_headers`, nginx, or the framework adapter) — SPAs do not set `frame-ancestors` from client JS in a way that blocks clickjacking of the first document.
@@ -637,6 +688,8 @@ On a **site you are paid to test**, people often walk this list. Use it as a **r
 - Treat `postMessage`, service workers, and webviews as extra origins with the same rules.
 
 ## Interview questions
+
+**Plain English:** Short answers to reuse in interviews or reviews.
 
 <details>
 <summary>What is an origin, and what does the same-origin policy actually stop?</summary>

@@ -10,7 +10,16 @@ tags:
 
 The **project graph** is Nx’s picture of the repo: nodes are <Term id="nx-project">projects</Term>, edges are “this one imports that one.”
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **A sketch of this site** — How this repo uses the idea today.
+2. **Task order follows the arrows** — Task order follows the arrows — explained with a short example.
+
 ## A sketch of this site
+
+**Plain English:** A sketch of this site — definition, example, and where you will see it.
 
 ```txt
 web → widgets → components → store
@@ -30,6 +39,8 @@ pnpm nx show project web --web
 `nx graph` opens a browser picture. Use it when “why did CI rebuild web?” is the question — follow the arrows.
 
 ## Task order follows the arrows
+
+**Plain English:** Task order follows the arrows — definition, example, and where you will see it.
 
 You can tell a target to wait on dependencies’ targets:
 

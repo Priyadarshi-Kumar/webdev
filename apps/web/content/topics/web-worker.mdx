@@ -14,7 +14,23 @@ A **Web Worker** is a separate JavaScript thread that runs alongside your page. 
 
 Workers have **no DOM access**. They cannot read `document`, touch elements, or call most window-only APIs. They talk to the page through **`postMessage`** and receive messages the same way.
 
+## Read this in order
+
+Work through these sections in order:
+
+1. **What a dedicated worker is** — Clear definition, then a minimal example.
+2. **The worker global: `self`, not `window`** — The worker global: `self`, not `window` — concepts first, then code.
+3. **Message passing and structured clone** — Message passing and structured clone — concepts first, then code.
+4. **Classic workers vs module workers** — Side-by-side comparison so you can pick the right tool.
+5. **Terminating and cleaning up** — Terminating and cleaning up — concepts first, then code.
+6. **What belongs in a worker** — What belongs in a worker — concepts first, then code.
+7. **Error handling** — Error handling — concepts first, then code.
+8. **Workers vs other threads** — Side-by-side comparison so you can pick the right tool.
+9. **Interview answers** — Quick map of the whole note — skim first or review last.
+
 ## What a dedicated worker is
+
+**Plain English:** What a dedicated worker is, explained simply with an example.
 
 `new Worker(url)` spins up a **dedicated** worker: one worker instance is owned by exactly one browsing context (one tab’s page, or one iframe). Close the tab and the worker dies.
 
@@ -57,6 +73,8 @@ The page posts a job. The worker computes. The worker posts the result back. The
 
 ## The worker global: `self`, not `window`
 
+**Plain English:** The worker global: `self`, not `window` — concepts first, then code.
+
 Inside a worker script, the global object is **`DedicatedWorkerGlobalScope`**, exposed as `self`. You get:
 
 - `self.onmessage` / `addEventListener("message", …)`
@@ -67,6 +85,8 @@ Inside a worker script, the global object is **`DedicatedWorkerGlobalScope`**, e
 You do **not** get `document`, `window`, `localStorage` (use `postMessage` to ask the main thread), or direct access to parent `Window`.
 
 ## Message passing and structured clone
+
+**Plain English:** Message passing and structured clone — concepts first, then code.
 
 `postMessage` copies data using the **structured clone algorithm** — same rules as `BroadcastChannel` and `history.pushState` state. Plain objects, arrays, `Date`, `Map`, `Set`, typed arrays, and `ArrayBuffer` work. Functions, DOM nodes, and symbols do not.
 
@@ -88,6 +108,8 @@ worker.postMessage({ type: "PROCESS", buffer }, [buffer]);
 The second argument is a list of **transferables**. After transfer, the sender’s buffer is detached. Use this for image decoding, audio buffers, or WASM memory.
 
 ## Classic workers vs module workers
+
+**Plain English:** Side-by-side comparison so you can pick the right tool.
 
 ### Classic worker (`type` defaults to classic)
 
@@ -128,6 +150,8 @@ Vite bundles the worker, handles HMR in dev, and keeps the main bundle smaller.
 
 ## Terminating and cleaning up
 
+**Plain English:** Terminating and cleaning up — concepts first, then code.
+
 Workers consume memory and a thread. Always terminate when done:
 
 ```js
@@ -167,6 +191,8 @@ Do not create a new `Worker` on every keystroke unless you terminate the old one
 
 ## What belongs in a worker
 
+**Plain English:** What belongs in a worker — concepts first, then code.
+
 | Good fit | Poor fit |
 | --- | --- |
 | Parsing large JSON/CSV | Updating React state directly |
@@ -178,6 +204,8 @@ Do not create a new `Worker` on every keystroke unless you terminate the old one
 If the task touches the UI, the worker computes a result and the main thread applies it in `onmessage`.
 
 ## Error handling
+
+**Plain English:** Error handling — concepts first, then code.
 
 Worker exceptions fire `error` on the worker object (main thread) and `error` on `self` (worker thread). Unhandled rejections in module workers may surface as `error` events too.
 
@@ -202,6 +230,8 @@ try {
 
 ## Workers vs other threads
 
+**Plain English:** Side-by-side comparison so you can pick the right tool.
+
 | API | Scope | DOM | Typical use |
 | --- | --- | --- | --- |
 | **Dedicated Worker** | One page | No | Heavy compute for one tab |
@@ -212,6 +242,8 @@ try {
 Dedicated workers are the default choice when one tab needs background CPU.
 
 ## Interview answers
+
+**Plain English:** Short answers to reuse in interviews or reviews.
 
 <details>
 <summary>Why use a Web Worker?</summary>

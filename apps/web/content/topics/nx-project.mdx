@@ -10,7 +10,16 @@ tags:
 
 An **Nx project** is a package in the <Term id="monorepo">monorepo</Term> that Nx can address by name. This repo puts a `project.json` next to each one.
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **A project.json** — A project.json — explained with a short example.
+2. **Application vs library** — Side-by-side comparison so you can pick the right tool.
+
 ## A project.json
+
+**Plain English:** A project.json — definition, example, and where you will see it.
 
 ```json
 {
@@ -35,6 +44,8 @@ An **Nx project** is a package in the <Term id="monorepo">monorepo</Term> that N
 `nx build web` means “run the `build` target on the project named `web`.” Libraries (`utils`, `widgets`) are projects too — often with `test` and no `dev` server.
 
 ## Application vs library
+
+**Plain English:** Application vs library — definition, example, and where you will see it.
 
 ```txt
 apps/web        → application (has a deployable `dist`)

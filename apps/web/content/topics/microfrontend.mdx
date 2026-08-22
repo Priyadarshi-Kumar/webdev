@@ -11,7 +11,17 @@ tags:
 
 A **microfrontend** is a piece of the UI that a team can ship **without rebuilding the whole product**. Checkout, the cart drawer, the admin grid — each can be a separate Vite (or Webpack) app with its own `package.json`, CI, and URL.
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **Host and remotes** — Host and remotes — explained with a short example.
+2. **One React** — One React — explained with a short example.
+3. **Not a monorepo** — Not a monorepo — explained with a short example.
+
 ## Host and remotes
+
+**Plain English:** Host and remotes — definition, example, and where you will see it.
 
 Composition is the rest of the story. The **host** owns the shell (nav, auth, routing). A **remote** exposes a component or a route. The host loads that JS at **runtime** (<Term id="module-federation">Module Federation</Term>, an iframe, a web component) or at **build time** (a workspace package). Runtime is the usual meaning of “microfrontend.”
 
@@ -32,6 +42,8 @@ Deploy `cart` at 3pm without rebuilding `shell`. That is the payoff. The cost is
 
 ## One React
 
+**Plain English:** One React — definition, example, and where you will see it.
+
 Two Reacts on one page break hooks. Shared libraries must be **one copy**, usually listed as a <Term id="peer-dependency">peer</Term> and as `shared` in federation config.
 
 ```ts
@@ -42,6 +54,8 @@ shared: {
 ```
 
 ## Not a monorepo
+
+**Plain English:** Not a monorepo — definition, example, and where you will see it.
 
 A <Term id="monorepo">monorepo</Term> is not a microfrontend. One repo with `apps/web` and `libs/widgets` is still **one deploy** unless you also split hosts and remotes. You can keep remotes in one git repo (this is common) and still publish two URLs.
 

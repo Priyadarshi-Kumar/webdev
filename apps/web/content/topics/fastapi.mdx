@@ -17,13 +17,22 @@ It is not a template-heavy “full website” framework like Django. You still p
 
 ## Read this in order
 
-1. **Mental model** — a route is a typed Python function
-2. **Path and query params** — validation from type hints
-3. **Request bodies** — Pydantic models for JSON in/out
-4. **Depends and middleware** — shared DB sessions, auth, CORS
-5. **Async and deployment** — when to use `async def`, how a Vite frontend calls the API
+Work through these sections in order:
+
+1. **Mental model** — Terms and mental model before the examples.
+2. **Request shapes** — Request shapes — concepts first, then code.
+3. **Status codes and errors** — Status codes and errors — concepts first, then code.
+4. **Dependencies (`Depends`)** — Dependencies (`Depends`) — concepts first, then code.
+5. **Async vs sync routes** — Side-by-side comparison so you can pick the right tool.
+6. **Talking to a frontend** — Talking to a frontend — concepts first, then code.
+7. **App lifespan** — App lifespan — concepts first, then code.
+8. **Tests without a real server** — Tests without a real server — concepts first, then code.
+9. **What FastAPI is not** — Clear definition, then a minimal example.
+10. **Interview answers** — Quick map of the whole note — skim first or review last.
 
 ## Mental model
+
+**Plain English:** Terms and mental model before the examples.
 
 ### A path operation is just a function
 
@@ -77,6 +86,8 @@ uvicorn main:app --reload
 Open `http://127.0.0.1:8000/docs`. That UI is generated from your functions. If a field is missing from `/docs`, it is missing from the signature.
 
 ## Request shapes
+
+**Plain English:** Request shapes — concepts first, then code.
 
 ### Path, query, and headers
 
@@ -150,6 +161,8 @@ async def upload_avatar(file: UploadFile = File()):
 
 ## Status codes and errors
 
+**Plain English:** Status codes and errors — concepts first, then code.
+
 ### Raise `HTTPException`
 
 ```python
@@ -175,6 +188,8 @@ def get_item(item_id: int):
 Most routes return a dict or a Pydantic model. If you need a raw body (CSV, redirect), use Starlette’s `Response`, `RedirectResponse`, or `JSONResponse` and set `status_code` there. Mixing a typed return with a manual `JSONResponse` is how `/docs` and reality drift apart — pick one per route.
 
 ## Dependencies (`Depends`)
+
+**Plain English:** Dependencies (`Depends`) — concepts first, then code.
 
 A **dependency** is a function FastAPI calls before (or while resolving) the route. Use it for DB sessions, the current user, and shared query params. It is not React context; it is constructor injection for HTTP.
 
@@ -227,6 +242,8 @@ def list_items(db: Annotated[object, Depends(get_db)]):
 
 ## Async vs sync routes
 
+**Plain English:** Side-by-side comparison so you can pick the right tool.
+
 ### When to use `async def`
 
 ```python
@@ -258,6 +275,8 @@ requests.get("https://example.com")  # blocks the event loop
 Rule: `async def` only if you `await` something, or the body is CPU-light. Otherwise `def` and let FastAPI thread it.
 
 ## Talking to a frontend
+
+**Plain English:** Talking to a frontend — concepts first, then code.
 
 ### CORS
 
@@ -302,6 +321,8 @@ The Pydantic model on the server and this `Item` type on the client are **two co
 
 ## App lifespan
 
+**Plain English:** App lifespan — concepts first, then code.
+
 Startup and shutdown (connection pools, caches) go on **lifespan**, not a global `engine = create_engine()` at import time if you need a clean close.
 
 ```python
@@ -323,6 +344,8 @@ app = FastAPI(lifespan=lifespan)
 Code before `yield` runs once when Uvicorn starts. Code after runs on shutdown. Route functions should take resources via `Depends`, not from random globals, if you want tests to swap them.
 
 ## Tests without a real server
+
+**Plain English:** Tests without a real server — concepts first, then code.
 
 ```python
 from fastapi.testclient import TestClient
@@ -353,12 +376,16 @@ Clear `dependency_overrides` after the test so the next one sees the real `get_t
 
 ## What FastAPI is not
 
+**Plain English:** What FastAPI is not, explained simply with an example.
+
 - **Not Django.** No admin, no batteries-included ORM, no `startproject` that is a CMS. Pair it with SQLAlchemy, SQLModel, or raw SQL.
 - **Not Flask with types glued on.** Flask is WSGI and a microframework; FastAPI is ASGI and validation-first. You can run both, but the request object is not the same.
 - **Not automatic auth.** `OAuth2PasswordBearer` is a scheme helper. You still verify JWTs or sessions.
 - **Not a replacement for a queue.** Long work belongs in a worker (Celery, arq, a cron). The HTTP handler should return 202 or a job id, not block for minutes.
 
 ## Interview answers
+
+**Plain English:** Short answers to reuse in interviews or reviews.
 
 <details>
 <summary>What is FastAPI built on?</summary>

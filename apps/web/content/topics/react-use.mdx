@@ -10,7 +10,16 @@ tags:
 
 `use` (React 19) can unwrap a **Promise** or a Context. For a promise, the component **pauses** until it resolves. A parent <Term id="react-suspense">Suspense</Term> shows a fallback meanwhile.
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **Waiting on data** — Waiting on data — explained with a short example.
+2. **Reading context** — Reading context — explained with a short example.
+
 ## Waiting on data
+
+**Plain English:** Waiting on data — definition, example, and where you will see it.
 
 ```tsx
 import { Suspense, use } from "react";
@@ -34,6 +43,8 @@ export function Page() {
 Create the promise **outside** render (or pass it from a parent / cache it). `use(fetch(...))` inside the component body starts a new request every render.
 
 ## Reading context
+
+**Plain English:** Reading context — definition, example, and where you will see it.
 
 ```tsx
 import { createContext, use } from "react";

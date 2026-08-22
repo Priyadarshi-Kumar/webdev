@@ -11,7 +11,17 @@ tags:
 
 `package.json` says “React 19-something.” The **lockfile** says “React 19.2.8, plus scheduler 0.26.0, plus these integrity hashes.”
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **One file, one manager** — One lockfile per repo — npm, Yarn, or pnpm, not all three.
+2. **Freeze it in CI** — Why CI must install from the lockfile exactly.
+3. **Migrating managers** — Switching tools without leaving two lockfiles in git.
+
 ## One file, one manager
+
+**Plain English:** One file, one manager — definition, example, and where you will see it.
 
 ```bash
 package-lock.json   # npm
@@ -39,6 +49,8 @@ The `integrity` field is a hash of the tarball. If the <Term id="npm-registry">r
 
 ## Freeze it in CI
 
+**Plain English:** Freeze it in CI — definition, example, and where you will see it.
+
 ```bash
 # CI: install exactly the lockfile, do not rewrite it
 npm ci
@@ -50,6 +62,8 @@ pnpm install --frozen-lockfile
 Local `npm install` / `pnpm add` **should** update the lockfile — that is how you record a new library. The robot must not.
 
 ## Migrating managers
+
+**Plain English:** Migrating managers — definition, example, and where you will see it.
 
 If you switch tools, delete the old lockfile, install with the new one, run tests, commit the new file in the same PR. Leaving both in git is how you get “works on my machine” for years.
 

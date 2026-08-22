@@ -14,7 +14,16 @@ tags:
 
 MCP messages are JSON-RPC. REST is a different style (URLs and HTTP verbs). You can tunnel JSON-RPC *over* HTTP; the body is still this object.
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **Request and result** — Request and result — explained with a short example.
+2. **Errors and notifications** — Errors and notifications — explained with a short example.
+
 ## Request and result
+
+**Plain English:** Request and result — definition, example, and where you will see it.
 
 ```json
 {
@@ -38,6 +47,8 @@ MCP messages are JSON-RPC. REST is a different style (URLs and HTTP verbs). You 
 The `id` pairs them. If two calls are in flight, the host does not guess which reply is which.
 
 ## Errors and notifications
+
+**Plain English:** Errors and notifications — definition, example, and where you will see it.
 
 ```json
 {

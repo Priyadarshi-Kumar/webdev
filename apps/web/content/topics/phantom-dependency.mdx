@@ -11,7 +11,17 @@ tags:
 
 A **phantom dependency** is a module your code imports that is **not** in your `package.json`. It is on disk only because a dependency of a dependency was <Term id="hoisting">hoisted</Term>.
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **It works… until it doesn’t** — It works… until it doesn’t — explained with a short example.
+2. **The fix is to declare it** — The fix is to declare it — explained with a short example.
+3. **How to hunt them** — Practical steps you can follow in order.
+
 ## It works… until it doesn’t
+
+**Plain English:** It works… until it doesn’t — definition, example, and where you will see it.
 
 ```ts
 // lodash is NOT in your package.json — this can still compile on npm
@@ -32,6 +42,8 @@ pnpm and Yarn PnP make this a **day-one** error instead of a surprise.
 
 ## The fix is to declare it
 
+**Plain English:** The fix is to declare it — definition, example, and where you will see it.
+
 ```bash
 pnpm add lodash
 # or, if it is only for tests / build
@@ -49,6 +61,8 @@ pnpm add -D lodash
 The error is annoying for a day and cheaper than an outage after someone bumps a nested package.
 
 ## How to hunt them
+
+**Plain English:** Follow these steps in order — each builds on the last.
 
 ```bash
 # pnpm: if this succeeds, you declared it (or shamefully-hoist is on)

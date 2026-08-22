@@ -17,20 +17,18 @@ This note covers when that happens, what the two phases do, and a **MiniReact** 
 
 ## Read this in order
 
-**Plain English:** Start here if you want the whole story in one pass before diving into details.
+Work through these sections in order:
 
-| Step | Section | What you will learn |
-| --- | --- | --- |
-| 1 | **A render is a function call** | What "render" actually means, and why `useState(0)` does not reset on every call |
-| 2 | **When React schedules another render** | The four reasons a component runs again (and what does *not* trigger one) |
-| 3 | **Internally: render, then commit** | Why React splits "figure out the UI" from "touch the DOM" |
-| 4 | **Hooks are a list on the fiber** | Where hook state lives, and why call order matters |
-| 5 | **MiniReact** | A tiny working React you can read in the browser |
-| 6 | **What real React adds** | The extra machinery on top of the sketch |
+1. **A render is a function call** — A render is a function call — concepts first, then code.
+2. **When React schedules another render** — When this applies — and when to skip it.
+3. **Internally: render, then commit** — Internally: render, then commit — concepts first, then code.
+4. **Hooks are a list on the fiber** — Hooks are a list on the fiber — concepts first, then code.
+5. **MiniReact: enough to feel the internals** — MiniReact: enough to feel the internals — concepts first, then code.
+6. **What real React adds on top of this** — What real React adds on top of this — concepts first, then code.
 
 ## A render is a function call
 
-**Plain English:** React calls your component like any other function. The difference is that React remembers the result and keeps hook state on the side.
+**Plain English:** A render is a function call — concepts first, then code.
 
 ```tsx
 function Counter({ label }: { label: string }) {
@@ -51,7 +49,7 @@ That is the whole trick: **the function is stateless; the fiber next to it is no
 
 ## When React schedules another render
 
-**Plain English:** React re-runs a component when its fiber is marked dirty. After that, it walks downward through the tree as needed.
+**Plain English:** When this applies — and when to skip it.
 
 ### State or reducer on that fiber
 
@@ -103,7 +101,7 @@ In development, Strict Mode may call your function **twice** for the same update
 
 ## Internally: render, then commit
 
-**Plain English:** React first calls your components and builds a new tree (render). Only when that tree is ready does it update the DOM (commit).
+**Plain English:** Internally: render, then commit — concepts first, then code.
 
 React 18+ still has two big phases. Concurrent features can **pause** the first one, but the picture is the same.
 
@@ -128,7 +126,7 @@ That split is why React can throw away a render (user typed again) without leavi
 
 ## Hooks are a list on the fiber
 
-**Plain English:** Every hook call on a render reads or creates one cell in a list stored on the fiber. Same order every time, or things break.
+**Plain English:** Hooks are a list on the fiber — concepts first, then code.
 
 Each function component fiber has a linked list (or array) of hook cells: state, effect deps, memo, ref, …
 
@@ -144,7 +142,7 @@ On every render React walks that list in **call order**. `useState` #1 is always
 
 ## MiniReact: enough to feel the internals
 
-**Plain English:** A small, runnable React in ~150 lines. Read it until "hooks live on the instance" and "same type, keep the fiber" feel obvious.
+**Plain English:** MiniReact: enough to feel the internals — concepts first, then code.
 
 The following runs in a browser. It supports function components, `useState`, host tags (`div`, `button`, `span`), strings as children, and **one** component root. No keys, no context, no fragments.
 
@@ -330,7 +328,7 @@ If `App` had its own `useState` and you updated **App**, MiniReact would call `A
 
 ## What real React adds on top of this
 
-**Plain English:** MiniReact has the core idea. Production React adds scheduling, diffing, and effect timing on top.
+**Plain English:** What real React adds on top of this — concepts first, then code.
 
 - **Fibers as a linked list** (`child`, `sibling`, `return`) so work can pause mid-tree.
 - **Lanes / priority** so a keystroke can jump ahead of a slow list.

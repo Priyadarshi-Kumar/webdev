@@ -10,7 +10,17 @@ tags:
 
 **Prop drilling** is threading a value through layers that only exist to forward it.
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **The long way** — The long way — explained with a short example.
+2. **Context skips the middle** — Context skips the middle — explained with a short example.
+3. **When drilling is fine** — When this applies — and when to skip it.
+
 ## The long way
+
+**Plain English:** The long way — definition, example, and where you will see it.
 
 ```tsx
 function App() {
@@ -31,6 +41,8 @@ function Header({ user }: { user: { name: string } }) {
 `Page` and `Layout` do not care about `user`. Every new field (`avatar`, `role`) touches every file in the chain.
 
 ## Context skips the middle
+
+**Plain English:** Context skips the middle — definition, example, and where you will see it.
 
 ```tsx
 import { createContext, use } from "react";
@@ -56,6 +68,8 @@ function Header() {
 (`Provider` as `UserContext.Provider` is the older spelling; React 19 lets you use `<UserContext>`.)
 
 ## When drilling is fine
+
+**Plain English:** When drilling is fine — definition, example, and where you will see it.
 
 Do not put **everything** in context — it still re-renders consumers when the value identity changes. Drill one or two levels if that is clearer (`Button` receiving `onClick` is not a problem). Use context for **theme, auth, locale** — values many distant leaves need.
 

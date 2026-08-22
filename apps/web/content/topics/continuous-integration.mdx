@@ -12,7 +12,17 @@ tags:
 
 That is why the <Term id="lockfile">lockfile</Term> matters: the robot should install **exactly** what you committed.
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **A minimal GitHub Actions job** — A minimal GitHub Actions job — explained with a short example.
+2. **Why “works on my machine” fails here** — The mess we are fixing — anomalies and duplicated data.
+3. **CI vs CD** — Side-by-side comparison so you can pick the right tool.
+
 ## A minimal GitHub Actions job
+
+**Plain English:** A minimal GitHub Actions job — definition, example, and where you will see it.
 
 ```yaml
 # .github/workflows/ci.yml
@@ -41,6 +51,8 @@ Never run a command in CI that **rewrites** the lockfile (`npm install` can). Us
 
 ## Why “works on my machine” fails here
 
+**Plain English:** Why “works on my machine” fails here — definition, example, and where you will see it.
+
 Your laptop has global CLIs, a warm pnpm store, and Node 22. The VM has none of that unless you install it. <Term id="corepack">Corepack</Term> + `packageManager` makes Yarn/pnpm versions match. `engines` in `package.json` can fail the job on the wrong Node:
 
 ```json
@@ -52,6 +64,8 @@ Your laptop has global CLIs, a warm pnpm store, and Node 22. The VM has none of 
 ```
 
 ## CI vs CD
+
+**Plain English:** CI vs CD — definition, example, and where you will see it.
 
 **CI** = merge is safe (lint, test, typecheck). **CD** (continuous delivery) = that green build is deployed (Netlify on `main`, for this site). Same lockfile rules apply to the deploy image.
 

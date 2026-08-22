@@ -17,7 +17,26 @@ That something is <Term id="nx">Nx</Term> (`^21.4.1` here). It does **not** repl
 
 Dotted, sky-colored words are glossary terms — hover for a short note; each is also a **link** to a full page with an example.
 
+## Read this in order
+
+Work through these sections in order:
+
+1. **What Nx is (and is not)** — Clear definition, then a minimal example.
+2. **Map of this repo** — Map of this repo — concepts first, then code.
+3. **Package manager vs Nx** — Side-by-side comparison so you can pick the right tool.
+4. **An Nx project** — An Nx project — concepts first, then code.
+5. **The project graph** — The project graph — concepts first, then code.
+6. **Cache** — Cache — concepts first, then code.
+7. **Affected** — Affected — concepts first, then code.
+8. **TypeScript paths vs workspace packages** — Side-by-side comparison so you can pick the right tool.
+9. **Everyday commands** — The main API or commands you will actually use.
+10. **CI and this site’s deploy** — How this repo uses the idea today.
+11. **When not to use Nx** — When this applies — and when to skip it.
+12. **Interview questions** — Quick map of the whole note — skim first or review last.
+
 ## What Nx is (and is not)
+
+**Plain English:** What Nx is (and is not), explained simply with an example.
 
 **Nx is a task runner with a map of the repo.** The map is the <Term id="project-graph">project graph</Term>: boxes for apps and libs, arrows for “this package imports that one.” From that map it can:
 
@@ -35,6 +54,8 @@ Dotted, sky-colored words are glossary terms — hover for a short note; each is
 If you only ever had one `package.json` and one `npm run build`, you would not need Nx. The moment you have six libraries and an app that should rebuild when `utils` changes, the graph pays rent.
 
 ## Map of this repo
+
+**Plain English:** Map of this repo — concepts first, then code.
 
 pnpm decides *which folders are packages*:
 
@@ -76,6 +97,8 @@ web → widgets → components → store
 
 ## Package manager vs Nx
 
+**Plain English:** Side-by-side comparison so you can pick the right tool.
+
 Three files, three jobs.
 
 | File | Job |
@@ -100,6 +123,8 @@ TypeScript `paths` in `tsconfig.base.json` (and Vite aliases) point `@webdev/uti
 `pnpm --filter web build` would also run the app script. You lose Nx cache, affected, and a single place to list outputs. This repo always goes through Nx for those jobs.
 
 ## An Nx project
+
+**Plain English:** An Nx project — concepts first, then code.
 
 Each package Nx can address has a `project.json`. The **name** is what you pass on the CLI (`web`, not `@webdev/web`).
 
@@ -150,6 +175,8 @@ Nx infers edges from `package.json` and from TypeScript imports. **Implicit** ed
 
 ## The project graph
 
+**Plain English:** The project graph — concepts first, then code.
+
 ```bash
 pnpm nx graph
 pnpm nx show project web
@@ -175,6 +202,8 @@ Task **order** can follow arrows. In `nx.json` you can say a target `dependsOn` 
 `^build` means “run `build` on **dependencies** first.” This site does **not** set that, because libraries are consumed as TypeScript source. `web`’s Vite build already compiles them. `^` still matters for **cache inputs** (`^production` below).
 
 ## Cache
+
+**Plain English:** Cache — concepts first, then code.
 
 The <Term id="nx-cache">Nx cache</Term> hashes a target’s **inputs**. Same hash → restore **outputs** instead of running Vite again.
 
@@ -213,6 +242,8 @@ If cache feels “stuck,” you changed a file that is **not** in `inputs`, or y
 
 ## Affected
 
+**Plain English:** Affected — concepts first, then code.
+
 <Term id="nx-affected">Affected</Term> walks git, then walks the graph *upward*.
 
 ```bash
@@ -241,6 +272,8 @@ On a tiny repo, `run-many` is simpler and fine. The win shows up when CI minutes
 
 ## TypeScript paths vs workspace packages
 
+**Plain English:** Side-by-side comparison so you can pick the right tool.
+
 Two wiring layers, both required:
 
 1. **pnpm `workspace:*`** — install-time: `web` may import `@webdev/utils` because it is a workspace package, not a phantom folder.
@@ -249,6 +282,8 @@ Two wiring layers, both required:
 Nx’s graph mostly follows (1) plus `implicitDependencies`. If you import a lib in Vite config but never add `workspace:*`, pnpm may still fail (strict node_modules). If you add `workspace:*` but forget `implicitDependencies` and the import is too dynamic for the scanner, **Nx** may fail silently (stale cache). Add both when you add a library.
 
 ## Everyday commands
+
+**Plain English:** The main API or commands you will actually use.
 
 From the repo root (Nx is a root `devDependency`):
 
@@ -277,6 +312,8 @@ pnpm nx test utils -- --watch=false
 
 ## CI and this site’s deploy
 
+**Plain English:** How this repo uses the idea today.
+
 Netlify runs `pnpm nx build web` and publishes `apps/web/dist/client`. That is **one project’s build**, not `run-many`. Cache still helps if the same commit is rebuilt or if inputs did not change.
 
 A fuller CI job for a PR looks like:
@@ -293,6 +330,8 @@ Do not run `nx reset` at the start of every CI job. Do not commit `.nx`. Do not 
 
 ## When not to use Nx
 
+**Plain English:** When this applies — and when to skip it.
+
 - **One package, one script.** `pnpm build` in a single app is enough.
 - **You only wanted workspaces.** pnpm filters (`pnpm --filter utils test`) already run one package’s script. Add Nx when you care about cache, affected, or a graph you can draw.
 - **Turborepo** is the close cousin: also cache + affected, often less “workspace framework.” Nx adds generators, plugins, and a stricter project model (`project.json`). This repo picked Nx because the layout is already `apps/` + `libs/` and the CLI is one `devDependency`.
@@ -301,6 +340,8 @@ Do not run `nx reset` at the start of every CI job. Do not commit `.nx`. Do not 
 Nx does not require you to generate apps from `@nx/react`. A hand-written `project.json` + `nx:run-commands` is a valid, small setup — that is this site.
 
 ## Interview questions
+
+**Plain English:** Short answers to reuse in interviews or reviews.
 
 Open a question to see a sample answer. Short version first; extra sentence if they probe.
 

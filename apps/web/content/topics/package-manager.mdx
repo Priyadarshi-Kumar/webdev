@@ -13,7 +13,17 @@ A **package manager** is the program that turns a shopping list (`package.json`)
 
 JavaScript’s public warehouse is the <Term id="npm-registry">npm registry</Term>. **npm**, **Yarn**, and **pnpm** are three installers for that same warehouse — not three different stores.
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **What it does** — What it does — explained with a short example.
+2. **Everyday example** — Runnable code or data to copy.
+3. **Pick one and stick to it** — Pick one and stick to it — explained with a short example.
+
 ## What it does
+
+**Plain English:** What it does — definition, example, and where you will see it.
 
 Without a package manager you would download zip files by hand, unzip them into a folder, and hope every nested library matches. The manager:
 
@@ -36,6 +46,8 @@ pnpm add lodash
 ```
 
 ## Everyday example
+
+**Plain English:** Everyday example — definition, example, and where you will see it.
 
 You start a Vite app and add React. The manager does more than copy `react/` — it also installs `scheduler`, `loose-envify`, and whatever else React lists.
 
@@ -60,6 +72,8 @@ export function App() {
 `import "react"` works only after install. Commit the lockfile, not `node_modules`. Teammates and <Term id="ci">CI</Term> recreate the folder from that receipt.
 
 ## Pick one and stick to it
+
+**Plain English:** Pick one and stick to it — definition, example, and where you will see it.
 
 Mixing managers in one repo produces two lockfiles and two slightly different trees. This site uses **pnpm**. If you inherit a repo, use whichever lockfile is already there.
 

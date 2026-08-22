@@ -14,7 +14,24 @@ A **SharedWorker** is a worker that **multiple browsing contexts share**. Open t
 
 Dedicated Web Workers are **one worker per page**. SharedWorkers are **one worker per origin + script URL** (until the last connection closes).
 
+## Read this in order
+
+Work through these sections in order:
+
+1. **Creating and connecting** — Creating and connecting — concepts first, then code.
+2. **`port.start()` — easy to forget** — `port.start()` — easy to forget — concepts first, then code.
+3. **What SharedWorker is good for** — Clear definition, then a minimal example.
+4. **SharedWorker vs dedicated Worker** — Side-by-side comparison so you can pick the right tool.
+5. **SharedWorker vs BroadcastChannel** — Terms and mental model before the examples.
+6. **Module SharedWorkers** — Module SharedWorkers — concepts first, then code.
+7. **Error handling and shutdown** — Error handling and shutdown — concepts first, then code.
+8. **Browser support reality** — Browser support reality — concepts first, then code.
+9. **React pattern** — Structure that scales as the app grows.
+10. **Interview answers** — Quick map of the whole note — skim first or review last.
+
 ## Creating and connecting
+
+**Plain English:** Creating and connecting — concepts first, then code.
 
 The page does not get the worker global directly. It gets a **`MessagePort`**:
 
@@ -61,9 +78,13 @@ function broadcast(data, except) {
 
 ## `port.start()` — easy to forget
 
+**Plain English:** `port.start()` — easy to forget — concepts first, then code.
+
 With `addEventListener("message", …)` on a port, the port is started implicitly. With `port.onmessage = …`, you must call **`port.start()`** on both sides or messages never flow. This trips up every team the first time.
 
 ## What SharedWorker is good for
+
+**Plain English:** What SharedWorker is good for, explained simply with an example.
 
 | Use case | Why SharedWorker |
 | --- | --- |
@@ -100,6 +121,8 @@ Each tab posts `{ type: "SEND", payload }` to the worker. Incoming socket messag
 
 ## SharedWorker vs dedicated Worker
 
+**Plain English:** Side-by-side comparison so you can pick the right tool.
+
 | | SharedWorker | Dedicated Worker |
 | --- | --- | --- |
 | Instances | One per script URL (shared) | One per `new Worker()` call |
@@ -108,6 +131,8 @@ Each tab posts `{ type: "SEND", payload }` to the worker. Incoming socket messag
 | Browser support | Chromium, Firefox (not Safari iOS) | Universal |
 
 ## SharedWorker vs BroadcastChannel
+
+**Plain English:** Terms and mental model before the examples.
 
 Both coordinate same-origin tabs. Different shapes:
 
@@ -122,6 +147,8 @@ If you only need to **notify** all tabs, BroadcastChannel is simpler. If you nee
 
 ## Module SharedWorkers
 
+**Plain English:** Module SharedWorkers — concepts first, then code.
+
 ```js
 const worker = new SharedWorker(new URL("./hub.js", import.meta.url), {
   type: "module",
@@ -132,6 +159,8 @@ const worker = new SharedWorker(new URL("./hub.js", import.meta.url), {
 Module shared workers support `import` like dedicated module workers. Check bundler docs — Vite may need a dedicated entry.
 
 ## Error handling and shutdown
+
+**Plain English:** Error handling and shutdown — concepts first, then code.
 
 ```js
 worker.onerror = (event) => {
@@ -144,6 +173,8 @@ When the **last** tab disconnects (closes or navigates away), the browser may te
 Inside the worker, remove dead ports when tabs close. There is no guaranteed `ondisconnect` — detect failed `postMessage` or use heartbeat pings.
 
 ## Browser support reality
+
+**Plain English:** Browser support reality — concepts first, then code.
 
 SharedWorker works in **desktop Chrome and Firefox**. **Safari on iOS does not support SharedWorker** (as of common deployments). For mobile-heavy products:
 
@@ -164,6 +195,8 @@ function connectHub() {
 ```
 
 ## React pattern
+
+**Plain English:** Structure that scales as the app grows.
 
 Keep the SharedWorker at module scope or in a context provider — not per component instance:
 
@@ -214,6 +247,8 @@ export function useSharedHub() {
 ```
 
 ## Interview answers
+
+**Plain English:** Short answers to reuse in interviews or reviews.
 
 <details>
 <summary>What is a SharedWorker?</summary>

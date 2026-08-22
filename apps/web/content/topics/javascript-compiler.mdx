@@ -15,19 +15,23 @@ This note walks that pipeline, shows how a JS *engine* compiler fits in, then bu
 
 ## Read this in order
 
-| Step | Section | Plain English |
-| --- | --- | --- |
-| 1 | [What “compiler” means](#what-compiler-means-for-javascript) | Three kinds of “compiler” show up around JS — transpiler, bytecode compiler, JIT |
-| 2 | [The pipeline](#the-pipeline-every-compiler-shares) | Every compiler turns text → tokens → tree → output |
-| 3 | [How V8 uses it](#how-v8s-compilers-use-that-pipeline) | Real browsers stack parse, bytecode, interpret, and optimize |
-| 4 | [Design Tiny](#design-a-language-small-enough-to-finish) | Shrink the language so you can finish in one sitting |
-| 5 | [Lexer → parser → codegen → VM](#write-the-compiler-lexer) | Build each stage; run `mul(add(2, 3), 4)` at the end |
-| 6 | [Grow toward real JS](#if-you-want-to-grow-it-toward-real-js) | Optional next steps after Tiny works |
-| 7 | [Transpilers & checklist](#transpilers-you-already-use) | Connect what you built to Babel, TypeScript, and SWC |
+Work through these sections in order:
+
+1. **What “compiler” means for JavaScript** — What “compiler” means for JavaScript — concepts first, then code.
+2. **The pipeline every compiler shares** — Terms and mental model before the examples.
+3. **How V8’s compilers use that pipeline** — Terms and mental model before the examples.
+4. **Design a language small enough to finish** — Design a language small enough to finish — concepts first, then code.
+5. **Write the compiler: lexer** — Write the compiler: lexer — concepts first, then code.
+6. **Write the parser (recursive descent)** — Write the parser (recursive descent) — concepts first, then code.
+7. **Transform, then generate bytecode** — Transform, then generate bytecode — concepts first, then code.
+8. **A VM so you can run it** — A VM so you can run it — concepts first, then code.
+9. **If you want to grow it toward real JS** — If you want to grow it toward real JS — concepts first, then code.
+10. **Transpilers you already use** — Transpilers you already use — concepts first, then code.
+11. **A checklist for your own compiler** — Quick map of the whole note — skim first or review last.
 
 ## What “compiler” means for JavaScript
 
-**Plain English:** “Compiler” is overloaded — here are the three machines people mean, and why a browser runs more than one.
+**Plain English:** What “compiler” means for JavaScript — concepts first, then code.
 
 People use the word for three different machines:
 
@@ -43,7 +47,7 @@ You do not pick one. A browser does all of them: parse → bytecode → interpre
 
 ## The pipeline every compiler shares
 
-**Plain English:** Source text becomes tokens, tokens become a tree, the tree becomes output — no matter whether the output is ES5, bytecode, or x86.
+**Plain English:** Terms and mental model before the examples.
 
 Every compiler follows the same steps:
 
@@ -86,7 +90,7 @@ The generator never looks at the original string — it walks the tree. That is 
 
 ## How V8’s compilers use that pipeline
 
-**Plain English:** V8 is not one program — it is several compilers stacked: parse once, run bytecode quickly, then rewrite hot code as native CPU instructions.
+**Plain English:** Follow these steps in order — each builds on the last.
 
 V8 is not “an interpreter.” It is several compilers stacked.
 
@@ -129,7 +133,7 @@ Writing “your own JS compiler” that matches TurboFan is a multi-year project
 
 ## Design a language small enough to finish
 
-**Plain English:** Full JavaScript is too big for a first compiler — pick a tiny expression language with numbers, operators, and function calls.
+**Plain English:** Design a language small enough to finish — concepts first, then code.
 
 Full JavaScript has ASI, `this`, prototypes, `eval`, generators, modules. For a first compiler, freeze a **subset**. Tiny here is:
 
@@ -146,7 +150,7 @@ That is enough to force a lexer, a recursive-descent parser, an AST, bytecode, a
 
 ## Write the compiler: lexer
 
-**Plain English:** The lexer scans left to right and turns characters into a flat list of tokens.
+**Plain English:** Write the compiler: lexer — concepts first, then code.
 
 A lexer is a cursor over the string. Skip spaces. If you see a digit, eat a number. If you see a letter, eat an identifier. Punctuation is one character.
 
@@ -200,7 +204,7 @@ Test it: `tokenize("add(1, 2)")` should give `IDENT, LPAREN, NUMBER, COMMA, NUMB
 
 ## Write the parser (recursive descent)
 
-**Plain English:** The parser reads tokens and builds a tree — each grammar rule is a small function that calls the next one down.
+**Plain English:** Write the parser (recursive descent) — concepts first, then code.
 
 Each grammar rule is a function. `parseExpr` calls `parseTerm` for `+` `-`; `parseTerm` calls `parseFactor` for `*` `/`; `parseFactor` is a number, a `(expr)`, or a call.
 
@@ -269,7 +273,7 @@ Precedence is **call order**: `*` binds tighter because `parseExpr` only eats `+
 
 ## Transform, then generate bytecode
 
-**Plain English:** Walk the AST and emit stack-machine instructions — each node becomes one or more opcodes.
+**Plain English:** Transform, then generate bytecode — concepts first, then code.
 
 A transformer walks the tree and returns a new tree. Tiny does not need one. Babel’s job is almost *only* this: `optional chaining` AST → `if (x == null)` AST.
 
@@ -317,7 +321,7 @@ That list **is** your compiler’s output. V8’s bytecode is denser and uses re
 
 ## A VM so you can run it
 
-**Plain English:** A tiny interpreter pops and pushes values on a stack — without this, your compiler only prints instructions.
+**Plain English:** A VM so you can run it — concepts first, then code.
 
 A compiler you cannot execute is a pretty-printer. Ten lines of VM:
 
@@ -375,7 +379,7 @@ Put `tokenize`, `parse`, `compile`, `run` in one file. That file is a compiler +
 
 ## If you want to grow it toward real JS
 
-**Plain English:** Once Tiny runs, add one feature at a time — variables, then functions, then borrow an existing parser instead of rewriting JS.
+**Plain English:** If you want to grow it toward real JS — concepts first, then code.
 
 Do this in order. Each step is one weekend, not one hour.
 
@@ -397,7 +401,7 @@ A hobby JIT needs: IR (three-address or SSA), a register allocator, and a deopt 
 
 ## Transpilers you already use
 
-**Plain English:** Babel and TypeScript are the same pipeline — they just emit JavaScript text instead of bytecode.
+**Plain English:** Transpilers you already use — concepts first, then code.
 
 When you write JSX or TypeScript, a compiler still ran. It just **emitted JS**:
 
@@ -415,7 +419,7 @@ SWC and esbuild do the same job faster (Rust / Go, parallel parse). They are sti
 
 ## A checklist for your own compiler
 
-**Plain English:** A short recipe — grammar first, lexer tests, AST printing, then pick a backend and keep the language tiny until every stage has tests.
+**Plain English:** Short answers to reuse in interviews or reviews.
 
 1. **Write the grammar down** (one page). If you cannot, you cannot parse it.
 2. **Lexer tests first.** Dump tokens until they bore you.

@@ -10,7 +10,17 @@ tags:
 
 The **Nx cache** skips work you already did. For `nx build web`, Nx hashes the files that `build` listed as inputs (and often the inputs of projects it depends on). Same hash → restore `dist` from cache instead of running Vite again.
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **Declaring what counts as an input** — Declaring what counts as an input — explained with a short example.
+2. **Seeing a hit vs a miss** — Side-by-side comparison so you can pick the right tool.
+3. **What must not be cached blindly** — What must not be cached blindly — explained with a short example.
+
 ## Declaring what counts as an input
+
+**Plain English:** Declaring what counts as an input — definition, example, and where you will see it.
 
 ```json
 {
@@ -30,6 +40,8 @@ The **Nx cache** skips work you already did. For `nx build web`, Nx hashes the f
 
 ## Seeing a hit vs a miss
 
+**Plain English:** Seeing a hit vs a miss — definition, example, and where you will see it.
+
 ```bash
 pnpm nx build web
 # second time, no source change:
@@ -44,6 +56,8 @@ pnpm nx reset    # wipe local cache when it looks wrong
 Cache lives under `.nx` locally (gitignored). Nx Cloud can share it across laptops and <Term id="ci">CI</Term> so the second agent does not rebuild what the first already built.
 
 ## What must not be cached blindly
+
+**Plain English:** What must not be cached blindly — definition, example, and where you will see it.
 
 `dev` servers and anything that watches files should stay `cache: false`. Caching `nx test` is fine if outputs (coverage) are declared; flaky tests plus a cache hit will hide failures until inputs change.
 

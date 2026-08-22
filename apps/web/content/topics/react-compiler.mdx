@@ -12,7 +12,17 @@ The **React Compiler** (formerly React Forget) is an optional Babel plugin. It a
 
 You still write hooks. You write **fewer** `useMemo` / `useCallback` wrappers.
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **Before and after** — Before and after — explained with a short example.
+2. **It does not replace hooks** — It does not replace hooks — explained with a short example.
+3. **When memoization still matters by hand** — When this applies — and when to skip it.
+
 ## Before and after
+
+**Plain English:** Before and after — definition, example, and where you will see it.
 
 ```tsx
 // without a compiler, people often write this by hand
@@ -28,6 +38,8 @@ The compiler proves `onSave` only changes when `draft` changes, and wraps it for
 
 ## It does not replace hooks
 
+**Plain English:** It does not replace hooks — definition, example, and where you will see it.
+
 ```tsx
 const [query, setQuery] = useState("");
 useEffect(() => {
@@ -38,6 +50,8 @@ useEffect(() => {
 State, effects, and refs stay. The compiler is about **skipping extra work**, not about new runtime APIs. Interviews and older codebases still expect you to know `useMemo`. This site does not require the compiler.
 
 ## When memoization still matters by hand
+
+**Plain English:** When memoization still matters by hand — definition, example, and where you will see it.
 
 If you cannot turn the compiler on (old Babel config, a runtime that does not support it), memoize **at the boundary** that is expensive:
 

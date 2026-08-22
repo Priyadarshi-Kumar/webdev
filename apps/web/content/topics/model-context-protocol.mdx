@@ -18,7 +18,26 @@ The analogy that stuck is USB-C: the **cable** is the protocol. The **laptop** i
 
 Dotted, sky-colored words are glossary terms. Each one is also a **link** to a short page with an example.
 
+## Read this in order
+
+Work through these sections in order:
+
+1. **What MCP is (and is not)** — Clear definition, then a minimal example.
+2. **Three roles** — Three roles — concepts first, then code.
+3. **The three primitives** — The three primitives — concepts first, then code.
+4. **How a call actually happens** — Practical steps you can follow in order.
+5. **JSON-RPC on the wire** — JSON-RPC on the wire — concepts first, then code.
+6. **Transports** — Transports — concepts first, then code.
+7. **Tiny server example** — Runnable code or data to copy.
+8. **Host config example (Cursor)** — Runnable code or data to copy.
+9. **Capabilities and notifications** — Capabilities and notifications — concepts first, then code.
+10. **Security, in practice** — Security, in practice — concepts first, then code.
+11. **What readers should remember** — What readers should remember — concepts first, then code.
+12. **Interview questions** — Quick map of the whole note — skim first or review last.
+
 ## What MCP is (and is not)
+
+**Plain English:** What MCP is (and is not), explained simply with an example.
 
 **MCP is a conversation format.** Messages are <Term id="json-rpc">JSON-RPC 2.0</Term>: a `method`, `params`, and an `id` to match the reply. On top of that, the spec names *who* talks, *what* a server may offer, and *how* bytes move (stdio or HTTP).
 
@@ -31,6 +50,8 @@ Dotted, sky-colored words are glossary terms. Each one is also a **link** to a s
 If you only needed “the model can call `fetch`,” you would not need MCP. You need it when **many hosts** should plug into **many servers** without each pair inventing a schema.
 
 ## Three roles
+
+**Plain English:** Three roles — concepts first, then code.
 
 | Role | What it is | Example |
 | --- | --- | --- |
@@ -49,6 +70,8 @@ Human
 A host often runs **several** <Term id="mcp-client">clients</Term> at once. Isolation is the point: a crash or a bad tool in one server should not take down the others.
 
 ## The three primitives
+
+**Plain English:** The three primitives — concepts first, then code.
 
 A <Term id="mcp-server">server</Term> may implement any mix of these. Most “useful” servers start with tools.
 
@@ -87,6 +110,8 @@ Use prompts for **repeatable workflows** (“review this PR”, “explain this 
 
 ## How a call actually happens
 
+**Plain English:** Follow these steps in order — each builds on the last.
+
 Ignore transports for a moment. The loop is always:
 
 1. Host starts or connects to the server.
@@ -101,6 +126,8 @@ Ignore transports for a moment. The loop is always:
 The model never speaks JSON-RPC. It speaks whatever tool format the host uses (OpenAI tools, Anthropic tools, …). **The client is the adapter.**
 
 ## JSON-RPC on the wire
+
+**Plain English:** JSON-RPC on the wire — concepts first, then code.
 
 A request:
 
@@ -136,6 +163,8 @@ Errors use JSON-RPC `error` objects (`code`, `message`). Tool *business* failure
 
 ## Transports
 
+**Plain English:** Transports — concepts first, then code.
+
 Same JSON-RPC, different pipes.
 
 ### stdio (local)
@@ -166,6 +195,8 @@ The client POSTs JSON-RPC to an HTTPS endpoint. The server may respond with a si
 Older docs mention a dedicated **SSE** transport. Treat Streamable HTTP as the remote default unless you are maintaining a 2024-era server.
 
 ## Tiny server example
+
+**Plain English:** Runnable code or data to copy.
 
 A stdio server with one tool. Sketch, not a full SDK dump — official packages move (`@modelcontextprotocol/sdk` vs `@modelcontextprotocol/server` 2.x for 2026).
 
@@ -212,6 +243,8 @@ A `tools/call` the host might send after the model picks IST:
 
 ## Host config example (Cursor)
 
+**Plain English:** Runnable code or data to copy.
+
 Cursor reads MCP servers from project or user config (often `.cursor/mcp.json` or Cursor Settings → MCP). Shape:
 
 ```json
@@ -239,6 +272,8 @@ After connect, open the host’s MCP panel: you should see `get_time` (or whatev
 
 ## Capabilities and notifications
 
+**Plain English:** Capabilities and notifications — concepts first, then code.
+
 `initialize` is not small talk. Each side sends a `capabilities` object. If the server does not advertise `tools`, the client must not call `tools/list`. If it advertises `tools.listChanged`, the client should listen for `notifications/tools/list_changed` instead of polling.
 
 Other capability families you will see in docs:
@@ -252,6 +287,8 @@ Read the date on the spec (`2024-11-05`, `2025-03-26`, `2025-11-25`, `2026-07-28
 
 ## Security, in practice
 
+**Plain English:** Security, in practice — concepts first, then code.
+
 MCP makes it **easy** to give a model a powerful API. Treat a new server like a new dependency with network and disk.
 
 1. **Least privilege.** A filesystem server should see one project folder, not `$HOME`.
@@ -263,6 +300,8 @@ MCP makes it **easy** to give a model a powerful API. Treat a new server like a 
 
 ## What readers should remember
 
+**Plain English:** What readers should remember — concepts first, then code.
+
 - **Host / client / server** — three nouns. The model lives in the host.
 - **Tools vs resources vs prompts** — verb / blob / template.
 - **JSON-RPC** — `method` + `id`; notifications have no `id`.
@@ -272,6 +311,8 @@ MCP makes it **easy** to give a model a powerful API. Treat a new server like a 
 - **Version the spec** when you debug “it works in Claude but not in Cursor.”
 
 ## Interview questions
+
+**Plain English:** Short answers to reuse in interviews or reviews.
 
 Open a question to see a sample answer. Short version first.
 

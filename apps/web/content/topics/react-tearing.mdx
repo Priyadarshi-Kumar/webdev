@@ -12,7 +12,17 @@ tags:
 
 <Term id="concurrent-rendering">Concurrent rendering</Term> makes this more likely: React may pause a render. If you read `Date.now()` or `store.getState()` directly during render, a later component in the same pass can see a newer value.
 
+## Read this in order
+
+Short jargon note — read top to bottom:
+
+1. **The naive read** — The naive read — explained with a short example.
+2. **The intended API** — The main API or commands you will actually use.
+3. **Zustand and friends** — Zustand and friends — explained with a short example.
+
 ## The naive read
+
+**Plain English:** The naive read — definition, example, and where you will see it.
 
 ```tsx
 // risky: window width during render differs on server (0) vs client
@@ -24,6 +34,8 @@ function Width() {
 On the server, `window` may not exist. On the client, it does. Even with a guard, two `Width` components could theoretically see two widths if a resize happens mid-render.
 
 ## The intended API
+
+**Plain English:** The intended API — definition, example, and where you will see it.
 
 ```tsx
 import { useSyncExternalStore } from "react";
@@ -42,6 +54,8 @@ export function Width() {
 The third argument is the **server snapshot** (here `0`) so SSR has a defined value. React will <Term id="hydration">hydrate</Term> with `0`, then subscribe and update to the real width — one consistent snapshot per render.
 
 ## Zustand and friends
+
+**Plain English:** Zustand and friends — definition, example, and where you will see it.
 
 Libraries that support concurrent React use `useSyncExternalStore` internally. If you write `const n = myStore.count` during render, you are on your own. Use the library’s hook:
 
