@@ -1,0 +1,438 @@
+---
+title: JavaScript modules — import, export, ESM, and CommonJS
+description: How JS modules split code into files, how import and export work, ESM vs CommonJS in Node and the browser, dynamic import, and the mistakes that break builds.
+slug: javascript-modules
+date: 2026-08-22
+subject: javascript
+tags:
+  - javascript
+  - esm
+  - node
+  - tooling
+  - interview
+---
+
+A **module** is one file that owns its own scope. Other files reach in through **`export`** and **`import`**. That is how you stop every variable from living in one global bucket and how bundlers like [Vite](/blog/vite) know what to include in a build.
+
+This note goes from syntax you use every day to the two systems that actually run in production — **ES modules (ESM)** and **CommonJS (CJS)** — plus dynamic `import()` and the interview questions that follow.
+
+## Read this in order
+
+Work through these sections in order:
+
+1. **Why modules exist** — The problem globals caused and what modules fix.
+2. **export and import** — Named, default, and re-exports with runnable examples.
+3. **How the browser loads ESM** — `type="module"`, strict mode, and the import graph.
+4. **ESM vs CommonJS** — Two module systems; how Node picks one.
+5. **Dynamic import()** — Load code lazily and on demand.
+6. **package.json switches** — `"type": "module"`, `.mjs`, `.cjs`, and `"exports"`.
+7. **Tree shaking** — Why static `import` matters for bundle size.
+8. **Common mistakes** — Mixing systems, circular deps, and path confusion.
+9. **Interview answers** — Short patterns to reuse under pressure.
+
+## Why modules exist
+
+**Plain English:** Before modules, scripts shared one global scope; modules give each file private variables and explicit public APIs.
+
+Old pattern — everything on `window`:
+
+```html
+<script src="utils.js"></script>
+<script src="app.js"></script>
+```
+
+If `utils.js` and `app.js` both declare `let config`, the second file wins or throws. Order matters. Nothing tells you what `app.js` needs from `utils.js`.
+
+Module pattern — explicit boundaries:
+
+```js
+// utils.js
+export function formatPrice(cents) {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+// app.js
+import { formatPrice } from "./utils.js";
+
+console.log(formatPrice(1299)); // "$12.99"
+```
+
+Each file is a **module scope**. Only names you **export** are visible outside. The bundler or browser builds a **dependency graph**: start at the entry, follow every static `import`, include those files.
+
+## export and import
+
+**Plain English:** `export` publishes names from a file; `import` pulls them into another file — the basic syntax for both styles.
+
+### Named exports
+
+Export one or many bindings. Import with `{ }` and the **exact name**.
+
+```js
+// math.js
+export const PI = 3.14159;
+
+export function add(a, b) {
+  return a + b;
+}
+
+export class Vector {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+  }
+}
+```
+
+```js
+// main.js
+import { PI, add, Vector } from "./math.js";
+
+console.log(add(PI, 1));
+```
+
+Rename on import:
+
+```js
+import { add as sum } from "./math.js";
+```
+
+Export after declaration:
+
+```js
+function multiply(a, b) {
+  return a * b;
+}
+
+export { multiply };
+```
+
+### Default export
+
+One file may have **one default** export. Import name is your choice.
+
+```js
+// logger.js
+export default function log(message) {
+  console.log(`[app] ${message}`);
+}
+```
+
+```js
+// main.js
+import log from "./logger.js";
+import anyNameWorks from "./logger.js"; // same binding
+
+log("ready");
+```
+
+You can mix default and named in one file (common in React):
+
+```js
+// Button.jsx
+export default function Button({ children }) {
+  return <button type="button">{children}</button>;
+}
+
+export function ButtonGroup({ children }) {
+  return <div className="btn-group">{children}</div>;
+}
+```
+
+```js
+import Button, { ButtonGroup } from "./Button.jsx";
+```
+
+**Convention:** default = main thing the file provides; named = helpers or extra types.
+
+### Re-exports and barrel files
+
+Re-export from another module — useful for a folder `index.js` that re-exports a public API:
+
+```js
+// components/index.js
+export { default as Button } from "./Button.jsx";
+export { Card } from "./Card.jsx";
+export * from "./icons.js";
+```
+
+```js
+import { Button, Card } from "./components/index.js";
+// or "./components" if your resolver adds index
+```
+
+Barrel files are convenient but can **slow dev servers** if they re-export huge trees. Prefer direct imports in hot paths when build time hurts.
+
+## How the browser loads ESM
+
+**Plain English:** Modern browsers run modules when you mark the script as `type="module"` and use full relative paths with file extensions.
+
+HTML entry:
+
+```html
+<script type="module" src="/main.js"></script>
+```
+
+Rules that differ from classic scripts:
+
+| Classic `<script>` | `<script type="module">` |
+| --- | --- |
+| Global scope | Module scope (strict mode always on) |
+| `defer` by default for external scripts | Deferred — runs after HTML parse, in order |
+| No top-level `import` | Top-level `import` / `export` allowed |
+| Same-origin unless CORS | CORS applies to cross-origin module scripts |
+
+Relative imports need a **file extension** in the browser (Node bundlers often hide this):
+
+```js
+import { add } from "./math.js"; // yes
+import { add } from "./math";    // fails in browser without a bundler
+```
+
+The browser fetches `main.js`, sees its imports, fetches those, and so on — a **module graph**. That is why [Vite dev](/blog/vite) serves source files directly: the browser does the graph walk; Vite only transforms each file on request.
+
+Inline module:
+
+```html
+<script type="module">
+  import { formatPrice } from "./utils.js";
+  document.body.textContent = formatPrice(500);
+</script>
+```
+
+## ESM vs CommonJS
+
+**Plain English:** ESM uses `import`/`export`; CommonJS uses `require`/`module.exports` — Node supports both, but you must not mix them carelessly in the same file.
+
+### CommonJS (CJS) — Node’s original system
+
+```js
+// logger.cjs or logger.js in a CJS package
+function log(msg) {
+  console.log(msg);
+}
+
+module.exports = { log };
+// or: module.exports.log = log;
+// or: exports.log = log;
+```
+
+```js
+const { log } = require("./logger.cjs");
+log("hello");
+```
+
+`require` is **synchronous**. Node reads and evaluates the file immediately. That fit server startup; browsers needed async loading, which led to ESM in the spec.
+
+### ESM — the JavaScript standard
+
+```js
+// logger.js (ESM)
+export function log(msg) {
+  console.log(msg);
+}
+```
+
+```js
+import { log } from "./logger.js";
+log("hello");
+```
+
+`import` is **static** (top level, string literal path) so tools can analyze the graph before running code.
+
+### Quick comparison
+
+| | ESM | CommonJS |
+| --- | --- | --- |
+| Syntax | `import` / `export` | `require` / `module.exports` |
+| Loading | Async (browser); Node loads synchronously for CJS compat layers | Sync |
+| Top-level `await` | Allowed in ESM | Not in CJS |
+| `__dirname` | Not built-in (use `import.meta.url`) | Available |
+| Tree shaking | Yes, with static imports | Harder |
+| Default in Node | When `"type": "module"` or `.mjs` | When `"type": "commonjs"` or `.cjs` |
+
+### Interop in Node
+
+ESM importing CJS default:
+
+```js
+import pkg from "some-cjs-package";
+// often the whole module.exports object
+```
+
+CJS requiring ESM (awkward — prefer dynamic import):
+
+```js
+const { log } = await import("./logger.js");
+```
+
+**Rule of thumb for new Node code:** write **ESM** (`.js` + `"type": "module"` or `.mjs`). Reach for CJS only when an old dependency or tool requires it.
+
+Libraries in [node_modules](/blog/node-modules) publish one or both formats; read their `package.json` `"exports"` field.
+
+## Dynamic import()
+
+**Plain English:** `import()` is a function that returns a Promise — use it for code splitting and loading modules only when needed.
+
+Static import — always included in the graph:
+
+```js
+import { heavyChart } from "./chart.js";
+```
+
+Dynamic import — loaded at runtime:
+
+```js
+button.addEventListener("click", async () => {
+  const { heavyChart } = await import("./chart.js");
+  heavyChart.render(data);
+});
+```
+
+Uses:
+
+- **Route-based splitting** — React `lazy(() => import("./Page.jsx"))`
+- **Optional features** — admin panel only for staff
+- **Conditional environment** — different adapters in browser vs Node
+
+Dynamic import returns a module namespace object:
+
+```js
+const mod = await import("./utils.js");
+mod.formatPrice(100);
+```
+
+Bundlers emit a **separate chunk** file for each dynamic target. That is how production keeps the first paint small.
+
+## package.json switches
+
+**Plain English:** [package.json](/blog/package-json) tells Node whether `.js` files are ESM or CJS and which entry points exist.
+
+```json
+{
+  "name": "my-app",
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js",
+    "./utils": "./dist/utils.js"
+  }
+}
+```
+
+| Setting | Effect |
+| --- | --- |
+| `"type": "module"` | `.js` files treated as ESM |
+| `"type": "commonjs"` (default) | `.js` files treated as CJS |
+| `.mjs` | Always ESM |
+| `.cjs` | Always CJS |
+| `"exports"` | Public import paths; can expose ESM and CJS separately |
+
+This repo’s web app uses `"type": "module"` at the workspace root. Tools ([Vite](/blog/vite), TypeScript, Nx) assume ESM in source and emit ESM or bundled output for the browser.
+
+### import.meta
+
+ESM-only object with module URL and env (Vite injects `import.meta.env`):
+
+```js
+const moduleUrl = import.meta.url;
+
+// Node: file path from URL
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+```
+
+## Tree shaking
+
+**Plain English:** Bundlers drop unused exports if you use static `import`/`export` — dynamic requires defeat that optimization.
+
+```js
+// utils.js
+export function used() {}
+export function unused() {}
+```
+
+```js
+import { used } from "./utils.js";
+used();
+```
+
+Production build includes `used` only if the bundler can prove `unused` is never referenced. **Side-effect imports** block shaking:
+
+```js
+import "./polyfills.js"; // runs for side effects; keep file small
+```
+
+CommonJS `require` inside functions is harder to analyze, so libraries ship **ESM builds** (`"module"` or `"exports"."import"`) for smaller client bundles.
+
+## Common mistakes
+
+**Plain English:** Most module bugs are mixing ESM/CJS, circular imports, or wrong paths — here is how to spot them.
+
+### Mixing require and import in one file
+
+```js
+import fs from "node:fs";
+const path = require("node:path"); // SyntaxError in ESM file
+```
+
+Pick one system per file (unless using createRequire in ESM):
+
+```js
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+const legacy = require("legacy-only-cjs");
+```
+
+### Circular dependencies
+
+```js
+// a.js
+import { b } from "./b.js";
+export const a = "a";
+
+// b.js
+import { a } from "./a.js";
+export const b = "a + " + a;
+```
+
+One module may see the other’s exports before initialization (`undefined`). Fix: extract shared code to `shared.js`, or pass values at runtime instead of import-time cycles.
+
+### Forgetting extensions in browser-native ESM
+
+Use `./file.js` in source meant to run without a bundler. TypeScript and Vite often allow `./file` — know which environment you target.
+
+### Default vs named import mismatch
+
+```js
+export default function App() {}
+import { App } from "./App.jsx"; // wrong — App is default, not named
+import App from "./App.jsx";     // correct
+```
+
+Read the library docs or hover types in the IDE.
+
+## Interview answers
+
+**Plain English:** Short answers to reuse in interviews or code review.
+
+**What is the difference between ESM and CommonJS?**  
+ESM is the JS standard (`import`/`export`, static analysis, async in browsers). CJS is Node’s older system (`require`/`module.exports`, synchronous). New apps and browser code use ESM.
+
+**What is a default export vs named export?**  
+Default: one primary export per file; import name is flexible. Named: zero or many; import must use `{ exactName }`.
+
+**What does `import()` do?**  
+Dynamic import — returns a Promise of the module. Used for code splitting and lazy loading.
+
+**Why `"type": "module"` in package.json?**  
+Tells Node to treat `.js` files as ESM so you can use top-level `import`/`export` without renaming to `.mjs`.
+
+**What is tree shaking?**  
+Dead-code elimination of unused exports in ESM graphs at build time. Needs static imports; side-effect-free modules shake best.
+
+**How does the browser load modules without Webpack?**  
+`<script type="module">` + native `import` URLs. The browser fetches and evaluates the graph. TypeScript/JSX still need a dev tool or build step.
+
+**Related on this site:** [How JavaScript actually runs](/blog/how-javascript-works) (host vs engine), [Vite](/blog/vite) (dev server + ESM), [package.json](/blog/package-json), [node_modules](/blog/node-modules). For loading remote apps at runtime, see [Module Federation](/blog/module-federation).
