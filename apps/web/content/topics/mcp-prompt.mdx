@@ -12,16 +12,7 @@ tags:
 
 A **prompt** in MCP is a *template*, not the chat box. `prompts/list` / `prompts/get` return messages the host can send to the model — often a slash command: `/pr-review 1842`.
 
-## Read this in order
-
-Short jargon note — read top to bottom:
-
-1. **A template with an argument** — A template with an argument — explained with a short example.
-2. **When to use which** — When this applies — and when to skip it.
-
 ## A template with an argument
-
-**Plain English:** A template with an argument — definition, example, and where you will see it.
 
 ```json
 {
@@ -42,8 +33,6 @@ Short jargon note — read top to bottom:
 The user picks `pr_review` and types `1842`. The host substitutes and sends a normal chat turn. The server can also *fetch* PR 1842 inside `prompts/get` and put the diff in the message — then you do not need a separate tool for that workflow.
 
 ## When to use which
-
-**Plain English:** When to use which — definition, example, and where you will see it.
 
 | Primitive | Job |
 | --- | --- |

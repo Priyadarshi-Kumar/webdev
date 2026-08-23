@@ -12,16 +12,7 @@ tags:
 
 An **MCP server** is a small process or HTTP service. The <Term id="mcp-host">host</Term> starts it (stdio) or POSTs to it (Streamable HTTP). The server answers structured requests. The **model stays in the host**.
 
-## Read this in order
-
-Short jargon note — read top to bottom:
-
-1. **Register a tool** — Register a tool — explained with a short example.
-2. **Two ways to run** — Two ways to run — explained with a short example.
-
 ## Register a tool
-
-**Plain English:** Register a tool — definition, example, and where you will see it.
 
 ```ts
 import { z } from "zod";
@@ -36,8 +27,6 @@ When the model wants docs, the host calls `tools/call` with `{ query: "lockfile"
 Official TypeScript today often lives in `@modelcontextprotocol/server` (2026 spec). Older samples use `@modelcontextprotocol/sdk`.
 
 ## Two ways to run
-
-**Plain English:** Two ways to run — definition, example, and where you will see it.
 
 **stdio** — the host spawns `node dist/server.js`. Messages are newline-delimited JSON on stdin/stdout. Good for local files.
 

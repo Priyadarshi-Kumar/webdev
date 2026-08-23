@@ -14,25 +14,7 @@ JavaScript already runs in the browser. TypeScript is a **type checker that eras
 
 You do not need the whole handbook. You need the pieces that show up in React: **props**, **state**, **events**, **API JSON**, and **shared helpers**. This note is that subset.
 
-## Read this in order
-
-Work through these sections in order:
-
-1. **Mental model** — Terms and mental model before the examples.
-2. **Everyday types** — Everyday types — concepts first, then code.
-3. **Narrowing (this is the real skill)** — Narrowing (this is the real skill) — concepts first, then code.
-4. **Generics (functions that keep the type)** — Generics (functions that keep the type) — concepts first, then code.
-5. **Utility types worth memorizing** — Utility types worth memorizing — concepts first, then code.
-6. **React: props and children** — React: props and children — concepts first, then code.
-7. **React: events, refs, hooks** — React: events, refs, hooks — concepts first, then code.
-8. **Typing JSON from an API** — The main API or commands you will actually use.
-9. **Escapes (use sparingly)** — Escapes (use sparingly) — concepts first, then code.
-10. **`tsconfig` that matters for React** — `tsconfig` that matters for React — concepts first, then code.
-11. **Interview-style questions** — Quick map of the whole note — skim first or review last.
-
 ## Mental model
-
-**Plain English:** Terms and mental model before the examples.
 
 ### Types are comments the compiler reads
 
@@ -62,8 +44,6 @@ const [user, setUser] = useState<User | null>(null); // need help: null is not a
 If you write `useState({})` you get `{}` forever. Give the generic, or pass a typed initial value.
 
 ## Everyday types
-
-**Plain English:** Everyday types — concepts first, then code.
 
 ### Primitives, unions, and `null`
 
@@ -131,8 +111,6 @@ type Scores = Record<string, number>; // { [key: string]: number }
 
 ## Narrowing (this is the real skill)
 
-**Plain English:** Narrowing (this is the real skill) — concepts first, then code.
-
 TypeScript follows your control flow. If you prove a value is a member of the union, later lines see the narrower type.
 
 ```ts
@@ -186,8 +164,6 @@ function assertNever(x: never): never {
 
 ## Generics (functions that keep the type)
 
-**Plain English:** Generics (functions that keep the type) — concepts first, then code.
-
 A generic is a **placeholder filled in at the call site**. You already use them: `useState<T>`, `Array<T>`, `Promise<T>`.
 
 ```ts
@@ -210,8 +186,6 @@ function byId<T extends { id: string }>(items: T[], id: string): T | undefined {
 Do not generic-ize everything. If there is only one type, write that type.
 
 ## Utility types worth memorizing
-
-**Plain English:** Utility types worth memorizing — concepts first, then code.
 
 These are built in. You will read them in React libraries.
 
@@ -249,8 +223,6 @@ get({ id: "1", name: "Ada" }, "name"); // string
 ```
 
 ## React: props and children
-
-**Plain English:** React: props and children — concepts first, then code.
 
 ### Props as a type (or interface)
 
@@ -314,8 +286,6 @@ export function IconButton({ icon, children, ...rest }: IconButtonProps) {
 `ComponentProps<"a">`, `ComponentProps<typeof Link>` — same idea for DOM tags and your own components. `ComponentPropsWithoutRef<"button">` if you do not want `ref` in the props object (pair with `forwardRef` / `useImperativeHandle` when you do).
 
 ## React: events, refs, hooks
-
-**Plain English:** React: events, refs, hooks — concepts first, then code.
 
 ### Events
 
@@ -396,8 +366,6 @@ Throwing when missing is a type narrowing trick: after the `if`, `ctx` is `Auth`
 
 ## Typing JSON from an API
 
-**Plain English:** The main API or commands you will actually use.
-
 The compiler does not trust `fetch`. `response.json()` is `any` in older DOM types, or a generic you must supply. Validate at the boundary (Zod, Valibot, or a type guard). A type assertion (`as User`) is a promise to the compiler, not a check.
 
 ```ts
@@ -430,8 +398,6 @@ You still get `"/" | "/blog/:slug"` on values, but you also get an error if you 
 
 ## Escapes (use sparingly)
 
-**Plain English:** Escapes (use sparingly) — concepts first, then code.
-
 | Syntax | What it does |
 | --- | --- |
 | `as T` | Trust me, this is `T` |
@@ -447,8 +413,6 @@ If you need `as` at an API boundary, put it in one function. Do not sprinkle it 
 
 ## `tsconfig` that matters for React
 
-**Plain English:** `tsconfig` that matters for React — concepts first, then code.
-
 You do not need to memorize every flag. These change how you write code:
 
 - **`strict`** — on. Includes null checks and more.
@@ -459,8 +423,6 @@ You do not need to memorize every flag. These change how you write code:
 `skipLibCheck` skips checking `.d.ts` in `node_modules`. Almost everyone leaves it on so library types do not fail your build.
 
 ## Interview-style questions
-
-**Plain English:** Short answers to reuse in interviews or reviews.
 
 ### Why not `any`?
 

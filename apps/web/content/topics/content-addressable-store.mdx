@@ -13,17 +13,7 @@ pnpm keeps a **store** (often `~/.local/share/pnpm/store`). Packages are filed b
 
 Each project’s `node_modules` <Term id="hard-links">hard-links</Term> (or ref-links) into that store.
 
-## Read this in order
-
-Short jargon note — read top to bottom:
-
-1. **One store, many projects** — One store, many projects — explained with a short example.
-2. **Cold vs warm machines** — Side-by-side comparison so you can pick the right tool.
-3. **Content-addressable means hash = identity** — Content-addressable means hash = identity — explained with a short example.
-
 ## One store, many projects
-
-**Plain English:** One store, many projects — definition, example, and where you will see it.
 
 ```txt
 ~/.local/share/pnpm/store/v3/     ← real tarball contents
@@ -41,8 +31,6 @@ pnpm store prune    # drop versions no project links to anymore
 
 ## Cold vs warm machines
 
-**Plain English:** Cold vs warm machines — definition, example, and where you will see it.
-
 A **cold** <Term id="ci">CI</Term> machine still downloads from the <Term id="npm-registry">registry</Term> (unless you cache the store between jobs). A **warm** laptop mostly links. GitHub Actions `cache: pnpm` is caching this store, not your git repo.
 
 ```yaml
@@ -53,8 +41,6 @@ A **cold** <Term id="ci">CI</Term> machine still downloads from the <Term id="np
 ```
 
 ## Content-addressable means hash = identity
-
-**Plain English:** Content-addressable means hash = identity — definition, example, and where you will see it.
 
 If two tarballs have the same contents, they share a store key. If a package republishes the same version with different bytes (registry incident), the hash will not match the <Term id="lockfile">lockfile</Term> `integrity` field and install should fail.
 

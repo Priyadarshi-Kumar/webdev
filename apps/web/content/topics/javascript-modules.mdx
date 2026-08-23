@@ -16,23 +16,7 @@ A **module** is one file that owns its own scope. Other files reach in through *
 
 This note goes from syntax you use every day to the two systems that actually run in production — **ES modules (ESM)** and **CommonJS (CJS)** — plus dynamic `import()` and the interview questions that follow.
 
-## Read this in order
-
-Work through these sections in order:
-
-1. **Why modules exist** — The problem globals caused and what modules fix.
-2. **export and import** — Named, default, and re-exports with runnable examples.
-3. **How the browser loads ESM** — `type="module"`, strict mode, and the import graph.
-4. **ESM vs CommonJS** — Two module systems; how Node picks one.
-5. **Dynamic import()** — Load code lazily and on demand.
-6. **package.json switches** — `"type": "module"`, `.mjs`, `.cjs`, and `"exports"`.
-7. **Tree shaking** — Why static `import` matters for bundle size.
-8. **Common mistakes** — Mixing systems, circular deps, and path confusion.
-9. **Interview answers** — Short patterns to reuse under pressure.
-
 ## Why modules exist
-
-**Plain English:** Before modules, scripts shared one global scope; modules give each file private variables and explicit public APIs.
 
 Old pattern — everything on `window`:
 
@@ -60,8 +44,6 @@ console.log(formatPrice(1299)); // "$12.99"
 Each file is a **module scope**. Only names you **export** are visible outside. The bundler or browser builds a **dependency graph**: start at the entry, follow every static `import`, include those files.
 
 ## export and import
-
-**Plain English:** `export` publishes names from a file; `import` pulls them into another file — the basic syntax for both styles.
 
 ### Named exports
 
@@ -164,8 +146,6 @@ Barrel files are convenient but can **slow dev servers** if they re-export huge 
 
 ## How the browser loads ESM
 
-**Plain English:** Modern browsers run modules when you mark the script as `type="module"` and use full relative paths with file extensions.
-
 HTML entry:
 
 ```html
@@ -200,8 +180,6 @@ Inline module:
 ```
 
 ## ESM vs CommonJS
-
-**Plain English:** ESM uses `import`/`export`; CommonJS uses `require`/`module.exports` — Node supports both, but you must not mix them carelessly in the same file.
 
 ### CommonJS (CJS) — Node’s original system
 
@@ -271,8 +249,6 @@ Libraries in [node_modules](/blog/node-modules) publish one or both formats; rea
 
 ## Dynamic import()
 
-**Plain English:** `import()` is a function that returns a Promise — use it for code splitting and loading modules only when needed.
-
 Static import — always included in the graph:
 
 ```js
@@ -304,8 +280,6 @@ mod.formatPrice(100);
 Bundlers emit a **separate chunk** file for each dynamic target. That is how production keeps the first paint small.
 
 ## package.json switches
-
-**Plain English:** [package.json](/blog/package-json) tells Node whether `.js` files are ESM or CJS and which entry points exist.
 
 ```json
 {
@@ -345,8 +319,6 @@ const __dirname = path.dirname(__filename);
 
 ## Tree shaking
 
-**Plain English:** Bundlers drop unused exports if you use static `import`/`export` — dynamic requires defeat that optimization.
-
 ```js
 // utils.js
 export function used() {}
@@ -367,8 +339,6 @@ import "./polyfills.js"; // runs for side effects; keep file small
 CommonJS `require` inside functions is harder to analyze, so libraries ship **ESM builds** (`"module"` or `"exports"."import"`) for smaller client bundles.
 
 ## Common mistakes
-
-**Plain English:** Most module bugs are mixing ESM/CJS, circular imports, or wrong paths — here is how to spot them.
 
 ### Mixing require and import in one file
 
@@ -414,8 +384,6 @@ import App from "./App.jsx";     // correct
 Read the library docs or hover types in the IDE.
 
 ## Interview answers
-
-**Plain English:** Short answers to reuse in interviews or code review.
 
 **What is the difference between ESM and CommonJS?**  
 ESM is the JS standard (`import`/`export`, static analysis, async in browsers). CJS is Node’s older system (`require`/`module.exports`, synchronous). New apps and browser code use ESM.

@@ -24,25 +24,7 @@ This site uses **pnpm**. Below is enough to choose one, use it daily, and explai
 
 Dotted, sky-colored words are glossary terms — hover (or tap on a phone) for a plain-language note.
 
-## Read this in order
-
-Work through these sections in order:
-
-1. **Start here: the mental model** — Terms and mental model before the examples.
-2. **Side-by-side comparison** — Side-by-side comparison — concepts first, then code.
-3. **Everyday commands** — The main API or commands you will actually use.
-4. **Lockfiles are not interchangeable** — Lockfiles are not interchangeable — concepts first, then code.
-5. **How `node_modules` is built (this is the real difference)** — Practical steps you can follow in order.
-6. **Phantom dependencies, in code** — Phantom dependencies, in code — concepts first, then code.
-7. **Workspaces (many packages, one install)** — Workspaces (many packages, one install) — concepts first, then code.
-8. **Peer dependencies, in one paragraph** — Peer dependencies, in one paragraph — concepts first, then code.
-9. **How to install the manager itself** — Practical steps you can follow in order.
-10. **What to pick** — What to pick — concepts first, then code.
-11. **Interview questions** — Quick map of the whole note — skim first or review last.
-
 ## Start here: the mental model
-
-**Plain English:** Terms and mental model before the examples.
 
 Your app has a shopping list called <Term id="package-json">`package.json`</Term>:
 
@@ -62,8 +44,6 @@ If two people install from the same lockfile, they should get the same tree. If 
 
 ## Side-by-side comparison
 
-**Plain English:** Side-by-side comparison — concepts first, then code.
-
 Four tools, one registry. Scroll sideways on a phone — the Topic column stays put.
 
 <ManagerCompare />
@@ -80,8 +60,6 @@ Yarn is two products with one name:
 If a teammate says “we use Yarn,” ask **which generation**.
 
 ## Everyday commands
-
-**Plain English:** The main API or commands you will actually use.
 
 Same jobs, different verbs. Memorize the column your repo uses.
 
@@ -121,8 +99,6 @@ pnpm dlx create-vite@latest
 
 ## Lockfiles are not interchangeable
 
-**Plain English:** Lockfiles are not interchangeable — concepts first, then code.
-
 Pick **one** manager per repo. Commit **one** lockfile.
 
 ```bash
@@ -145,8 +121,6 @@ pnpm install --frozen-lockfile
 `npm install` can bump the lockfile. <Term id="npm-ci">`npm ci`</Term> deletes `node_modules`, requires `package-lock.json`, and installs exactly that graph. Prefer `npm ci` on CI.
 
 ## How `node_modules` is built (this is the real difference)
-
-**Plain English:** Follow these steps in order — each builds on the last.
 
 ### npm and Yarn Classic: a flat pile
 
@@ -204,8 +178,6 @@ Then Berry looks closer to Yarn 1 / npm on disk.
 
 ## Phantom dependencies, in code
 
-**Plain English:** Phantom dependencies, in code — concepts first, then code.
-
 This can work on hoisted npm if some other package already pulled in `lodash`:
 
 ```ts
@@ -232,8 +204,6 @@ pnpm add lodash
 The error is annoying for an afternoon and cheaper than an outage after someone bumps a lockfile.
 
 ## Workspaces (many packages, one install)
-
-**Plain English:** Workspaces (many packages, one install) — concepts first, then code.
 
 A <Term id="monorepo">monorepo</Term> is several packages in one git repo — for example `apps/web` and `libs/utils` — with **one** install at the root.
 
@@ -281,8 +251,6 @@ Install once at the root. Do not run `npm install` inside every app folder unles
 
 ## Peer dependencies, in one paragraph
 
-**Plain English:** Peer dependencies, in one paragraph — concepts first, then code.
-
 A UI library often says: “I need React, but I will not bundle my own copy.” That is a <Term id="peer-dependency">peer dependency</Term>.
 
 - **npm 7+** installs peers for you (and can still create a second React if version ranges fight).
@@ -296,8 +264,6 @@ pnpm why react
 You want **one** React for the whole workspace.
 
 ## How to install the manager itself
-
-**Plain English:** Follow these steps in order — each builds on the last.
 
 npm is already there if Node is. Pin Yarn or pnpm with <Term id="corepack">Corepack</Term> so the repo’s `packageManager` field wins on every laptop and in CI:
 
@@ -316,8 +282,6 @@ corepack prepare pnpm@9.15.0 --activate
 
 ## What to pick
 
-**Plain English:** What to pick — concepts first, then code.
-
 **npm** — zero extra tools. Fine for a single `package.json`, courses, and small repos. Use `npm ci` in CI.
 
 **Yarn Classic** — you inherited `yarn.lock` and Yarn 1 scripts. Do not rewrite it for sport.
@@ -329,8 +293,6 @@ corepack prepare pnpm@9.15.0 --activate
 If you remember one rule: **one manager + one lockfile + declared dependencies**. The CLI logo is secondary. The graph is not.
 
 ## Interview questions
-
-**Plain English:** Short answers to reuse in interviews or reviews.
 
 Open a question to see a sample answer. Say the short version first, then offer the extra sentence if they probe.
 

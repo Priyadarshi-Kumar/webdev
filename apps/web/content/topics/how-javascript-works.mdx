@@ -12,20 +12,7 @@ tags:
 ---
 
 
-## Read this in order
-
-Work through these sections in order:
-
-1. **The engine: source to machine code** — The engine: source to machine code — concepts first, then code.
-2. **The runtime: JS is single-threaded; the host is not** — The runtime: JS is single-threaded; the host is not — concepts first, then code.
-3. **How a browser API reaches the system** — Practical steps you can follow in order.
-4. **Process model: why JS is locked in a sandbox** — Process model: why JS is locked in a sandbox — concepts first, then code.
-5. **Same language, different hosts** — Same language, different hosts — concepts first, then code.
-6. **A picture you can keep** — A picture you can keep — concepts first, then code.
-
 ## The engine: source to machine code
-
-**Plain English:** The engine: source to machine code — concepts first, then code.
 
 This section walks through how a JS engine turns your source into bytecode and then into machine code on the CPU.
 
@@ -101,8 +88,6 @@ If you only shipped V8, `console.log` would not exist until the embedder bound i
 
 ## The runtime: JS is single-threaded; the host is not
 
-**Plain English:** The runtime: JS is single-threaded; the host is not — concepts first, then code.
-
 Here you'll see why only one JS call stack runs at a time, and how the host's event loop schedules timers, promises, and clicks.
 
 One **isolate** (one engine instance) runs **one** JS call stack at a time on that thread. The browser’s **main thread** also paints, runs layout, and handles input. That is why a tight loop freezes the page: you never return to the host, so it cannot paint or run the next click.
@@ -155,8 +140,6 @@ Order: `a`, `b`, `then`, `micro`, `timeout`. Both `then` and `queueMicrotask` ar
 That delay is the **host**. `setTimeout` does not live in V8. The embedder asks the OS (or a timer heap) to wake it, then later invokes the callback **as a task**.
 
 ## How a browser API reaches the system
-
-**Plain English:** Follow these steps in order — each builds on the last.
 
 This section traces real Web APIs — timers, fetch, the DOM — from a JS call through C++ bindings to the operating system.
 
@@ -249,8 +232,6 @@ requestAnimationFrame(frame);
 
 ## Process model: why JS is locked in a sandbox
 
-**Plain English:** Process model: why JS is locked in a sandbox — concepts first, then code.
-
 You'll learn why the browser splits work across processes and why your tab's JavaScript cannot talk to the kernel directly.
 
 A modern browser is several processes. A sketch of Chromium:
@@ -267,8 +248,6 @@ Your tab’s JS runs in the **renderer**. The sandbox blocks most syscalls. Need
 `SharedArrayBuffer` and `Atomics` are still **memory in the engine**. They do not grant `write(/etc/passwd)`. Cross-origin isolation exists because shared memory is a side-channel risk, not because JS grew a syscall table.
 
 ## Same language, different hosts
-
-**Plain English:** Same language, different hosts — concepts first, then code.
 
 The same ECMAScript language shows up in Node, Deno, and Bun with different host APIs attached.
 
@@ -293,8 +272,6 @@ await readFile("./notes.md", "utf8");
 Deno and Bun are other embeddings: still JS-the-language, different host APIs and syscalls.
 
 ## A picture you can keep
-
-**Plain English:** A picture you can keep — concepts first, then code.
 
 This section ties the whole stack together in one diagram you can remember.
 

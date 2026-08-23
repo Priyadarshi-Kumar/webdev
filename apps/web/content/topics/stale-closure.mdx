@@ -10,16 +10,7 @@ tags:
 
 A **closure** is a function that remembers the variables around it. In React, each render creates new functions. A **stale** closure is one that still remembers *yesterday’s* `count`.
 
-## Read this in order
-
-Short jargon note — read top to bottom:
-
-1. **The interval that never counts** — The interval that never counts — explained with a short example.
-2. **Fixes** — Fixes — explained with a short example.
-
 ## The interval that never counts
-
-**Plain English:** The interval that never counts — definition, example, and where you will see it.
 
 ```tsx
 function Counter() {
@@ -37,8 +28,6 @@ function Counter() {
 First render: `count` is `0`. The interval closes over that `0`. Every tick does `setCount(0 + 1)`. The UI sits at `1`.
 
 ## Fixes
-
-**Plain English:** Fixes — definition, example, and where you will see it.
 
 **Functional setter** — React passes the latest state; you do not read `count` from the closure:
 

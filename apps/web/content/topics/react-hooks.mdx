@@ -16,21 +16,7 @@ React 16 shipped the first ten. Later major versions added a few more. This note
 
 This site runs React 19. Dotted, sky-colored words open a short definition. Each one is also a **link** to a full glossary page with a code example.
 
-## Read this in order
-
-Work through these sections in order:
-
-1. **Rules that never change** — Rules that never change — concepts first, then code.
-2. **Map (latest on top)** — Map (latest on top) — concepts first, then code.
-3. **React 19** — React 19 — concepts first, then code.
-4. **React 18** — React 18 — concepts first, then code.
-5. **React 16** — React 16 — concepts first, then code.
-6. **Which hook, in one glance** — Which hook, in one glance — concepts first, then code.
-7. **Interview questions** — Quick map of the whole note — skim first or review last.
-
 ## Rules that never change
-
-**Plain English:** Rules that never change — concepts first, then code.
 
 1. Only call hooks at the **top level** of a component or custom hook — not in `if`, loops, or nested functions.
 2. Only call them from **React functions** (components and hooks), not from event handlers, class methods, or plain helpers.
@@ -39,8 +25,6 @@ Work through these sections in order:
 A <Term id="custom-hook">custom hook</Term> is just a function that calls other hooks. It is not magic; it is the composition story.
 
 ## Map (latest on top)
-
-**Plain English:** Map (latest on top) — concepts first, then code.
 
 | Version | When | Hooks |
 | --- | --- | --- |
@@ -53,8 +37,6 @@ A <Term id="custom-hook">custom hook</Term> is just a function that calls other 
 ---
 
 ## React 19
-
-**Plain English:** React 19 — concepts first, then code.
 
 ### `useEffectEvent`
 
@@ -233,8 +215,6 @@ It only sees the **nearest parent** `<form>`. It does not take arguments.
 
 ## React 18
 
-**Plain English:** React 18 — concepts first, then code.
-
 ### `useTransition`
 
 **Use when:** an update is **not urgent** (filtering a big list, navigating) and you do not want to freeze typing or clicks. React may show the old UI until the new one is ready.
@@ -404,8 +384,6 @@ useInsertionEffect(() => {
 ---
 
 ## React 16
-
-**Plain English:** React 16 — concepts first, then code.
 
 ### `useState`
 
@@ -759,8 +737,6 @@ function useOnline() {
 
 ## Which hook, in one glance
 
-**Plain English:** Which hook, in one glance — concepts first, then code.
-
 | I need… | Reach for |
 | --- | --- |
 | A value that re-renders | `useState` / `useReducer` |
@@ -784,8 +760,6 @@ function useOnline() {
 ---
 
 ## Interview questions
-
-**Plain English:** Short answers to reuse in interviews or reviews.
 
 Open a question to see a sample answer. Lead with the short version; add the extra sentence if they probe.
 

@@ -10,17 +10,7 @@ tags:
 
 `package.json` is the project manifest. Humans edit it. The <Term id="lockfile">lockfile</Term> is the machine-exact copy of what got installed.
 
-## Read this in order
-
-Short jargon note — read top to bottom:
-
-1. **A typical app manifest** — A typical app manifest — explained with a short example.
-2. **Scripts are just shell commands** — The main API or commands you will actually use.
-3. **What does not belong here** — What does not belong here — explained with a short example.
-
 ## A typical app manifest
-
-**Plain English:** A typical app manifest — definition, example, and where you will see it.
 
 ```json
 {
@@ -55,8 +45,6 @@ Short jargon note — read top to bottom:
 
 ## Scripts are just shell commands
 
-**Plain English:** Scripts are just shell commands — definition, example, and where you will see it.
-
 ```json
 {
   "scripts": {
@@ -76,8 +64,6 @@ yarn dev
 Binaries from packages land in `node_modules/.bin`. The manager puts that folder on `PATH` while a script runs, so `eslint` works without a global install.
 
 ## What does not belong here
-
-**Plain English:** What does not belong here — definition, example, and where you will see it.
 
 Exact nested versions belong in the lockfile. Secrets belong in env vars, not in this file. If you need a sibling library in the same repo, use `workspace:*` instead of a copied version number you will forget to bump.
 

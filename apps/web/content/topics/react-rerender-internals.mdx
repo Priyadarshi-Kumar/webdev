@@ -15,20 +15,7 @@ React does not watch your JSX or diff your source code. It keeps a tree of **fib
 
 This note covers when that happens, what the two phases do, and a **MiniReact** you can hold in your head. MiniReact is a teaching sketch: no <Term id="concurrent-rendering">concurrent rendering</Term>, no list keys, no <Term id="hydration">hydration</Term>. The real scheduler does more; the data model is the same.
 
-## Read this in order
-
-Work through these sections in order:
-
-1. **A render is a function call** — A render is a function call — concepts first, then code.
-2. **When React schedules another render** — When this applies — and when to skip it.
-3. **Internally: render, then commit** — Internally: render, then commit — concepts first, then code.
-4. **Hooks are a list on the fiber** — Hooks are a list on the fiber — concepts first, then code.
-5. **MiniReact: enough to feel the internals** — MiniReact: enough to feel the internals — concepts first, then code.
-6. **What real React adds on top of this** — What real React adds on top of this — concepts first, then code.
-
 ## A render is a function call
-
-**Plain English:** A render is a function call — concepts first, then code.
 
 ```tsx
 function Counter({ label }: { label: string }) {
@@ -48,8 +35,6 @@ function Counter({ label }: { label: string }) {
 That is the whole trick: **the function is stateless; the fiber next to it is not.**
 
 ## When React schedules another render
-
-**Plain English:** When this applies — and when to skip it.
 
 ### State or reducer on that fiber
 
@@ -101,8 +86,6 @@ In development, Strict Mode may call your function **twice** for the same update
 
 ## Internally: render, then commit
 
-**Plain English:** Internally: render, then commit — concepts first, then code.
-
 React 18+ still has two big phases. Concurrent features can **pause** the first one, but the picture is the same.
 
 ### Render: call components, build a new tree
@@ -126,8 +109,6 @@ That split is why React can throw away a render (user typed again) without leavi
 
 ## Hooks are a list on the fiber
 
-**Plain English:** Hooks are a list on the fiber — concepts first, then code.
-
 Each function component fiber has a linked list (or array) of hook cells: state, effect deps, memo, ref, …
 
 ```txt
@@ -141,8 +122,6 @@ On every render React walks that list in **call order**. `useState` #1 is always
 `useState` is "read cell `i`, or create it with `initial`." `setState` is "write the cell, mark this fiber dirty, schedule work."
 
 ## MiniReact: enough to feel the internals
-
-**Plain English:** MiniReact: enough to feel the internals — concepts first, then code.
 
 The following runs in a browser. It supports function components, `useState`, host tags (`div`, `button`, `span`), strings as children, and **one** component root. No keys, no context, no fragments.
 
@@ -327,8 +306,6 @@ Click the button: `setState` writes the hook cell, `flush` calls `renderFiber` o
 If `App` had its own `useState` and you updated **App**, MiniReact would call `App` again, see `child.type === Counter`, **reuse** the child fiber, and `Counter` would re-render too — parent render pulls the child. Same as React without `memo`.
 
 ## What real React adds on top of this
-
-**Plain English:** What real React adds on top of this — concepts first, then code.
 
 - **Fibers as a linked list** (`child`, `sibling`, `return`) so work can pause mid-tree.
 - **Lanes / priority** so a keystroke can jump ahead of a slow list.

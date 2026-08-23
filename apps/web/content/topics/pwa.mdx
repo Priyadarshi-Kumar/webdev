@@ -15,23 +15,7 @@ A **Progressive Web App (PWA)** is a web app that uses modern browser APIs to fe
 
 The goal is not to rewrite your app in native code. It is to meet users where they already are — the browser — with app-like affordances: home screen icon, splash screen, offline shell, push (optional).
 
-## Read this in order
-
-Work through these sections in order:
-
-1. **The three pillars** — The three pillars — concepts first, then code.
-2. **App shell architecture** — Structure that scales as the app grows.
-3. **Installability criteria** — Installability criteria — concepts first, then code.
-4. **Vite + PWA (practical setup)** — Vite + PWA (practical setup) — concepts first, then code.
-5. **Offline UX patterns** — Structure that scales as the app grows.
-6. **Lighthouse PWA checklist (summary)** — Quick map of the whole note — skim first or review last.
-7. **What PWAs are not** — What PWAs are not — concepts first, then code.
-8. **PWA + workers map** — PWA + workers map — concepts first, then code.
-9. **Interview answers** — Quick map of the whole note — skim first or review last.
-
 ## The three pillars
-
-**Plain English:** The three pillars — concepts first, then code.
 
 ### 1. Secure origin (HTTPS)
 
@@ -90,8 +74,6 @@ See the dedicated service worker note for lifecycle and caching strategies. For 
 
 ## App shell architecture
 
-**Plain English:** Structure that scales as the app grows.
-
 Split the UI into:
 
 - **Shell** — layout, router, CSS, core JS (cached aggressively)
@@ -122,8 +104,6 @@ self.addEventListener("install", (event) => {
 Use hashed filenames from Vite/webpack builds and generate this list at build time (`vite-plugin-pwa` does this automatically).
 
 ## Installability criteria
-
-**Plain English:** Installability criteria — concepts first, then code.
 
 Browsers decide when to show **“Install app”** (criteria vary slightly):
 
@@ -166,8 +146,6 @@ Use this to hide “Install” UI when already installed or to tweak navigation.
 
 ## Vite + PWA (practical setup)
 
-**Plain English:** Vite + PWA (practical setup) — concepts first, then code.
-
 `vite-plugin-pwa` generates the service worker and injects the manifest:
 
 ```ts
@@ -199,8 +177,6 @@ export default defineConfig({
 
 ## Offline UX patterns
 
-**Plain English:** Structure that scales as the app grows.
-
 Do not pretend the user is online when they are not.
 
 ```js
@@ -229,8 +205,6 @@ Show **when data was last updated** so users trust stale cache.
 
 ## Lighthouse PWA checklist (summary)
 
-**Plain English:** Short answers to reuse in interviews or reviews.
-
 Audits typically look for:
 
 - Manifest present and valid
@@ -244,16 +218,12 @@ Run Lighthouse in Chrome DevTools → **Progressive Web App** category. Fix red 
 
 ## What PWAs are not
 
-**Plain English:** What PWAs are not — concepts first, then code.
-
 - **Not app store binaries** — unless you wrap with TWA (Android) or publish via PWABuilder / App Store rules for web apps
 - **Not full native API access** — Bluetooth, NFC, some sensors need native or limited web APIs
 - **Not “offline everything”** — you choose what to cache; mutations still need sync strategy
 - **Not a replacement for good performance** — a slow SPA with a manifest is still a slow PWA
 
 ## PWA + workers map
-
-**Plain English:** PWA + workers map — concepts first, then code.
 
 | Piece | Role in PWA |
 | --- | --- |
@@ -264,8 +234,6 @@ Run Lighthouse in Chrome DevTools → **Progressive Web App** category. Fix red 
 | **IndexedDB** | Larger offline data than Cache API |
 
 ## Interview answers
-
-**Plain English:** Short answers to reuse in interviews or reviews.
 
 <details>
 <summary>What makes a website a PWA?</summary>

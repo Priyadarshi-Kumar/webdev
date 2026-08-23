@@ -11,17 +11,7 @@ tags:
 
 **Hoisting** means nested dependencies get lifted toward the root `node_modules` so one copy of React is reused.
 
-## Read this in order
-
-Short jargon note — read top to bottom:
-
-1. **Nested vs flat** — Side-by-side comparison so you can pick the right tool.
-2. **Who hoists?** — Who hoists? — explained with a short example.
-3. **When sharing a copy is good** — When this applies — and when to skip it.
-
 ## Nested vs flat
-
-**Plain English:** Nested vs flat — definition, example, and where you will see it.
 
 Without hoisting, React’s helper `scheduler` would live only under `node_modules/react/node_modules/scheduler`. npm and Yarn Classic lift it:
 
@@ -44,8 +34,6 @@ Upgrade React, or switch to pnpm, and the import vanishes.
 
 ## Who hoists?
 
-**Plain English:** Who hoists? — definition, example, and where you will see it.
-
 | Tool | Default |
 | --- | --- |
 | npm | Hoist (flat-ish `node_modules`) |
@@ -61,8 +49,6 @@ npm ls scheduler
 ```
 
 ## When sharing a copy is good
-
-**Plain English:** When sharing a copy is good — definition, example, and where you will see it.
 
 One React for the whole app **is** what you want. That is also why <Term id="peer-dependency">peer dependencies</Term> exist. Hoisting just does sharing *implicitly*, including packages you should not import.
 

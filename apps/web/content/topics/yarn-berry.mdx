@@ -11,17 +11,7 @@ tags:
 
 **Yarn Berry** is Yarn **2, 3, 4+**. New config (`.yarnrc.yml`), new constraints, and **<Term id="yarn-plug-n-play">Plug’n’Play</Term>** unless you opt out.
 
-## Read this in order
-
-Short jargon note — read top to bottom:
-
-1. **Config that actually matters** — Config that actually matters — explained with a short example.
-2. **What changed from Classic** — What changed from Classic — explained with a short example.
-3. **Example: keep Berry, skip PnP** — Runnable code or data to copy.
-
 ## Config that actually matters
-
-**Plain English:** Config that actually matters — definition, example, and where you will see it.
 
 ```yml
 # .yarnrc.yml
@@ -46,8 +36,6 @@ yarn constraints            # optional: repo-wide dependency rules
 
 ## What changed from Classic
 
-**Plain English:** What changed from Classic — definition, example, and where you will see it.
-
 | Classic (v1) | Berry (v2+) |
 | --- | --- |
 | `yarn.lock` (old format) | `yarn.lock` (new format — not interchangeable) |
@@ -59,8 +47,6 @@ yarn constraints            # optional: repo-wide dependency rules
 Zero-installs (commit `.yarn/cache`) is optional. Most teams still gitignore the cache and let CI download, same as pnpm.
 
 ## Example: keep Berry, skip PnP
-
-**Plain English:** Example: keep Berry, skip PnP — definition, example, and where you will see it.
 
 ```yml
 # .yarnrc.yml

@@ -11,17 +11,7 @@ tags:
 
 **Plug’n’Play** is Yarn Berry’s default linker. There is often **no** `node_modules`. Node asks `.pnp.cjs` (and `.pnp.data.json`) where each package lives — usually inside `.yarn/cache` zips.
 
-## Read this in order
-
-Short jargon note — read top to bottom:
-
-1. **How resolution works** — Practical steps you can follow in order.
-2. **Opt out when a tool needs folders** — Opt out when a tool needs folders — explained with a short example.
-3. **Editor and TypeScript** — Editor and TypeScript — explained with a short example.
-
 ## How resolution works
-
-**Plain English:** Follow these steps in order — each builds on the last.
 
 Classic Node: walk folders named `node_modules`. PnP: a generated map says “`react` from this package is this zip path.” Yarn patches Node (via `--require .pnp.cjs`) so `import "react"` still looks normal in your source.
 
@@ -39,8 +29,6 @@ fs.readdirSync("node_modules"); // folder may not exist
 
 ## Opt out when a tool needs folders
 
-**Plain English:** Opt out when a tool needs folders — definition, example, and where you will see it.
-
 ```yml
 # .yarnrc.yml — opt out of PnP, get a classic folder
 nodeLinker: node-modules
@@ -49,8 +37,6 @@ nodeLinker: node-modules
 Many teams keep Berry (immutable installs, `packageManager`, workspaces) but set `nodeLinker: node-modules` so ESLint plugins, native addons, and “open `node_modules/foo`” scripts keep working.
 
 ## Editor and TypeScript
-
-**Plain English:** Editor and TypeScript — definition, example, and where you will see it.
 
 “Go to definition” needs the Yarn SDK / PnP editor plugin so the language service can see packages inside zips.
 

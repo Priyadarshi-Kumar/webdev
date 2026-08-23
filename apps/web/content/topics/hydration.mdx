@@ -12,17 +12,7 @@ tags:
 
 If it does not, React warns about a hydration mismatch and may throw away the server HTML — you paid for SSR and then flashed a client re-render.
 
-## Read this in order
-
-Short jargon note — read top to bottom:
-
-1. **Stable ids with `useId`** — Stable ids with `useId` — explained with a short example.
-2. **Browser-only values** — Browser-only values — explained with a short example.
-3. **Checklist** — Quick map of the whole note — skim first or review last.
-
 ## Stable ids with `useId`
-
-**Plain English:** Stable ids with `useId` — definition, example, and where you will see it.
 
 `useId()` exists so labels and `aria-describedby` get the **same** id on both sides:
 
@@ -43,8 +33,6 @@ export function EmailField() {
 Bad: `id={Math.random()}` or `Date.now()` during render — server and client disagree (<Term id="react-tearing">tearing</Term> / hydration mismatch).
 
 ## Browser-only values
-
-**Plain English:** Browser-only values — definition, example, and where you will see it.
 
 ```tsx
 function Clock() {
@@ -69,8 +57,6 @@ function Clock() {
 Or subscribe with `useSyncExternalStore` and a server snapshot.
 
 ## Checklist
-
-**Plain English:** Short answers to reuse in interviews or reviews.
 
 - Same component tree on server and client for the first render
 - No `window` / `document` during render (guard or move to an effect)

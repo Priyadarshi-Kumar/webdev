@@ -12,16 +12,7 @@ tags:
 
 A **tool** is an action: `tools/list` advertises it; `tools/call` runs it. Arguments follow JSON Schema. The result is content the host stuffs back into the model’s context (text, images, or an error).
 
-## Read this in order
-
-Short jargon note — read top to bottom:
-
-1. **Schema the model sees** — Schema the model sees — explained with a short example.
-2. **Call and result** — Call and result — explained with a short example.
-
 ## Schema the model sees
-
-**Plain English:** Schema the model sees — definition, example, and where you will see it.
 
 ```json
 {
@@ -40,8 +31,6 @@ Short jargon note — read top to bottom:
 A vague `description` (“gets stuff”) makes the model guess. A precise one (“Fetch a GitHub issue by number”) makes it pass `{ "number": 1842 }`.
 
 ## Call and result
-
-**Plain English:** Call and result — definition, example, and where you will see it.
 
 ```json
 {

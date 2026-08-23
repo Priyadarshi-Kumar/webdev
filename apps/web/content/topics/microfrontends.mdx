@@ -19,22 +19,7 @@ This site is **not** a microfrontend. It is one Vite app plus libraries in a <Te
 
 Dotted, sky-colored words are glossary terms — hover for a short note; each is also a **link** to a full page with an example.
 
-## Read this in order
-
-Work through these sections in order:
-
-1. **The problem it is for** — The problem it is for — concepts first, then code.
-2. **Ways to compose (pick one on purpose)** — Ways to compose (pick one on purpose) — concepts first, then code.
-3. **Mental model: a remote is a URL plus a map** — Terms and mental model before the examples.
-4. **Vite + React: a host and a cart remote** — Vite + React: a host and a cart remote — concepts first, then code.
-5. **Routing, CSS, and auth** — Routing, CSS, and auth — concepts first, then code.
-6. **Deploy and versioning** — Deploy and versioning — concepts first, then code.
-7. **When not to use this** — When this applies — and when to skip it.
-8. **Interview questions** — Quick map of the whole note — skim first or review last.
-
 ## The problem it is for
-
-**Plain English:** The problem it is for — concepts first, then code.
 
 ### One frontend, many clocks
 
@@ -60,8 +45,6 @@ The host is still “the app” in the URL bar. Remotes are **not** required to 
 A remote can also **be a host** of other remotes. That nesting is possible and usually a mistake on day one.
 
 ## Ways to compose (pick one on purpose)
-
-**Plain English:** Ways to compose (pick one on purpose) — concepts first, then code.
 
 ### Build-time: it is just a library
 
@@ -97,8 +80,6 @@ The rest of this note is that path, with React 19 and Vite.
 
 ## Mental model: a remote is a URL plus a map
 
-**Plain English:** Terms and mental model before the examples.
-
 At build time the remote writes a **manifest of exposes**:
 
 ```txt
@@ -117,8 +98,6 @@ That is why:
 - `shared` versions must be a **range both sides accept**, or you get two Reacts.
 
 ## Vite + React: a host and a cart remote
-
-**Plain English:** Vite + React: a host and a cart remote — concepts first, then code.
 
 Two apps. Two ports. One React copy.
 
@@ -307,8 +286,6 @@ Federation `shared` can take a **semver range**. If the remote requires `^18` an
 
 ## Routing, CSS, and auth
 
-**Plain English:** Routing, CSS, and auth — concepts first, then code.
-
 ### Who owns the URL
 
 Two sane contracts:
@@ -339,8 +316,6 @@ A remote on another team’s origin is a **third party** to the browser. Treat i
 
 ## Deploy and versioning
 
-**Plain English:** Deploy and versioning — concepts first, then code.
-
 ### Independent deploys
 
 The cart team ships a new `remoteEntry.js` to `https://cart.example/remoteEntry.js`. The host still points at that URL. **No host rebuild** if the expose names and props stay compatible.
@@ -361,8 +336,6 @@ Minimum:
 
 ## When not to use this
 
-**Plain English:** When this applies — and when to skip it.
-
 Skip runtime microfrontends when:
 
 - One team, one product, one deploy (this site).
@@ -373,8 +346,6 @@ Skip runtime microfrontends when:
 Use them when **release independence** is a real org constraint, you can staff **platform** work (shared config, observability, a broken-remote fallback), and you accept that the architecture is a **distributed system in the browser**.
 
 ## Interview questions
-
-**Plain English:** Short answers to reuse in interviews or reviews.
 
 **What is a microfrontend?**  
 A UI slice with its own build (and usually deploy), composed into a host. Not the same as a folder in a monorepo.

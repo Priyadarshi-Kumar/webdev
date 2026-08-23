@@ -10,29 +10,13 @@ tags:
 ---
 
 
-## Read this in order
-
-Work through these sections in order:
-
-1. **What this is** — Clear definition, then a minimal example.
-2. **The call site picks this** — The call site picks this — concepts first, then code.
-3. **The four bindings** — The four bindings — concepts first, then code.
-4. **Implement call, apply, and bind** — Implement call, apply, and bind — concepts first, then code.
-5. **Implement new** — Implement new — concepts first, then code.
-6. **What the spec adds (optional)** — What the spec adds (optional) — concepts first, then code.
-7. **A compact cheat sheet** — Quick map of the whole note — skim first or review last.
-
 ## What this is
-
-**Plain English:** What this is, explained simply with an example.
 
 `this` is a hidden extra argument the engine fills in when your function runs — not a variable you declare, and not “the object the function lives on.”
 
 If you treat `this` like Python’s `self` that the caller passes in, the language suddenly makes sense. The function body just reads whatever value the engine put in that slot.
 
 ## The call site picks this
-
-**Plain English:** The call site picks this — concepts first, then code.
 
 ### A call is more than a list of arguments
 
@@ -73,8 +57,6 @@ greet();      // "hi undefined" (or throw in strict) — call site is greet()
 Same function object. Different call site. Different `this`. Losing the `obj.` on the left is the classic bug: you passed the function, not the method.
 
 ## The four bindings
-
-**Plain English:** The four bindings — concepts first, then code.
 
 Think of a tiny dispatcher the engine could run before entering the function. This is teaching code, not a real VM — but the rules match.
 
@@ -183,8 +165,6 @@ An arrow function does not get its own `this`. It reuses whatever `this` meant i
 
 ## Implement call, apply, and bind
 
-**Plain English:** Implement call, apply, and bind — concepts first, then code.
-
 The trick: temporarily hang the function on the target object, call it as a method (so implicit binding kicks in), then clean up.
 
 ### myCall
@@ -260,8 +240,6 @@ Real `bind` also handles `new bound()`: constructing a bound function ignores th
 
 ## Implement new
 
-**Plain English:** Implement new — concepts first, then code.
-
 ```js
 function myNew(Fn, ...args) {
   if (typeof Fn !== "function") {
@@ -288,8 +266,6 @@ If the constructor `return`s an object, that object wins. If it returns a primit
 
 ## What the spec adds (optional)
 
-**Plain English:** What the spec adds (optional) — concepts first, then code.
-
 The spec uses a few labels for the same story:
 
 - **`this` environment slot** — where the value lives for the duration of the call
@@ -308,8 +284,6 @@ fn.call(obj, 1);
 Methods, callbacks, and `setTimeout(obj.fn, 0)` all drop the Reference: you extracted the function, so there is no `base`. Bind it, wrap it in an arrow, or call it as `obj.fn()` if you need that object.
 
 ## A compact cheat sheet
-
-**Plain English:** Short answers to reuse in interviews or reviews.
 
 ```js
 obj.method();           // this → obj

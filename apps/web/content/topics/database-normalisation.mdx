@@ -15,26 +15,7 @@ subject: backend
 
 This note walks one example — a **campus bookstore** — from a bad export to a clean schema. Read the sections in order: each normal form builds on the previous one.
 
-## Read this in order
-
-Work through these sections in order:
-
-1. **What problem are we solving?** — The mess we are fixing — anomalies and duplicated data.
-2. **Normal forms at a glance** — Quick map of 1NF through 5NF before the walkthrough.
-3. **Vocabulary (only what you need)** — Terms and mental model before the examples.
-4. **Step 0 — The messy table** — The example schema at this stage of the walkthrough.
-5. **1NF — First normal form** — What 1NF — First normal form means and how to spot it in a schema.
-6. **2NF — Second normal form** — What 2NF — Second normal form means and how to spot it in a schema.
-7. **3NF — Third normal form** — What 3NF — Third normal form means and how to spot it in a schema.
-8. **BCNF — Boyce–Codd normal form** — What BCNF — Boyce–Codd normal form means and how to spot it in a schema.
-9. **4NF and 5NF (interview extras)** — What 4NF and 5NF (interview extras) means and how to spot it in a schema.
-10. **How to normalise in an interview** — Quick map of the whole note — skim first or review last.
-11. **When denormalisation is OK** — When this applies — and when to skip it.
-12. **Cheat sheet** — Quick map of the whole note — skim first or review last.
-
 ## What problem are we solving?
-
-**Plain English:** The mess we are fixing — anomalies and duplicated data.
 
 Imagine one Excel sheet for orders:
 
@@ -56,8 +37,6 @@ Normalisation is a **checklist** that makes those mistakes hard to repeat.
 
 ## Normal forms at a glance
 
-**Plain English:** What Normal forms at a glance means and how to spot it in a schema.
-
 | Step | Name | Plain English |
 | --- | --- | --- |
 | 1 | **1NF** | One value per cell. No lists like “book1, book2” in a single cell |
@@ -69,8 +48,6 @@ Normalisation is a **checklist** that makes those mistakes hard to repeat.
 **Mnemonic for 1NF–3NF:** “The key, the **whole** key, and **nothing but** the key.”
 
 ## Vocabulary (only what you need)
-
-**Plain English:** Terms and mental model before the examples.
 
 ### Functional dependency
 
@@ -91,8 +68,6 @@ You need composite keys to understand **2NF**. Single-column keys automatically 
 
 ## Step 0 — The messy table
 
-**Plain English:** The example schema at this stage of the walkthrough.
-
 Someone flattened an order into one wide row per line item. Lists are gone, but facts are duplicated:
 
 | order_id | line | customer_id | customer_name | email | isbn | title | publisher | pub_city | qty | price |
@@ -112,8 +87,6 @@ Problems still here:
 We fix these one normal form at a time.
 
 ## 1NF — First normal form
-
-**Plain English:** What 1NF — First normal form means and how to spot it in a schema.
 
 ### Rule
 
@@ -144,8 +117,6 @@ CREATE TABLE order_line_1nf (
 **Takeaway:** 1NF = “looks like a proper SQL table.” Redundancy can remain.
 
 ## 2NF — Second normal form
-
-**Plain English:** What 2NF — Second normal form means and how to spot it in a schema.
 
 ### Rule
 
@@ -235,8 +206,6 @@ CREATE TABLE order_line (
 
 ## 3NF — Third normal form
 
-**Plain English:** What 3NF — Third normal form means and how to spot it in a schema.
-
 ### Rule
 
 Table is in 2NF **and** no non-key column depends on **another** non-key column.
@@ -292,8 +261,6 @@ Move DataPress from Pune to Bengaluru **once** — every book follows.
 **Takeaway:** For most CRUD apps, **3NF is the design you want**: `customer`, `publisher`, `book`, `orders`, `order_line`.
 
 ## BCNF — Boyce–Codd normal form
-
-**Plain English:** What BCNF — Boyce–Codd normal form means and how to spot it in a schema.
 
 ### Rule (simpler wording)
 
@@ -362,8 +329,6 @@ Join on `teacher` to recover the original rows. That join is **lossless** — yo
 
 ## 4NF and 5NF (interview extras)
 
-**Plain English:** Short answers to reuse in interviews or reviews.
-
 Most product backends stop at 3NF/BCNF. Skim these if an interviewer asks “what comes after BCNF?”
 
 ### 4NF — independent lists
@@ -389,8 +354,6 @@ Even rarer. A row `(agent, product, company)` might always be reconstructible fr
 
 ## How to normalise in an interview
 
-**Plain English:** Follow these steps in order — each builds on the last.
-
 Follow this sequence:
 
 1. **List columns** and pick candidate keys.
@@ -402,8 +365,6 @@ Follow this sequence:
 7. **Stop** unless they ask for 4NF/5NF.
 
 ## When denormalisation is OK
-
-**Plain English:** When this applies — and when to skip it.
 
 Normalisation is the default for **OLTP** (orders, users, payments). Sometimes you **copy** data on purpose:
 
@@ -421,8 +382,6 @@ Normalisation is the default for **OLTP** (orders, users, payments). Sometimes y
 If you denormalise, document the **source of truth** and how updates propagate (trigger, job, app write).
 
 ## Cheat sheet
-
-**Plain English:** Short answers to reuse in interviews or reviews.
 
 | Form | What it adds | What smell it fixes |
 | --- | --- | --- |

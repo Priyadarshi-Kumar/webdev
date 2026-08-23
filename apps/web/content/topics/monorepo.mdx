@@ -11,17 +11,7 @@ tags:
 
 A **monorepo** is one repository with more than one package — for example `apps/web` and `libs/utils`. You install **once at the root**. Apps depend on local libraries with <Term id="workspace-protocol">`workspace:*`</Term> instead of publishing to npm first.
 
-## Read this in order
-
-Short jargon note — read top to bottom:
-
-1. **Shape of this site** — How this repo uses the idea today.
-2. **One install, many scripts** — One install, many scripts — explained with a short example.
-3. **Not a microfrontend** — Not a microfrontend — explained with a short example.
-
 ## Shape of this site
-
-**Plain English:** Shape of this site — definition, example, and where you will see it.
 
 ```txt
 repo/
@@ -43,8 +33,6 @@ npm and Yarn put the same globs in `"workspaces"` inside the root `package.json`
 
 ## One install, many scripts
 
-**Plain English:** One install, many scripts — definition, example, and where you will see it.
-
 ```bash
 pnpm install                 # root only — links every workspace
 pnpm --filter web dev        # run one package’s script
@@ -64,8 +52,6 @@ pnpm --filter @webdev/utils test
 Change a button in `libs/widgets` and the app sees it immediately — no `npm publish`. That is the point.
 
 ## Not a microfrontend
-
-**Plain English:** Not a microfrontend — definition, example, and where you will see it.
 
 A monorepo is a **git and install** choice. You can still ship **one** site from `apps/web`. A <Term id="microfrontend">microfrontend</Term> is a **deploy** choice: separate apps loaded at runtime. This repo is a monorepo, not a set of remotes.
 

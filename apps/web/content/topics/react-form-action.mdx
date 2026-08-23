@@ -10,17 +10,7 @@ tags:
 
 A React **Action** is a function meant to run from a form (or `useTransition`). It can be `async`. Hooks like `useActionState` give you the last result and `isPending`.
 
-## Read this in order
-
-Short jargon note — read top to bottom:
-
-1. **Save a field without `onSubmit` glue** — Save a field without `onSubmit` glue — explained with a short example.
-2. **Pending state from a transition** — Pending state from a transition — explained with a short example.
-3. **Progressive enhancement** — Progressive enhancement — explained with a short example.
-
 ## Save a field without `onSubmit` glue
-
-**Plain English:** Save a field without `onSubmit` glue — definition, example, and where you will see it.
 
 ```tsx
 import { useActionState } from "react";
@@ -46,8 +36,6 @@ React calls `saveName` with the previous state and a `FormData` of the fields. `
 
 ## Pending state from a transition
 
-**Plain English:** Pending state from a transition — definition, example, and where you will see it.
-
 Any async function passed to `startTransition` is also an Action. `useFormStatus` (inside the form) reads whether *that* form is pending — useful for a nested Submit button:
 
 ```tsx
@@ -71,8 +59,6 @@ export function Signup() {
 `useFormStatus` must be a **child** of the `<form>`, not the same component that renders the form.
 
 ## Progressive enhancement
-
-**Plain English:** Progressive enhancement — definition, example, and where you will see it.
 
 A plain `action="/api"` still works if JavaScript is slow to load. A function `action={fn}` needs React on the client (or a framework that maps it to a server endpoint). This site’s tools run in the browser; they use the function form.
 

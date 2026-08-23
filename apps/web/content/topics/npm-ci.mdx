@@ -11,17 +11,7 @@ tags:
 
 `npm install` may update `package-lock.json` to satisfy ranges. `npm ci` will **not**. It deletes `node_modules`, requires an existing lockfile, and installs that graph — or fails.
 
-## Read this in order
-
-Short jargon note — read top to bottom:
-
-1. **When to use which** — When this applies — and when to skip it.
-2. **What failure means** — What failure means — explained with a short example.
-3. **Extra guarantees** — Extra guarantees — explained with a short example.
-
 ## When to use which
-
-**Plain English:** When to use which — definition, example, and where you will see it.
 
 ```bash
 # local tinkering — may rewrite the lockfile
@@ -43,8 +33,6 @@ This site uses pnpm, so the CI equivalent is `pnpm install --frozen-lockfile`, n
 
 ## What failure means
 
-**Plain English:** What failure means — definition, example, and where you will see it.
-
 If `npm ci` exits non-zero, `package.json` and `package-lock.json` disagree — someone added a dependency and forgot to commit the lockfile, or edited a version by hand.
 
 ```bash
@@ -57,8 +45,6 @@ git commit -m "Pin lodash in the lockfile"
 Do not “fix” CI by switching the job to `npm install`. That hides the drift and makes every build a slightly different tree.
 
 ## Extra guarantees
-
-**Plain English:** Extra guarantees — definition, example, and where you will see it.
 
 `npm ci` also refuses to run without a lockfile, and it does a clean `node_modules` so leftover packages from an old branch cannot leak into tests. That is slower than an incremental `npm install` and worth it on a VM.
 

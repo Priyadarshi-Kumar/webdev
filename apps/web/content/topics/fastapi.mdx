@@ -15,24 +15,7 @@ tags:
 
 It is not a template-heavy “full website” framework like Django. You still pick your own ORM, auth, and queue. What you get is a fast way to ship a JSON API that a React or Vite app can call, with types that stay honest.
 
-## Read this in order
-
-Work through these sections in order:
-
-1. **Mental model** — Terms and mental model before the examples.
-2. **Request shapes** — Request shapes — concepts first, then code.
-3. **Status codes and errors** — Status codes and errors — concepts first, then code.
-4. **Dependencies (`Depends`)** — Dependencies (`Depends`) — concepts first, then code.
-5. **Async vs sync routes** — Side-by-side comparison so you can pick the right tool.
-6. **Talking to a frontend** — Talking to a frontend — concepts first, then code.
-7. **App lifespan** — App lifespan — concepts first, then code.
-8. **Tests without a real server** — Tests without a real server — concepts first, then code.
-9. **What FastAPI is not** — Clear definition, then a minimal example.
-10. **Interview answers** — Quick map of the whole note — skim first or review last.
-
 ## Mental model
-
-**Plain English:** Terms and mental model before the examples.
 
 ### A path operation is just a function
 
@@ -40,7 +23,6 @@ Work through these sections in order:
 from fastapi import FastAPI
 
 app = FastAPI()
-
 
 @app.get("/health")
 def health():
@@ -87,8 +69,6 @@ Open `http://127.0.0.1:8000/docs`. That UI is generated from your functions. If 
 
 ## Request shapes
 
-**Plain English:** Request shapes — concepts first, then code.
-
 ### Path, query, and headers
 
 ```python
@@ -97,7 +77,6 @@ from typing import Annotated
 from fastapi import FastAPI, Header, Query
 
 app = FastAPI()
-
 
 @app.get("/users/{user_id}/orders")
 def list_orders(
@@ -121,16 +100,13 @@ from fastapi import FastAPI
 
 app = FastAPI()
 
-
 class ItemIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     price: float = Field(gt=0)
     tags: list[str] = []
 
-
 class ItemOut(ItemIn):
     id: int
-
 
 @app.post("/items", status_code=201)
 def create_item(item: ItemIn) -> ItemOut:
@@ -150,7 +126,6 @@ from fastapi import FastAPI, File, UploadFile
 
 app = FastAPI()
 
-
 @app.post("/avatar")
 async def upload_avatar(file: UploadFile = File()):
     data = await file.read()
@@ -161,8 +136,6 @@ async def upload_avatar(file: UploadFile = File()):
 
 ## Status codes and errors
 
-**Plain English:** Status codes and errors — concepts first, then code.
-
 ### Raise `HTTPException`
 
 ```python
@@ -171,7 +144,6 @@ from fastapi import FastAPI, HTTPException
 app = FastAPI()
 
 ITEMS = {1: {"name": "widget"}}
-
 
 @app.get("/items/{item_id}")
 def get_item(item_id: int):
@@ -189,8 +161,6 @@ Most routes return a dict or a Pydantic model. If you need a raw body (CSV, redi
 
 ## Dependencies (`Depends`)
 
-**Plain English:** Dependencies (`Depends`) — concepts first, then code.
-
 A **dependency** is a function FastAPI calls before (or while resolving) the route. Use it for DB sessions, the current user, and shared query params. It is not React context; it is constructor injection for HTTP.
 
 ```python
@@ -200,12 +170,10 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 
 app = FastAPI()
 
-
 def get_token(authorization: Annotated[str | None, Header()] = None) -> str:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing bearer token")
     return authorization.removeprefix("Bearer ")
-
 
 @app.get("/me")
 def me(token: Annotated[str, Depends(get_token)]):
@@ -224,14 +192,12 @@ from fastapi import Depends
 
 # SessionLocal = sessionmaker(bind=engine)
 
-
 def get_db() -> Generator:
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
-
 
 @app.get("/items")
 def list_items(db: Annotated[object, Depends(get_db)]):
@@ -242,8 +208,6 @@ def list_items(db: Annotated[object, Depends(get_db)]):
 
 ## Async vs sync routes
 
-**Plain English:** Side-by-side comparison so you can pick the right tool.
-
 ### When to use `async def`
 
 ```python
@@ -251,7 +215,6 @@ import httpx
 from fastapi import FastAPI
 
 app = FastAPI()
-
 
 @app.get("/title")
 async def title():
@@ -275,8 +238,6 @@ requests.get("https://example.com")  # blocks the event loop
 Rule: `async def` only if you `await` something, or the body is CPU-light. Otherwise `def` and let FastAPI thread it.
 
 ## Talking to a frontend
-
-**Plain English:** Talking to a frontend — concepts first, then code.
 
 ### CORS
 
@@ -321,8 +282,6 @@ The Pydantic model on the server and this `Item` type on the client are **two co
 
 ## App lifespan
 
-**Plain English:** App lifespan — concepts first, then code.
-
 Startup and shutdown (connection pools, caches) go on **lifespan**, not a global `engine = create_engine()` at import time if you need a clean close.
 
 ```python
@@ -330,13 +289,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # startup
     yield
     # shutdown
-
 
 app = FastAPI(lifespan=lifespan)
 ```
@@ -345,8 +302,6 @@ Code before `yield` runs once when Uvicorn starts. Code after runs on shutdown. 
 
 ## Tests without a real server
 
-**Plain English:** Tests without a real server — concepts first, then code.
-
 ```python
 from fastapi.testclient import TestClient
 
@@ -354,12 +309,10 @@ from main import app
 
 client = TestClient(app)
 
-
 def test_health():
     r = client.get("/health")
     assert r.status_code == 200
     assert r.json() == {"ok": True}
-
 
 def test_missing_item():
     r = client.get("/items/999")
@@ -376,16 +329,12 @@ Clear `dependency_overrides` after the test so the next one sees the real `get_t
 
 ## What FastAPI is not
 
-**Plain English:** What FastAPI is not, explained simply with an example.
-
 - **Not Django.** No admin, no batteries-included ORM, no `startproject` that is a CMS. Pair it with SQLAlchemy, SQLModel, or raw SQL.
 - **Not Flask with types glued on.** Flask is WSGI and a microframework; FastAPI is ASGI and validation-first. You can run both, but the request object is not the same.
 - **Not automatic auth.** `OAuth2PasswordBearer` is a scheme helper. You still verify JWTs or sessions.
 - **Not a replacement for a queue.** Long work belongs in a worker (Celery, arq, a cron). The HTTP handler should return 202 or a job id, not block for minutes.
 
 ## Interview answers
-
-**Plain English:** Short answers to reuse in interviews or reviews.
 
 <details>
 <summary>What is FastAPI built on?</summary>

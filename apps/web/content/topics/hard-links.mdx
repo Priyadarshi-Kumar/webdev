@@ -11,16 +11,7 @@ tags:
 
 A **hard link** is a second directory entry that points at the **same inode** (same bytes). Delete one name, the bytes stay until the last name is gone.
 
-## Read this in order
-
-Short jargon note — read top to bottom:
-
-1. **Tiny demo** — Runnable code or data to copy.
-2. **Why pnpm cares** — The mess we are fixing — anomalies and duplicated data.
-
 ## Tiny demo
-
-**Plain English:** Tiny demo — definition, example, and where you will see it.
 
 ```bash
 echo hello > a.txt
@@ -39,8 +30,6 @@ cat link.txt            # broken — still points at a.txt
 ```
 
 ## Why pnpm cares
-
-**Plain English:** Why pnpm cares — definition, example, and where you will see it.
 
 pnpm hard-links (or copy-on-Windows fallbacks) from the <Term id="content-addressable-store">content-addressable store</Term> into each project. Ten apps × React is still one copy of React’s files on disk.
 

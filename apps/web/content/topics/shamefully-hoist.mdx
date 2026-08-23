@@ -10,17 +10,7 @@ tags:
 
 `shamefully-hoist=true` tells pnpm to lift packages to the root of `node_modules`, npm-style. Phantom imports start working again — which is why the name includes **shamefully**.
 
-## Read this in order
-
-Short jargon note — read top to bottom:
-
-1. **The nuclear switch** — The nuclear switch — explained with a short example.
-2. **Slightly less nuclear** — Slightly less nuclear — explained with a short example.
-3. **Check what you actually flattened** — Check what you actually flattened — explained with a short example.
-
 ## The nuclear switch
-
-**Plain English:** The nuclear switch — definition, example, and where you will see it.
 
 ```ini
 # .npmrc  (project root)
@@ -36,8 +26,6 @@ pnpm add lodash
 ```
 
 ## Slightly less nuclear
-
-**Plain English:** Slightly less nuclear — definition, example, and where you will see it.
 
 Some tools (old ESLint configs, Create React App-era plugins) look for packages **only** at the repo root. Hoist just those patterns:
 
@@ -56,8 +44,6 @@ public-hoist-pattern[]=ts-node
 Use full `shamefully-hoist` when a generator or old bundler **requires** a flat tree and you cannot fix it today. Leave a comment in `.npmrc` so the next person knows it is a workaround.
 
 ## Check what you actually flattened
-
-**Plain English:** Check what you actually flattened — definition, example, and where you will see it.
 
 ```bash
 ls node_modules | head

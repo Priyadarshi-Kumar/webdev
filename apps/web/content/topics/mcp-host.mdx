@@ -12,16 +12,7 @@ tags:
 
 The **host** is the app you sit in — Cursor, Claude Desktop, VS Code Copilot Chat, a custom agent. It starts <Term id="mcp-client">MCP clients</Term>, shows tool-call approvals, and decides what the model is allowed to see.
 
-## Read this in order
-
-Short jargon note — read top to bottom:
-
-1. **Config lives on the host** — Config lives on the host — explained with a short example.
-2. **What the host is responsible for** — Clear definition, then a minimal example.
-
 ## Config lives on the host
-
-**Plain English:** Config lives on the host — definition, example, and where you will see it.
 
 ```json
 {
@@ -54,8 +45,6 @@ A second server is a second client:
 ```
 
 ## What the host is responsible for
-
-**Plain English:** What the host is responsible for, explained simply with an example.
 
 - Which servers may start (allowlist)
 - Whether a `tools/call` needs a click (“delete this file?”)
