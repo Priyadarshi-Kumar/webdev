@@ -7,8 +7,10 @@ import {
   Play,
   RotateCcw,
   Search,
+  SlidersHorizontal,
   SquareCheck,
   Terminal,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
@@ -81,6 +83,7 @@ function PracticeHub({
   const [query, setQuery] = useState("");
   const [topic, setTopic] = useState<TopicFilter>("all");
   const [difficulty, setDifficulty] = useState<DifficultyFilter>("all");
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   useEffect(() => {
     const hash = window.location.hash.replace(/^#/, "");
@@ -117,6 +120,21 @@ function PracticeHub({
     window.history.replaceState(null, "", `${window.location.pathname}${hash}`);
   }
 
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFiltersOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    document.body.classList.add("overflow-hidden");
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.classList.remove("overflow-hidden");
+    };
+  }, [filtersOpen]);
+
+  const filtersActive = topic !== "all" || difficulty !== "all";
+
   return (
     <div className="pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       <div className="flex flex-wrap items-center gap-3">
@@ -145,8 +163,21 @@ function PracticeHub({
         </label>
       </div>
 
-      <TopicChips className="mt-4" topic={topic} passed={passed} onChange={selectTopic} />
-      <DifficultyChips className="mt-2" difficulty={difficulty} onChange={setDifficulty} />
+      <div className="mt-4 hidden md:block">
+        <TopicChips topic={topic} passed={passed} onChange={selectTopic} />
+        <DifficultyChips className="mt-2" difficulty={difficulty} onChange={setDifficulty} />
+      </div>
+
+      <PracticeMobileFilters
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        filtersActive={filtersActive}
+        topic={topic}
+        difficulty={difficulty}
+        passed={passed}
+        onTopicChange={selectTopic}
+        onDifficultyChange={setDifficulty}
+      />
 
       {sections.length === 0 ? (
         <p className="mt-8 text-sm text-zinc-500 dark:text-zinc-400">
@@ -183,6 +214,84 @@ function PracticeHub({
         </div>
       )}
     </div>
+  );
+}
+
+function PracticeMobileFilters({
+  open,
+  onOpenChange,
+  filtersActive,
+  topic,
+  difficulty,
+  passed,
+  onTopicChange,
+  onDifficultyChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  filtersActive: boolean;
+  topic: TopicFilter;
+  difficulty: DifficultyFilter;
+  passed: string[];
+  onTopicChange: (id: TopicFilter) => void;
+  onDifficultyChange: (id: DifficultyFilter) => void;
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => onOpenChange(true)}
+        aria-expanded={open}
+        aria-controls="practice-mobile-filters"
+        className="fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-5 z-50 inline-flex h-12 w-12 items-center justify-center rounded-full border-2 border-sky-400 bg-white/90 text-zinc-700 shadow-[0_8px_24px_-12px_rgba(15,23,42,0.45)] backdrop-blur-md transition hover:border-sky-300 hover:text-sky-700 md:hidden dark:border-sky-400 dark:bg-zinc-950/80 dark:text-zinc-200 dark:hover:border-sky-300 dark:hover:text-sky-300"
+      >
+        <span className="sr-only">Open practice filters</span>
+        <SlidersHorizontal size={20} aria-hidden />
+        {filtersActive ? (
+          <span
+            className="absolute right-2 top-2 h-2 w-2 rounded-full bg-sky-500 ring-2 ring-white dark:ring-zinc-950"
+            aria-hidden
+          />
+        ) : null}
+      </button>
+
+      {open ? (
+        <div className="fixed inset-0 z-[60] md:hidden" role="presentation">
+          <button
+            type="button"
+            aria-label="Close filters"
+            className="absolute inset-0 bg-zinc-950/50 backdrop-blur-[2px]"
+            onClick={() => onOpenChange(false)}
+          />
+          <div
+            id="practice-mobile-filters"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="practice-mobile-filters-title"
+            className="absolute inset-x-0 bottom-0 max-h-[min(85svh,32rem)] overflow-y-auto rounded-t-3xl border border-zinc-200/80 bg-white/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_-16px_rgba(15,23,42,0.35)] dark:border-white/10 dark:bg-zinc-950/95"
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2
+                id="practice-mobile-filters-title"
+                className="font-display text-base font-semibold tracking-tight text-zinc-950 dark:text-white"
+              >
+                Filters
+              </h2>
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/10 dark:hover:text-white"
+              >
+                <span className="sr-only">Close filters</span>
+                <X size={18} aria-hidden />
+              </button>
+            </div>
+            <TopicChips topic={topic} passed={passed} onChange={onTopicChange} />
+            <DifficultyChips className="mt-3" difficulty={difficulty} onChange={onDifficultyChange} />
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 
