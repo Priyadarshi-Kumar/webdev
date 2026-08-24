@@ -118,7 +118,7 @@ function MobileNavFab({ urlPathname }: { urlPathname: string }) {
   }, [open]);
 
   return (
-    <div className="site-mobile-nav fixed top-[max(0.75rem,env(safe-area-inset-top))] right-[max(0.75rem,env(safe-area-inset-right))] z-40 lg:hidden">
+    <div className="site-mobile-nav pointer-events-none fixed inset-x-0 top-0 z-40 flex justify-end p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pr-[max(0.75rem,env(safe-area-inset-right))] lg:hidden">
       <button
         ref={buttonRef}
         type="button"
@@ -126,14 +126,14 @@ function MobileNavFab({ urlPathname }: { urlPathname: string }) {
         aria-controls={panelId}
         aria-haspopup="dialog"
         onClick={() => setOpen((value) => !value)}
-        className="relative z-50 inline-flex h-12 w-12 items-center justify-center rounded-full border-2 border-sky-400 bg-white/90 text-zinc-700 shadow-[0_8px_24px_-12px_rgba(15,23,42,0.45)] backdrop-blur-md transition hover:border-sky-300 hover:text-sky-700 dark:border-sky-400 dark:bg-zinc-950/80 dark:text-zinc-200 dark:hover:border-sky-300 dark:hover:text-sky-300"
+        className="pointer-events-auto relative z-50 inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-sky-400 bg-white/90 text-zinc-700 shadow-[0_8px_24px_-12px_rgba(15,23,42,0.45)] backdrop-blur-md transition hover:border-sky-300 hover:text-sky-700 dark:border-sky-400 dark:bg-zinc-950/80 dark:text-zinc-200 dark:hover:border-sky-300 dark:hover:text-sky-300"
       >
         <span className="sr-only">{open ? "Close navigation" : "Open navigation"}</span>
-        {open ? <X size={20} aria-hidden /> : <Menu size={20} aria-hidden />}
+        {open ? <X size={18} aria-hidden /> : <Menu size={18} aria-hidden />}
       </button>
 
       {open ? (
-        <div className="fixed inset-0 z-40 lg:hidden" role="presentation">
+        <div className="pointer-events-auto fixed inset-0 z-40 lg:hidden" role="presentation">
           <button
             type="button"
             aria-label="Close navigation"
@@ -146,7 +146,7 @@ function MobileNavFab({ urlPathname }: { urlPathname: string }) {
             role="dialog"
             aria-modal="true"
             aria-label="Site navigation"
-            className="absolute top-[max(4.25rem,calc(env(safe-area-inset-top)+3.5rem))] right-[max(0.75rem,env(safe-area-inset-right))] w-[min(18rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-zinc-200/80 bg-white/95 shadow-[0_16px_40px_-18px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/95"
+            className="absolute top-[max(3.75rem,calc(env(safe-area-inset-top)+3rem))] right-[max(0.75rem,env(safe-area-inset-right))] w-[min(18rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-zinc-200/80 bg-white/95 shadow-[0_16px_40px_-18px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/95"
           >
             <div className="border-b border-zinc-200/80 px-3 py-3 dark:border-white/10">
               <NavLink
@@ -251,7 +251,7 @@ export function ReadProgress() {
 
 export function Footer() {
   return (
-    <footer className="site-footer mt-auto shrink-0 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1 sm:px-4 sm:pb-3">
+    <footer className="site-footer shrink-0 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1 sm:px-4 sm:pb-3 lg:mt-auto">
       <div className="site-footer-panel mx-auto flex max-w-6xl items-center justify-center gap-1 overflow-hidden rounded-2xl border border-zinc-200/80 bg-white/60 px-3 py-1.5 backdrop-blur-xl sm:gap-2 sm:px-4 dark:border-white/10 dark:bg-zinc-950/50">
         <a
           href={`mailto:${SITE.email}`}

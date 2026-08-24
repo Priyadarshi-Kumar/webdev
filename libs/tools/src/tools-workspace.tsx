@@ -27,7 +27,7 @@ export function ToolsWorkspace({ selectedSlug }: { selectedSlug?: string }) {
 
   return (
     <div className="flex min-h-full min-w-0 flex-col gap-5 lg:flex-row lg:items-start lg:gap-8">
-      <aside className="sticky top-0 z-20 -mx-3 flex min-w-0 flex-col bg-slate-50/90 px-3 py-2 backdrop-blur-md dark:bg-[#07080c]/90 sm:-mx-0 sm:px-0 lg:top-0 lg:h-[calc(100svh-14rem)] lg:max-h-[calc(100svh-14rem)] lg:w-64 lg:shrink-0 lg:self-start lg:bg-transparent lg:px-0 lg:py-0 lg:backdrop-blur-none">
+      <aside className="sticky top-0 z-20 -mx-3 flex min-w-0 flex-col bg-slate-50/90 px-3 py-2 pr-14 backdrop-blur-md dark:bg-[#07080c]/90 sm:-mx-0 sm:px-0 sm:pr-0 lg:top-0 lg:h-[calc(100svh-14rem)] lg:max-h-[calc(100svh-14rem)] lg:w-64 lg:shrink-0 lg:self-start lg:bg-transparent lg:px-0 lg:py-0 lg:pr-0 lg:backdrop-blur-none">
           <label className="relative block">
             <span className="sr-only">Search tools</span>
             <Search

@@ -137,7 +137,7 @@ function PracticeHub({
 
   return (
     <div className="pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3 pr-14 md:pr-0">
         <h1 className="font-display text-2xl font-semibold tracking-tight text-zinc-950 dark:text-white">Practice</h1>
         {ready ? (
           <p className="text-sm tabular-nums text-zinc-500 dark:text-zinc-400">
@@ -475,7 +475,7 @@ function PracticeKata({
 
   return (
     <div className="-mx-1 flex min-h-0 min-w-0 flex-col lg:-mx-2">
-      <header className="mb-2 flex min-w-0 items-center gap-2">
+      <header className="mb-2 flex min-w-0 items-center gap-2 pr-14 lg:pr-0">
         <a
           href={`/practice#${group.id}`}
           className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-zinc-600 hover:text-sky-700 dark:text-zinc-400 dark:hover:text-sky-300"
