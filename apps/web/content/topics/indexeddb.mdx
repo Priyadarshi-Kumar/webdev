@@ -1,0 +1,494 @@
+---
+title: IndexedDB — structured storage in the browser
+description: How IndexedDB stores structured data in the browser — databases, object stores, indexes, transactions, cursors, quotas, React patterns, and interview answers with working examples.
+slug: indexeddb
+date: 2026-08-24
+subject: browser
+tags:
+  - javascript
+  - browser
+  - web-apis
+  - pwa
+  - interview
+---
+
+**IndexedDB** is the browser’s built-in database for **large, structured, persistent** data on the client. It stores JavaScript values (objects, arrays, blobs, files) keyed by a primary key, supports **indexes** for secondary lookups, and runs **transactions** so reads and writes stay consistent across tabs.
+
+If `localStorage` is a sticky-note pad (strings only, ~5MB, sync and blocking), IndexedDB is a filing cabinet: megabytes to gigabytes, async, queryable, and usable from pages, [workers](/blog/web-worker), and [service workers](/blog/service-worker).
+
+This note is the **core model** — open a DB, define stores, run transactions, read and write — plus the patterns you actually ship in a React app.
+
+## Why IndexedDB exists
+
+Web apps need offline or “fast second visit” data that is bigger and richer than a few string keys:
+
+- Draft documents, offline queues, cached API entities
+- User preferences that are objects, not `"true"` strings
+- Binary assets (images, PDFs) as `Blob` / `ArrayBuffer`
+- Full-text-ish lookup via indexes (by `email`, by `updatedAt`)
+
+The platform answer is IndexedDB (IDB). It is **asynchronous** (promise-friendly wrappers or `onsuccess` / `onerror`), **transactional**, and **same-origin** — `https://a.com` cannot read `https://b.com`’s databases.
+
+## Mental model
+
+```
+origin (https://example.com)
+ └── database "notes-db"  (version 3)
+      ├── object store "notes"     keyPath: "id"
+      │    └── index "by-tag"      keyPath: "tag"
+      └── object store "meta"      keyPath: "key"
+```
+
+| Piece | Role |
+| --- | --- |
+| **Database** | Named container for one app’s data; has an integer **version** |
+| **Object store** | Like a table / collection — holds records |
+| **Key** | Unique id for a record (`keyPath` on the object, or key supplied separately) |
+| **Index** | Secondary lookup path (`get` / `getAll` by field, not only by primary key) |
+| **Transaction** | Short-lived unit of work: `"readonly"` or `"readwrite"` on one or more stores |
+| **Cursor** | Walk records in key order without loading everything into memory |
+
+You never “SQL query” IndexedDB. You **open a transaction**, get a store (and maybe an index), then `get` / `put` / `add` / `delete` / `openCursor`.
+
+## IndexedDB vs localStorage vs Cache API
+
+| | `localStorage` | IndexedDB | Cache API |
+| --- | --- | --- | --- |
+| Values | Strings only | Structured clone (objects, Blobs, …) | `Request` / `Response` |
+| Size | ~5MB typical | Much larger (quota) | Cache quota |
+| API | Sync | Async | Async |
+| Query | By exact key | Keys + indexes + cursors | By URL / request |
+| Best for | Tiny flags | App data / entities | HTTP responses (PWAs) |
+
+A [PWA](/blog/pwa) often uses **Cache** for the shell and network responses, and **IndexedDB** for domain objects (todos, drafts, sync queues).
+
+## Opening a database
+
+```js
+function openNotesDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open("notes-db", 1);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+
+      if (!db.objectStoreNames.contains("notes")) {
+        const store = db.createObjectStore("notes", {
+          keyPath: "id",
+          autoIncrement: true,
+        });
+        store.createIndex("by-updated", "updatedAt");
+        store.createIndex("by-tag", "tag", { unique: false });
+      }
+    };
+  });
+}
+```
+
+### Version and `onupgradeneeded`
+
+- Second argument to `open` is the **schema version** (integer).
+- If the on-disk version is **lower**, the browser fires **`upgradeneeded`** before `success`.
+- **Create / delete stores and indexes only inside `upgradeneeded`.** Outside that event, schema changes throw.
+- Bump the version when you add a store or index: `indexedDB.open("notes-db", 2)`.
+
+```js
+request.onupgradeneeded = (event) => {
+  const db = event.target.result;
+  const oldVersion = event.oldVersion;
+
+  if (oldVersion < 1) {
+    db.createObjectStore("notes", { keyPath: "id", autoIncrement: true });
+  }
+  if (oldVersion < 2) {
+    const tx = event.target.transaction;
+    const store = tx.objectStore("notes");
+    store.createIndex("by-tag", "tag");
+  }
+};
+```
+
+### Keys: `keyPath` vs out-of-line
+
+```js
+// In-line key — id lives on the object
+db.createObjectStore("notes", { keyPath: "id" });
+store.put({ id: "n1", title: "Hello", body: "…" });
+
+// Out-of-line key — you pass the key separately
+db.createObjectStore("blobs", { autoIncrement: false });
+store.put(fileBlob, "avatar.png");
+```
+
+`autoIncrement: true` assigns numeric keys when you `add` without an id.
+
+## Transactions — the unit of work
+
+Every read or write goes through a **transaction**.
+
+```js
+async function listNotes(db) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("notes", "readonly");
+    const store = tx.objectStore("notes");
+    const request = store.getAll();
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+    tx.onabort = () => reject(tx.error ?? new Error("transaction aborted"));
+  });
+}
+
+async function saveNote(db, note) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("notes", "readwrite");
+    const store = tx.objectStore("notes");
+    store.put({ ...note, updatedAt: Date.now() });
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+```
+
+Rules that bite people:
+
+1. **Transactions auto-commit.** When your sync turn ends and no requests are pending, the transaction finishes. Do not `await fetch(...)` in the middle of a transaction and expect the store to still be open — start a new transaction after the network call.
+2. **`"readonly"`** can run in parallel with other readonly txs. **`"readwrite"`** on the same store blocks writers.
+3. Pass **multiple store names** when one logical update touches more than one: `db.transaction(["notes", "meta"], "readwrite")`.
+4. Prefer waiting on **`tx.oncomplete`** for writes (the put’s `onsuccess` means the request was accepted, not that the disk flush finished).
+
+## CRUD examples
+
+### Add / put / delete / get
+
+```js
+function req(promiseLike) {
+  return new Promise((resolve, reject) => {
+    promiseLike.onsuccess = () => resolve(promiseLike.result);
+    promiseLike.onerror = () => reject(promiseLike.error);
+  });
+}
+
+async function addNote(db, note) {
+  const tx = db.transaction("notes", "readwrite");
+  const id = await req(tx.objectStore("notes").add(note));
+  await new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  return id;
+}
+
+async function getNote(db, id) {
+  const tx = db.transaction("notes", "readonly");
+  return req(tx.objectStore("notes").get(id));
+}
+
+async function deleteNote(db, id) {
+  const tx = db.transaction("notes", "readwrite");
+  tx.objectStore("notes").delete(id);
+  await new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+```
+
+- **`add`** fails if the key already exists.
+- **`put`** inserts or overwrites.
+- **`get`** returns `undefined` when missing (not an error).
+
+### Query by index
+
+```js
+async function notesWithTag(db, tag) {
+  const tx = db.transaction("notes", "readonly");
+  const index = tx.objectStore("notes").index("by-tag");
+  return req(index.getAll(tag));
+}
+
+async function notesUpdatedSince(db, since) {
+  const tx = db.transaction("notes", "readonly");
+  const index = tx.objectStore("notes").index("by-updated");
+  const range = IDBKeyRange.lowerBound(since);
+  return req(index.getAll(range));
+}
+```
+
+### `IDBKeyRange`
+
+| Helper | Meaning |
+| --- | --- |
+| `IDBKeyRange.only(x)` | Exactly `x` |
+| `IDBKeyRange.lowerBound(a)` | `≥ a` (optional exclusive flag) |
+| `IDBKeyRange.upperBound(b)` | `≤ b` |
+| `IDBKeyRange.bound(a, b)` | Between `a` and `b` |
+
+Indexes make these ranges fast. Without an index you only scan by primary key or walk a cursor over the whole store.
+
+## Cursors — walk without loading everything
+
+```js
+async function forEachNote(db, visit) {
+  const tx = db.transaction("notes", "readonly");
+  const store = tx.objectStore("notes");
+
+  await new Promise((resolve, reject) => {
+    const cursorReq = store.openCursor();
+    cursorReq.onerror = () => reject(cursorReq.error);
+    cursorReq.onsuccess = () => {
+      const cursor = cursorReq.result;
+      if (!cursor) {
+        resolve();
+        return;
+      }
+      visit(cursor.value, cursor.key);
+      cursor.continue();
+    };
+  });
+}
+```
+
+Use cursors for export, migration, or filtering that does not fit a single index lookup. Prefer `getAll` / `getAllKeys` when the result set is known to be small.
+
+`openCursor(range, "prev")` walks descending. Index cursors: `store.index("by-updated").openCursor(range)`.
+
+## Structured clone — what you can store
+
+IndexedDB uses the **structured clone algorithm** (same family as `postMessage`):
+
+**Allowed:** plain objects, arrays, `Date`, `Map`, `Set`, `ArrayBuffer`, typed arrays, `Blob`, `File`, nested structures.
+
+**Not allowed:** functions, DOM nodes, class instances (methods are dropped; own data props may clone), symbols as values in some cases.
+
+```js
+await put(db, {
+  id: "doc-1",
+  title: "Spec",
+  updatedAt: Date.now(),
+  attachment: new Blob([markdown], { type: "text/markdown" }),
+});
+```
+
+## Promise wrappers (what people actually use)
+
+The raw callback API works but is noisy. Many apps use a thin helper or libraries like **`idb`** (Jake Archibald):
+
+```js
+import { openDB } from "idb";
+
+const db = await openDB("notes-db", 1, {
+  upgrade(db) {
+    const store = db.createObjectStore("notes", {
+      keyPath: "id",
+      autoIncrement: true,
+    });
+    store.createIndex("by-tag", "tag");
+  },
+});
+
+await db.put("notes", { title: "Ship it", tag: "work", updatedAt: Date.now() });
+const all = await db.getAll("notes");
+const work = await db.getAllFromIndex("notes", "by-tag", "work");
+```
+
+Same engine, less boilerplate. The concepts (version, store, index, transaction) do not change.
+
+## Multi-tab and versionchange
+
+If tab A opens version `2` while tab B still holds version `1`, B gets a **`versionchange`** event and must **close** its connection so the upgrade can proceed.
+
+```js
+db.onversionchange = () => {
+  db.close();
+  // optionally: show “App updated — reload”
+  location.reload();
+};
+```
+
+Ignore this and upgrades hang forever with a blocked `open`.
+
+For “user logged out in another tab,” pair IndexedDB with [BroadcastChannel](/blog/broadcast-channel): one tab clears the store, then broadcasts `LOGOUT` so others reload state.
+
+## Quotas, persistence, and eviction
+
+Browsers give each origin a **quota** (depends on disk and engagement). Check usage:
+
+```js
+if (navigator.storage?.estimate) {
+  const { usage, quota } = await navigator.storage.estimate();
+  console.log(`using ${usage} of ${quota} bytes`);
+}
+```
+
+Ask the browser not to wipe data under pressure (best-effort):
+
+```js
+if (navigator.storage?.persist) {
+  const granted = await navigator.storage.persist();
+  console.log("persistent?", granted);
+}
+```
+
+Storage is still **cleared** when the user clears site data, or in some browsers after long unused time for non-persistent origins. Treat IndexedDB as **cache + offline**, not the only copy of irreplaceable data unless you sync to a server.
+
+## React pattern
+
+Keep IDB out of render. Load once (or on demand), hold results in state, write on user actions.
+
+```tsx
+import { useEffect, useState } from "react";
+import { openNotesDb, listNotes, saveNote } from "./notesDb";
+
+export function NotesApp() {
+  const [notes, setNotes] = useState([]);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const db = await openNotesDb();
+      const rows = await listNotes(db);
+      if (!cancelled) {
+        setNotes(rows);
+        setReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function onSave(draft) {
+    const db = await openNotesDb();
+    await saveNote(db, draft);
+    setNotes(await listNotes(db));
+  }
+
+  if (!ready) return <p>Loading…</p>;
+  return (
+    <ul>
+      {notes.map((n) => (
+        <li key={n.id}>{n.title}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+Reuse one connection (module-level promise) instead of `open` on every click:
+
+```js
+let dbPromise;
+export function getDb() {
+  if (!dbPromise) dbPromise = openNotesDb();
+  return dbPromise;
+}
+```
+
+## Offline queue example
+
+A common PWA pattern: enqueue mutations while offline, flush when online.
+
+```js
+async function enqueueMutation(db, mutation) {
+  const tx = db.transaction("outbox", "readwrite");
+  tx.objectStore("outbox").add({
+    ...mutation,
+    createdAt: Date.now(),
+  });
+  await complete(tx);
+}
+
+async function flushOutbox(db, send) {
+  const tx = db.transaction("outbox", "readwrite");
+  const store = tx.objectStore("outbox");
+  const items = await req(store.getAll());
+
+  for (const item of items) {
+    await send(item); // network — outside the same tx in real code
+    await req(store.delete(item.id));
+  }
+}
+
+window.addEventListener("online", () => {
+  getDb().then((db) => flushOutbox(db, postToApi));
+});
+```
+
+In production, open a **new** transaction after each successful `send`, and handle partial failure (keep the row, retry with backoff). A [service worker](/blog/service-worker) can help with Background Sync where supported.
+
+## DevTools and debugging
+
+Chrome / Edge: **Application → IndexedDB** — inspect databases, stores, and records; delete the DB from the right-click menu.
+
+Programmatic wipe:
+
+```js
+indexedDB.deleteDatabase("notes-db");
+```
+
+That is asynchronous and can be blocked if a connection is still open — close all tabs / connections first.
+
+## What IndexedDB is not
+
+- **Not SQL.** No joins, no `SELECT * WHERE`. Design indexes for the queries you need.
+- **Not a replacement for your server database.** Sync and conflict resolution are your problem.
+- **Not sync across devices.** Same browser profile, same origin.
+- **Not available in non-secure contexts** the same way modern storage APIs expect HTTPS (use `localhost` for dev).
+- **Not ideal for tiny flags.** Prefer `localStorage` or cookies when a few strings are enough.
+
+## Interview answers
+
+<details>
+<summary>What is IndexedDB?</summary>
+
+A browser database API for large structured client-side data. It stores clonable JS values in object stores, supports indexes and transactions, and is asynchronous and same-origin scoped.
+
+</details>
+
+<details>
+<summary>When do you use IndexedDB instead of localStorage?</summary>
+
+When values are objects/blobs, data may exceed a few MB, you need indexes or cursors, or you must not block the main thread with sync storage. localStorage is fine for small string prefs.
+
+</details>
+
+<details>
+<summary>What is onupgradeneeded?</summary>
+
+The only place you create or delete object stores and indexes. It runs when `open(name, version)` requests a version higher than the one on disk.
+
+</details>
+
+<details>
+<summary>Why do transactions matter?</summary>
+
+They group operations for consistency and define read vs write locking. All IDB operations run inside a transaction; long async gaps (like await fetch) close the transaction early.
+
+</details>
+
+<details>
+<summary>How do you look up by a field that is not the primary key?</summary>
+
+Create an index on that field in `upgradeneeded`, then `store.index("by-email").get(email)` or `getAll` with an `IDBKeyRange`.
+
+</details>
+
+<details>
+<summary>Can service workers use IndexedDB?</summary>
+
+Yes. Same origin, same API. Common for offline queues and caching metadata while the Cache API stores HTTP responses.
+
+</details>
+
+<details>
+<summary>What happens when two tabs open different DB versions?</summary>
+
+The upgrade waits until older connections close. Tabs should listen for `versionchange`, close the DB, and reload so the new schema can install.
+
+</details>

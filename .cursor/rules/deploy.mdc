@@ -1,0 +1,15 @@
+---
+description: When the user asks to deploy — commit, land on main, push, then Netlify build/publish
+alwaysApply: true
+---
+
+# Deploy workflow
+
+Whenever the user asks to **deploy** (or “build and deploy”, “send to Netlify”, etc.):
+
+1. **Commit everything** that should ship — stage relevant changes and create a commit (follow the repo’s commit rules; ask only if intent to commit is unclear outside a deploy request).
+2. **Land on `main`** — if work is on another branch, merge (or open/merge PR as appropriate) so `main` has the changes. If already on `main`, skip merge.
+3. **Push to `main`** — `git push origin main` (or push the branch and merge, then ensure `origin/main` is updated).
+4. **Build and publish to Netlify** — from repo root run `pnpm deploy:site` (builds `web` with cache skipped, then `scripts/netlify-publish.mjs`). Report the Live and Draft URLs when done.
+
+Do not stop after a local build alone when the user asked to deploy. Do not leave uncommitted deployable work behind unless they explicitly exclude it.
