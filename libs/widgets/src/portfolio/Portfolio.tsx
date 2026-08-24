@@ -209,7 +209,7 @@ export function PortfolioPage({ section }: { section: PortfolioSectionId }) {
 
   return (
     <div className="flex min-h-full min-w-0 flex-col gap-6 lg:flex-row lg:items-start lg:gap-10">
-      <aside className="sticky top-0 z-20 -mx-3 min-w-0 bg-slate-50/90 px-3 py-2 backdrop-blur-md dark:bg-[#07080c]/90 sm:-mx-0 sm:px-0 lg:top-10 lg:w-56 lg:shrink-0 lg:self-start lg:bg-transparent lg:px-0 lg:py-0 lg:backdrop-blur-none">
+      <aside className="sticky top-0 z-20 -mx-3 min-w-0 bg-slate-50/90 px-3 py-2 pr-14 backdrop-blur-md dark:bg-[#07080c]/90 sm:-mx-0 sm:px-0 sm:pr-0 lg:top-10 lg:w-56 lg:shrink-0 lg:self-start lg:bg-transparent lg:px-0 lg:py-0 lg:pr-0 lg:backdrop-blur-none">
         <p className="eyebrow hidden lg:block">Portfolio</p>
         <h1 className="section-title hidden text-2xl lg:mt-1 lg:block lg:text-xl">Resume</h1>
         <nav

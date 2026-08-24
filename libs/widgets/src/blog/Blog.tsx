@@ -494,7 +494,7 @@ export function BlogWorkspace({
     >
       {reading ? (
         <>
-          <div className="sticky top-0 z-20 -mx-3 border-b border-zinc-200/80 bg-slate-50/95 px-3 py-2 backdrop-blur-md lg:hidden dark:border-white/10 dark:bg-[#07080c]/95">
+          <div className="sticky top-0 z-20 -mx-3 border-b border-zinc-200/80 bg-slate-50/95 px-3 py-2 pr-14 backdrop-blur-md lg:hidden dark:border-white/10 dark:bg-[#07080c]/95">
             <a
               href={browseHref}
               className="inline-flex min-h-10 items-center gap-1.5 text-sm font-semibold text-zinc-700 transition hover:text-sky-700 dark:text-zinc-200 dark:hover:text-sky-300"
@@ -524,7 +524,7 @@ export function BlogWorkspace({
           </aside>
         </>
       ) : (
-        <aside className="blog-rail sticky top-0 z-20 -mx-3 space-y-3 bg-slate-50/90 px-3 py-2 backdrop-blur-md dark:bg-[#07080c]/90 sm:-mx-0 sm:px-0 lg:-ml-6 lg:flex lg:h-[calc(100svh-14rem)] lg:max-h-[calc(100svh-14rem)] lg:w-56 lg:shrink-0 lg:flex-col lg:space-y-0 lg:overflow-hidden lg:self-start lg:bg-transparent lg:px-0 lg:py-0 lg:backdrop-blur-none">
+        <aside className="blog-rail sticky top-0 z-20 -mx-3 space-y-3 bg-slate-50/90 px-3 py-2 pr-14 backdrop-blur-md dark:bg-[#07080c]/90 sm:-mx-0 sm:px-0 sm:pr-0 lg:-ml-6 lg:flex lg:h-[calc(100svh-14rem)] lg:max-h-[calc(100svh-14rem)] lg:w-56 lg:shrink-0 lg:flex-col lg:space-y-0 lg:overflow-hidden lg:self-start lg:bg-transparent lg:px-0 lg:py-0 lg:pr-0 lg:backdrop-blur-none">
           <SearchField query={query} onQueryChange={setQuery} />
           <div className="lg:mt-4 lg:hidden">
             <ModeNav pane={pane} readingKind={readingKind} articleCounts={modeCounts} layout="pills" />
