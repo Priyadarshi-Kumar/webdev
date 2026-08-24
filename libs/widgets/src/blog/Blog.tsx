@@ -484,7 +484,7 @@ export function BlogWorkspace({
 
   return (
     <div
-      className={`blog-workspace flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8 ${
+      className={`blog-workspace flex min-w-0 flex-col gap-6 lg:flex-row lg:items-start lg:gap-8 ${
         browseWide
           ? ""
           : toc.length > 0

@@ -474,7 +474,7 @@ function PracticeKata({
   }
 
   return (
-    <div className="-mx-1 flex min-h-0 flex-col lg:-mx-2">
+    <div className="-mx-1 flex min-h-0 min-w-0 flex-col lg:-mx-2">
       <header className="mb-2 flex min-w-0 items-center gap-2">
         <a
           href={`/practice#${group.id}`}

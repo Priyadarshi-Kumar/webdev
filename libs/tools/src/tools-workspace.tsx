@@ -26,8 +26,8 @@ export function ToolsWorkspace({ selectedSlug }: { selectedSlug?: string }) {
   }, [needle]);
 
   return (
-    <div className="flex min-h-full flex-col gap-5 lg:flex-row lg:items-start lg:gap-8">
-      <aside className="sticky top-0 z-20 -mx-4 flex flex-col bg-slate-50/90 px-4 py-2 backdrop-blur-md dark:bg-[#07080c]/90 lg:top-0 lg:mx-0 lg:h-[calc(100svh-14rem)] lg:max-h-[calc(100svh-14rem)] lg:w-64 lg:shrink-0 lg:self-start lg:bg-transparent lg:px-0 lg:py-0 lg:backdrop-blur-none">
+    <div className="flex min-h-full min-w-0 flex-col gap-5 lg:flex-row lg:items-start lg:gap-8">
+      <aside className="sticky top-0 z-20 -mx-3 flex min-w-0 flex-col bg-slate-50/90 px-3 py-2 backdrop-blur-md dark:bg-[#07080c]/90 sm:-mx-0 sm:px-0 lg:top-0 lg:h-[calc(100svh-14rem)] lg:max-h-[calc(100svh-14rem)] lg:w-64 lg:shrink-0 lg:self-start lg:bg-transparent lg:px-0 lg:py-0 lg:backdrop-blur-none">
           <label className="relative block">
             <span className="sr-only">Search tools</span>
             <Search
@@ -47,7 +47,7 @@ export function ToolsWorkspace({ selectedSlug }: { selectedSlug?: string }) {
 
           <ScrollHints
             frameClassName="mt-3 min-h-0 lg:mt-4 lg:flex-1 lg:min-h-0"
-            className="rail-scroll h-full min-h-0 overflow-x-auto lg:overflow-y-auto lg:overflow-x-hidden lg:overscroll-contain"
+            className="rail-scroll h-full min-h-0 max-w-full overflow-x-auto overscroll-x-contain lg:overflow-y-auto lg:overflow-x-hidden lg:overscroll-contain"
           >
             <nav aria-label="Developer tools" className="flex w-max gap-1 lg:w-full lg:flex-col">
               {visible.length === 0 ? (
