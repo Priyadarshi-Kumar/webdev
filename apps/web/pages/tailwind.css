@@ -602,7 +602,8 @@ body.page-transition #page-content {
 html.zen-mode header,
 html.zen-mode footer,
 html.zen-mode .blog-rail,
-html.zen-mode .article-toc {
+html.zen-mode .article-toc,
+html.zen-mode .site-mobile-nav {
   display: none !important;
 }
 
