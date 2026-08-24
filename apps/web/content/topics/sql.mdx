@@ -1,0 +1,404 @@
+---
+title: SQL — relational queries, and PostgreSQL vs MySQL vs SQLite
+description: How SQL models data with tables, keys, joins, and transactions — then a detailed comparison of PostgreSQL, MySQL, and SQLite (with notes on other engines) so you can pick and write queries with intent.
+slug: sql
+date: 2026-08-24
+subject: backend
+tags:
+  - database
+  - sql
+  - postgresql
+  - mysql
+  - backend
+  - interview
+---
+
+**SQL** (Structured Query Language) is how you talk to a **relational database**: ask for rows, insert them, change them, and keep related tables consistent. The language is an ANSI/ISO standard. **PostgreSQL**, **MySQL**, **SQLite**, SQL Server, and Oracle all speak “SQL,” but each engine adds dialects, types, and tools on top.
+
+This note is two layers: **core SQL** you use every day, then a **detailed engine comparison** so “Postgres vs MySQL” is a real decision, not a slogan. Schema design (1NF–BCNF) lives in [database normalisation](/blog/database-normalisation).
+
+## What a relational database is
+
+Data lives in **tables** (relations). Each table has **columns** (named fields with types) and **rows** (one record). Rows are identified by a **primary key**. Other tables point at that key with a **foreign key**.
+
+```txt
+customers                orders
+───────────              ─────────────────
+id (PK)  ◄────────────── customer_id (FK)
+name                     id (PK)
+email                    total_cents
+                         created_at
+```
+
+SQL is **declarative**: you say *what* you want (`SELECT name FROM customers WHERE …`), not *how* to walk indexes. The engine’s **query planner** chooses scans, indexes, and join order.
+
+## The statements you actually use
+
+| Family | Verbs | Role |
+| --- | --- | --- |
+| **DQL** | `SELECT` | Read |
+| **DML** | `INSERT`, `UPDATE`, `DELETE` | Change rows |
+| **DDL** | `CREATE`, `ALTER`, `DROP` | Change schema |
+| **DCL** | `GRANT`, `REVOKE` | Permissions |
+| **TCL** | `BEGIN`, `COMMIT`, `ROLLBACK` | Transactions |
+
+### SELECT, filter, sort, limit
+
+```sql
+SELECT id, name, email
+FROM customers
+WHERE email LIKE '%@example.com'
+ORDER BY name ASC
+LIMIT 20;
+```
+
+- `WHERE` filters **rows** before grouping
+- `HAVING` filters **groups** after `GROUP BY`
+- `ORDER BY` sorts the result
+- `LIMIT` / `OFFSET` (or `FETCH FIRST` in some dialects) page results
+
+### Aggregates
+
+```sql
+SELECT customer_id, COUNT(*) AS order_count, SUM(total_cents) AS spent
+FROM orders
+GROUP BY customer_id
+HAVING COUNT(*) >= 2;
+```
+
+Common aggregates: `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`. In strict modes, every non-aggregated column in `SELECT` must appear in `GROUP BY`.
+
+### Joins
+
+```sql
+-- Inner: only matching pairs
+SELECT c.name, o.id, o.total_cents
+FROM customers AS c
+INNER JOIN orders AS o ON o.customer_id = c.id;
+
+-- Left: keep customers even with no orders
+SELECT c.name, o.id
+FROM customers AS c
+LEFT JOIN orders AS o ON o.customer_id = c.id;
+```
+
+| Join | Keeps |
+| --- | --- |
+| `INNER` | Rows that match on both sides |
+| `LEFT` | All left rows; right side `NULL` if no match |
+| `RIGHT` | All right rows (less common; rewrite as `LEFT`) |
+| `FULL OUTER` | All from both (PostgreSQL yes; MySQL historically no / needs union tricks) |
+
+### Insert, update, delete
+
+```sql
+INSERT INTO customers (name, email) VALUES ('Ada', 'ada@uni.edu');
+
+UPDATE orders SET total_cents = 1999 WHERE id = 42;
+
+DELETE FROM orders WHERE created_at < '2020-01-01';
+```
+
+Prefer keyed `WHERE` clauses. A forgotten `WHERE` on `UPDATE`/`DELETE` is a career event.
+
+### Transactions
+
+A **transaction** is a unit of work that either **commits** entirely or **rolls back**.
+
+```sql
+BEGIN;
+UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+UPDATE accounts SET balance = balance + 100 WHERE id = 2;
+COMMIT;
+-- or ROLLBACK;
+```
+
+**ACID** (what “serious” engines aim for):
+
+| Letter | Meaning |
+| --- | --- |
+| **Atomicity** | All or nothing |
+| **Consistency** | Constraints still hold after commit |
+| **Isolation** | Concurrent txs don’t trash each other (levels vary) |
+| **Durability** | After commit, data survives a crash |
+
+Isolation levels (from weaker to stronger, roughly): `READ UNCOMMITTED` → `READ COMMITTED` → `REPEATABLE READ` → `SERIALIZABLE`. Defaults differ by engine — that alone explains many “works on MySQL, flakes on Postgres” bugs.
+
+## Keys, constraints, and indexes
+
+```sql
+CREATE TABLE orders (
+  id            BIGSERIAL PRIMARY KEY,          -- Postgres identity style
+  customer_id   BIGINT NOT NULL REFERENCES customers(id),
+  total_cents   INTEGER NOT NULL CHECK (total_cents >= 0),
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX orders_customer_id_idx ON orders (customer_id);
+```
+
+- **Primary key** — unique identity for a row
+- **Foreign key** — referential integrity (child cannot point at a missing parent)
+- **Unique / CHECK / NOT NULL** — rules the engine enforces
+- **Index** — speeds lookups and joins; slows writes a bit; not a free lunch
+
+`EXPLAIN` (and `EXPLAIN ANALYZE` where available) shows the plan. Learn it early.
+
+## Subqueries and CTEs
+
+```sql
+-- Subquery
+SELECT name
+FROM customers
+WHERE id IN (SELECT customer_id FROM orders WHERE total_cents > 5000);
+
+-- CTE (readable multi-step query)
+WITH big_spenders AS (
+  SELECT customer_id, SUM(total_cents) AS spent
+  FROM orders
+  GROUP BY customer_id
+  HAVING SUM(total_cents) > 5000
+)
+SELECT c.name, b.spent
+FROM big_spenders AS b
+JOIN customers AS c ON c.id = b.customer_id;
+```
+
+Modern engines treat many CTEs like inline views; older MySQL versions were weaker here.
+
+## SQL is one language; dialects are many
+
+Examples of dialect friction:
+
+| Idea | PostgreSQL | MySQL | SQLite |
+| --- | --- | --- | --- |
+| Auto id | `GENERATED … AS IDENTITY` / `BIGSERIAL` | `AUTO_INCREMENT` | `INTEGER PRIMARY KEY` |
+| Boolean | real `BOOLEAN` | often `TINYINT(1)` | `INTEGER` 0/1 |
+| Limit | `LIMIT n` | `LIMIT n` | `LIMIT n` |
+| Upsert | `ON CONFLICT` | `ON DUPLICATE KEY UPDATE` | `ON CONFLICT` |
+| String concat | `\|\|` or `CONCAT` | `CONCAT` (`\|\|` depends on mode) | `\|\|` |
+| JSON | rich `jsonb` + operators | `JSON` type + functions | `JSON1` extension |
+| Full text | built-in + ranking | FULLTEXT indexes | FTS5 |
+| Window functions | yes | yes (8+) | yes (3.25+) |
+
+Always test migrations on the **same** engine you run in production.
+
+## PostgreSQL vs MySQL vs SQLite (detail)
+
+These three cover most app backends and local tools. Others (SQL Server, Oracle, MariaDB, Cockroach) sit nearby.
+
+### Positioning
+
+| | **PostgreSQL** | **MySQL** | **SQLite** |
+| --- | --- | --- | --- |
+| What it is | Object-relational server, standards-heavy | Popular client/server RDBMS (Oracle-owned) | Embedded library DB in one file |
+| Process model | Separate server process | Separate server process | In-process; file on disk |
+| Best default for | Complex apps, analytics-ish SQL, strict data | Web apps, simple CRUD, LAMP heritage | Mobile, desktop, tests, small sites |
+| Concurrent writers | Strong (MVCC) | Strong with InnoDB | One writer at a time (readers OK) |
+| Ops | You run/patch a server (or use a host) | Same | Mostly “copy the `.db` file” |
+
+**MariaDB** forked from MySQL and stays wire-compatible for many apps; treat it as “MySQL family” unless you rely on a feature only one side has.
+
+### Storage and engines
+
+- **PostgreSQL** — one storage system. Tables, indexes, TOAST for large values. Extensions (`postgis`, `pg_trgm`, `uuid-ossp`, …) plug into the same core.
+- **MySQL** — pluggable engines historically; **InnoDB** is the default that gives you transactions and foreign keys. Older **MyISAM** lacked proper txs/FKs — avoid it for new work.
+- **SQLite** — B-tree in a single file (or memory). Optional WAL mode improves concurrent reads with a writer.
+
+### Types and correctness
+
+PostgreSQL is picky in a good way:
+
+```sql
+-- Postgres: real boolean, arrays, enums, uuid, jsonb
+SELECT ARRAY[1,2,3], 't'::boolean, '{"a":1}'::jsonb;
+
+-- Strict casting: 'abc'::int fails loudly
+```
+
+MySQL has historically been more permissive (implicit casts, “zero dates”, non-strict group by) depending on **sql_mode**. Modern defaults (`STRICT_TRANS_TABLES`, etc.) are better — still verify `sql_mode` in every environment.
+
+SQLite uses **dynamic typing** / type affinity: you can insert a string into an `INTEGER` column unless you add `CHECK` constraints or use `STRICT` tables (newer SQLite). Great for flexibility; dangerous if you expect Postgres-level rigidity.
+
+### JSON
+
+| Need | Prefer |
+| --- | --- |
+| Index and query inside JSON often | **PostgreSQL `jsonb`** (GIN indexes, `@>`, `->>`, …) |
+| Store JSON documents, occasional functions | **MySQL JSON** |
+| Light JSON in an embedded app | **SQLite JSON1** |
+
+If JSON is half your data model, Postgres usually hurts less long-term.
+
+### Concurrency and locking
+
+- **Postgres** — MVCC; readers don’t block writers for most workloads. Deadlocks still happen; retry is normal.
+- **MySQL InnoDB** — also MVCC-ish; default isolation is often **REPEATABLE READ** (Postgres default is typically **READ COMMITTED**). Phantom reads and gap locks surprise people moving between them.
+- **SQLite** — database-level write lock (WAL softens this). Fine for one writer; not a multi-writer OLTP server.
+
+### Replication and ops
+
+| Concern | PostgreSQL | MySQL | SQLite |
+| --- | --- | --- | --- |
+| Streaming replication | First-class | First-class (async/semisync) | App-level / file copy |
+| Managed cloud | Everywhere (RDS, Cloud SQL, Neon, …) | Everywhere | Rare as “server” |
+| Backup | `pg_dump` / base backups | `mysqldump` / snapshots | Copy file (after checkpoint) |
+| Extensions | Rich ecosystem | Plugins / engines | Compile-time / loadable |
+
+### Extensibility and SQL power
+
+PostgreSQL tends to win “advanced SQL” checklists: window functions (mature), CTEs, `FILTER`, `DISTINCT ON`, lateral joins, custom types, stored procedures in multiple languages, PostGIS for geo.
+
+MySQL caught up on windows/CTEs and remains excellent for straightforward CRUD and read replicas. Some advanced analytics still feel more natural in Postgres.
+
+SQLite supports a large SQL subset for a library, including windows and CTEs, but not a networked multi-user server.
+
+### Licensing and ecosystem (short)
+
+- **PostgreSQL** — permissive open-source license; community + companies.
+- **MySQL** — GPL (with commercial options from Oracle); huge hosting/tutorial surface.
+- **SQLite** — public domain; ships inside phones, browsers, and apps.
+
+### When to choose which
+
+| Situation | Lean toward |
+| --- | --- |
+| New SaaS / complex domain / JSON + relational | **PostgreSQL** |
+| Existing LAMP / WordPress / simple CRUD + team knows MySQL | **MySQL** (InnoDB) |
+| Unit tests, CLI tools, Electron/mobile local store | **SQLite** |
+| Need Oracle/SQL Server shop standards | Those engines (not this trio) |
+| Geo queries, serious full-text, custom types | **PostgreSQL** |
+| Maximum “one file, zero ops” | **SQLite** |
+
+Rule of thumb for greenfield backends in 2026: **start with PostgreSQL** unless you have a concrete MySQL or SQLite reason.
+
+## Other engines you will hear about
+
+| Engine | One-line |
+| --- | --- |
+| **MariaDB** | MySQL fork; often a drop-in, check feature parity |
+| **SQL Server** | Microsoft stack; T-SQL dialect; strong Windows/.NET shops |
+| **Oracle Database** | Enterprise feature depth; proprietary; different career/cost path |
+| **CockroachDB / Yugabyte** | Distributed SQL, Postgres-wire leaning |
+| **PlanetScale (Vitess)** | MySQL-compatible at scale, with sharding tradeoffs |
+
+Same SQL ideas; different dialects, tooling, and failure modes.
+
+## A small schema that works on Postgres and MySQL
+
+Postgres:
+
+```sql
+CREATE TABLE customers (
+  id         BIGSERIAL PRIMARY KEY,
+  email      TEXT NOT NULL UNIQUE,
+  name       TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE orders (
+  id          BIGSERIAL PRIMARY KEY,
+  customer_id BIGINT NOT NULL REFERENCES customers(id),
+  total_cents INTEGER NOT NULL CHECK (total_cents >= 0),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX orders_customer_id_idx ON orders (customer_id);
+```
+
+MySQL (InnoDB) shape:
+
+```sql
+CREATE TABLE customers (
+  id         BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  email      VARCHAR(320) NOT NULL UNIQUE,
+  name       VARCHAR(200) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE orders (
+  id          BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  customer_id BIGINT NOT NULL,
+  total_cents INT NOT NULL,
+  created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_orders_customer
+    FOREIGN KEY (customer_id) REFERENCES customers(id),
+  CONSTRAINT chk_total CHECK (total_cents >= 0)
+) ENGINE=InnoDB;
+
+CREATE INDEX orders_customer_id_idx ON orders (customer_id);
+```
+
+Same relationships; different type and identity spellings.
+
+### Example query both understand
+
+```sql
+SELECT c.email, COUNT(o.id) AS orders, COALESCE(SUM(o.total_cents), 0) AS spent
+FROM customers AS c
+LEFT JOIN orders AS o ON o.customer_id = c.id
+GROUP BY c.id, c.email
+ORDER BY spent DESC
+LIMIT 10;
+```
+
+## Common mistakes
+
+1. **Selecting `*` in hot paths** — pull only columns you need  
+2. **N+1 queries** from the app — join or batch instead  
+3. **Missing indexes** on foreign keys and filter columns  
+4. **Assuming dialects match** — especially dates, booleans, `LIMIT` in updates, upserts  
+5. **Ignoring transactions** around multi-table writes  
+6. **Using SQLite like a multi-writer server**  
+7. **Turning off FK checks** “temporarily” and forgetting  
+
+## Interview answers
+
+<details>
+<summary>What is SQL?</summary>
+
+A standard language for defining and querying relational databases: tables of rows and columns related by keys. Engines implement SQL with dialect differences.
+
+</details>
+
+<details>
+<summary>INNER JOIN vs LEFT JOIN?</summary>
+
+INNER returns only matching pairs. LEFT returns every left-side row; unmatched right columns are NULL.
+
+</details>
+
+<details>
+<summary>What does ACID mean?</summary>
+
+Atomicity, Consistency, Isolation, Durability — the properties transactions aim to provide so concurrent failures don’t corrupt data.
+
+</details>
+
+<details>
+<summary>PostgreSQL vs MySQL in one minute?</summary>
+
+Both are solid client/server RDBMSs. Postgres leans stricter types, richer SQL/JSON/extensions, and advanced features. MySQL (InnoDB) is ubiquitous for web CRUD, with a simpler historical culture and different defaults for isolation and sql_mode. Pick based on features and team, not memes.
+
+</details>
+
+<details>
+<summary>When is SQLite the right choice?</summary>
+
+Embedded use: mobile/desktop apps, local caches, tests, small single-writer apps. Not a replacement for a multi-writer network database.
+
+</details>
+
+<details>
+<summary>What is an index?</summary>
+
+A separate structure (usually B-tree) that speeds lookups and sorts at the cost of storage and slower writes. Use EXPLAIN to see whether the planner uses it.
+
+</details>
+
+<details>
+<summary>WHERE vs HAVING?</summary>
+
+WHERE filters rows before aggregation. HAVING filters groups after GROUP BY.
+
+</details>
