@@ -103,7 +103,7 @@ Workers exist because they are **another isolate on another thread**, with no DO
 
 ### Call stack vs task queues
 
-The **event loop** is not part of ECMAScript. It is specified for browsers in HTML, and Node has its own (libuv). Mental model:
+The **event loop** is not part of ECMAScript. It is specified for browsers in HTML, and Node has its own (libuv). Mental model (the [event loop note](/blog/event-loop) walks through the ordering rules in detail):
 
 ```txt
 ┌─────────────┐     ┌──────────────────┐

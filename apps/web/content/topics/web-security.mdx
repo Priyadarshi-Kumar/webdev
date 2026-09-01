@@ -52,6 +52,8 @@ Attacks live in the gap: “I cannot *read* your page, but I can *make the user�
 
 ### How a session usually works
 
+This section is the attacker's view of sessions; [Web authentication](/blog/auth-sessions-oauth) covers how to build them — hashing, revocation, JWT tradeoffs, and OAuth.
+
 The server sets a cookie after login. Every later request to that site includes it:
 
 ```http
@@ -364,7 +366,7 @@ Modern browsers default `rel=noopener` for `target=_blank` in many cases. **Stil
 
 ## CORS is not a lock — it is a hole you cut
 
-Browsers **block JS** on `evil.example` from **reading** `https://shop.example/api/me`. Your API can **opt in** with CORS headers.
+Browsers **block JS** on `evil.example` from **reading** `https://shop.example/api/me`. Your API can **opt in** with CORS headers. For preflight rules, credentialed requests, and the DevTools errors these produce, see [CORS and cookies](/blog/cors-and-cookies).
 
 ```http
 Access-Control-Allow-Origin: https://app.shop.example
