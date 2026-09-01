@@ -1,3 +1,3 @@
 import { SITE } from "@webdev/widgets/config";
 
-export default `External articles · Blog · ${SITE.name}`;
+export default `External articles · Notes · ${SITE.name}`;

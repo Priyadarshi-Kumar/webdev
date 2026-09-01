@@ -1,0 +1,654 @@
+---
+title: Docker for frontend developers — images, multi-stage builds, and monorepos
+description: Containers for frontend work — layers and caching, multi-stage Dockerfiles for Vite and Node SSR, pnpm monorepo builds, image size, CI, security, and debugging.
+slug: docker-for-frontend
+date: 2026-09-01
+subject: tooling
+tags:
+  - tooling
+  - nodejs
+  - monorepo
+  - interview
+---
+
+Most frontend jobs eventually hand you a `Dockerfile`. Usually it was written years ago by someone who left, takes nine minutes to build, and ships a 1.4 GB image to serve 300 KB of JavaScript. This is the practical version: what a container is, how layer caching decides your build time, two complete multi-stage Dockerfiles, and what breaks specifically in a pnpm monorepo.
+
+## What a container actually is
+
+A container is **a normal Linux process on the host kernel** with its view of the world restricted. It is not a virtual machine — no guest kernel, no emulated hardware, no boot sequence. Two kernel features do the work:
+
+- **Namespaces** — what the process can *see*: process tree (`pid`), mounts (`mnt`), network, hostname, users, IPC. Inside the container your Node process is PID 1 and `ls /` shows the image's filesystem, because those namespaces were swapped out.
+- **cgroups** — what it can *use*: CPU shares, memory, IO. `docker run --memory=512m` is a cgroup setting.
+
+Consequences you feel daily: startup is milliseconds because it is `fork` plus `exec`; the kernel is shared, so a Linux image needs a VM to run on macOS or Windows, which is why bind-mounted file IO is slow on a Mac; and architecture matters, so an `amd64` image on Apple Silicon is emulated and slow, or fails outright with `exec format error`.
+
+## The vocabulary
+
+| Term | What it is | Analogy |
+| --- | --- | --- |
+| Image | A read-only stack of layers plus metadata (default command, env, ports) | A built artifact |
+| Layer | One filesystem diff produced by one instruction, addressed by digest | A git commit of the filesystem |
+| Container | A running instance of an image with a thin writable layer on top | A process |
+| Registry | A server that stores and serves images by name and tag | npm, for images |
+
+### Layers are a diff stack
+
+Each `RUN`, `COPY`, and `ADD` produces a layer holding only what changed, and layers are shared — ten images starting `FROM node:22-alpine` store that base once and pull it once. Two consequences bite people. **Deleting a file in a later layer does not shrink the image**: it still sits in the earlier layer, marked deleted. And **every layer is cached independently**, which is the whole game for build speed.
+
+### Tags are mutable pointers
+
+`node:22-alpine` is a name the maintainers repoint on every patch release; `node@sha256:abc123...` is immutable. Tags are convenient, digests are reproducible — the same tension as [What is a lockfile?](/blog/lockfile), one level down the stack.
+
+## The CLI you actually use
+
+There are around 60 subcommands. You will use ten.
+
+```bash
+docker build -t web:dev .                          # build from ./Dockerfile
+docker build -f apps/web/Dockerfile -t web:dev .   # explicit file, root context
+docker run --rm -p 8080:80 web:dev                 # foreground, delete on exit
+docker run -d --name web -e NODE_ENV=production -p 3000:3000 web:prod
+docker ps -a                                       # containers, including stopped
+docker logs -f --tail 100 web
+docker exec -it web sh                             # shell inside a running container
+docker images                                      # local images and sizes
+docker rm -f web && docker rmi web:dev
+docker system prune -af                            # remove everything unused (careful)
+docker pull ghcr.io/acme/web:sha-1a2b3c4
+docker push ghcr.io/acme/web:sha-1a2b3c4
+docker compose up --build
+docker compose down -v
+```
+
+### Flags worth memorising
+
+| Flag | Where | Why |
+| --- | --- | --- |
+| `--rm` | `run` | Delete the container on exit so you do not accumulate hundreds |
+| `-it` | `run`, `exec` | Interactive TTY, required for a usable shell |
+| `-p host:container` | `run` | Publish a port. Host side first |
+| `--init` | `run` | Insert a tiny init as PID 1 so signals and zombies are handled |
+| `--platform linux/amd64` | `build`, `run` | Force architecture on Apple Silicon |
+| `--progress=plain` | `build` | Full, uncollapsed build output |
+| `--no-cache` | `build` | Prove a cache bug is a cache bug |
+
+## Dockerfile fundamentals
+
+Every instruction either sets metadata or creates a layer.
+
+```dockerfile
+# syntax=docker/dockerfile:1.7
+FROM node:22-alpine
+
+WORKDIR /app                 # created for you; later relative paths resolve here
+ARG BUILD_MODE=production    # build time only, set with --build-arg
+ENV NODE_ENV=production      # baked into the image, present at runtime
+
+COPY package.json pnpm-lock.yaml ./
+RUN corepack enable && pnpm install --frozen-lockfile
+COPY . .
+
+EXPOSE 3000                  # documentation; it publishes nothing
+USER node                    # drop root
+CMD ["node", "server.js"]    # default command, overridable
+```
+
+Use `COPY`, not `ADD`. `COPY` copies files from the build context and nothing else, while `ADD` also auto-extracts local tar archives and fetches remote URLs — both surprising in a file you read at 2 a.m. For a remote file use `RUN curl` so the failure is visible.
+
+### CMD vs ENTRYPOINT
+
+| | `ENTRYPOINT` | `CMD` |
+| --- | --- | --- |
+| Role | The executable | The default arguments |
+| Overridden by | `docker run --entrypoint` | Any arguments after the image name |
+| Typical value | `["dumb-init", "--"]` | `["node", "server.js"]` |
+
+Always use the **exec form** (a JSON array). The shell form wraps your process in `/bin/sh -c`, so `sh` becomes PID 1 and never forwards `SIGTERM`. Your container then ignores graceful shutdown and gets killed after the timeout on every deploy.
+
+### USER
+
+`FROM node:*` images ship a `node` user with UID 1000. Switch to it late, because `apk add` and writes under `/usr/local` need root. Switch to it at all, because a root process that escapes its namespace is root on the host.
+
+## Layer caching
+
+One rule: **an instruction is cached until its inputs change, and once one instruction misses, everything after it misses too.** For `RUN` the input is the command string; for `COPY` it is the content of the copied files. So this is broken:
+
+```dockerfile
+# Bad — every source edit reinstalls every dependency
+FROM node:22-alpine
+WORKDIR /app
+COPY . .
+RUN pnpm install --frozen-lockfile
+RUN pnpm build
+```
+
+Change one line of CSS, `COPY . .` produces a different layer, and 900 packages reinstall. Copy the manifests first instead:
+
+```dockerfile
+# Good — install is cached until the lockfile changes
+FROM node:22-alpine
+WORKDIR /app
+COPY package.json pnpm-lock.yaml ./
+RUN corepack enable && pnpm install --frozen-lockfile
+COPY . .
+RUN pnpm build
+```
+
+The expensive layer now depends only on the two files that describe your dependency tree. Order instructions least-volatile to most: base image, OS packages, package manager, lockfile and manifests, config, source.
+
+### Things that silently break the cache
+
+- **`ARG` used too early.** A changing value invalidates everything after its first use, so declare `GIT_SHA`-style args as late as possible.
+- **`COPY . .` with no `.dockerignore`.** A touched log file or `.git` rewrites the layer.
+- **A fresh CI runner.** With no local layer store, every build is effectively `--no-cache` unless you wire up a cache backend.
+
+## .dockerignore
+
+The build context is everything sent to the daemon before the build starts. Without a `.dockerignore` that includes `node_modules`, `.git`, `dist`, and every screenshot in the repo. Symptoms: 40 seconds on `transferring context`, an enormous image, and a cache that never hits because `.git` changes every commit.
+
+```txt
+node_modules
+**/node_modules
+.git
+.nx
+dist
+**/dist
+coverage
+.env
+.env.*
+*.log
+Dockerfile
+docker-compose.yml
+```
+
+Ignoring `node_modules` is not only about speed. Host `node_modules` holds binaries compiled for your OS and architecture, and under pnpm it is a forest of symlinks into a store path that does not exist in the image. Copy it in and you get an image that fails at runtime in a confusing way. Install inside the image.
+
+## Multi-stage build: a Vite static site behind Nginx
+
+A built React app is static files, and nothing about serving them needs Node — so the runtime image should not contain Node, your dev dependencies, or your source. Multi-stage builds do exactly that: several `FROM` statements in one file, where later stages copy artifacts out of earlier ones and everything else is discarded.
+
+```dockerfile
+# syntax=docker/dockerfile:1.7
+
+##### Stage 1: build #####
+FROM node:22-alpine AS builder
+WORKDIR /app
+ENV CI=true
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml .npmrc* ./
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store && \
+    pnpm install --frozen-lockfile
+
+COPY . .
+RUN pnpm build            # emits ./dist
+
+##### Stage 2: runtime #####
+FROM nginx:1.27-alpine AS runtime
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+The final image is Nginx plus your `dist` folder — roughly 45 MB, most of it a base you pull once.
+
+### The nginx.conf
+
+A SPA needs three things: history fallback, compression, and correct cache headers for hashed filenames.
+
+```nginx
+server {
+    listen 80;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Vite writes content hashes into asset names: app-B1c2D3e4.js
+    location /assets/ {
+        access_log off;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    # Never cache the shell; it points at the hashed assets
+    location = /index.html { add_header Cache-Control "no-cache"; }
+
+    # SPA history fallback: unknown paths render the app, not a 404
+    location / { try_files $uri $uri/ /index.html; }
+
+    location /healthz { access_log off; return 200 "ok\n"; }
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+}
+```
+
+`immutable` is only safe because every asset filename carries a content hash. Disable hashing and that line serves stale JavaScript for a year. You *can* serve the same output with `vite preview` or `serve`, but that keeps Node in the runtime image (150 MB instead of 45 MB), gives you a single-threaded static server, and gives you no control over headers.
+
+## Multi-stage build: an SSR Node server
+
+Server rendering needs Node at runtime, so the goal shifts: keep dev dependencies and source out, keep the built server and production dependencies in.
+
+```dockerfile
+# syntax=docker/dockerfile:1.7
+
+##### Stage 1: build #####
+FROM node:22-alpine AS builder
+WORKDIR /app
+RUN corepack enable
+COPY package.json pnpm-lock.yaml ./
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store && pnpm install --frozen-lockfile
+COPY . .
+RUN pnpm build
+
+##### Stage 2: production dependencies only #####
+FROM node:22-alpine AS deps
+WORKDIR /app
+RUN corepack enable
+COPY package.json pnpm-lock.yaml ./
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store && pnpm install --frozen-lockfile --prod
+
+##### Stage 3: runtime #####
+FROM node:22-alpine AS runtime
+WORKDIR /app
+RUN apk add --no-cache dumb-init
+
+ENV NODE_ENV=production \
+    PORT=3000 \
+    NODE_OPTIONS=--enable-source-maps
+
+COPY --from=deps    --chown=node:node /app/node_modules ./node_modules
+COPY --from=builder --chown=node:node /app/dist         ./dist
+COPY --from=builder --chown=node:node /app/package.json ./package.json
+
+USER node
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "dist/server/index.js"]
+```
+
+The separate `deps` stage matters: `pnpm prune --prod` in the builder still leaves the pruned files in an earlier layer, while a stage that only ever installs production dependencies produces a clean `node_modules` with nothing behind it. `HEALTHCHECK` marks the container healthy or unhealthy — Docker will not restart it for you, but Compose `depends_on` conditions and most orchestrators read it. On Kubernetes you write probes in the manifest instead.
+
+### Signal handling
+
+Node as PID 1 gets no default signal handlers: `SIGTERM` is ignored unless you registered a handler, and orphaned children are never reaped.
+
+| Approach | How | Notes |
+| --- | --- | --- |
+| `docker run --init` | Runtime flag | No image change, but depends on whoever runs it |
+| `dumb-init` | `ENTRYPOINT ["dumb-init", "--"]` | Tiny, forwards signals, baked in |
+| `tini` | `ENTRYPOINT ["/sbin/tini", "--"]` | Equivalent; it is what `--init` uses |
+
+You still want an explicit handler so in-flight requests finish:
+
+```js
+const server = app.listen(process.env.PORT);
+
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.on(signal, () => {
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(1), 10_000).unref();
+  });
+}
+```
+
+## pnpm inside Docker
+
+pnpm is fast locally because of a global content-addressable store and symlinked `node_modules`, and both facts change how you write a Dockerfile — [pnpm vs npm vs Yarn](/blog/pnpm-vs-npm-vs-yarn) covers the model.
+
+Do not `npm i -g pnpm` and hope the version matches. Node ships [Corepack](/blog/corepack), which reads `packageManager` from `package.json`, so `RUN corepack enable` (optionally `corepack prepare pnpm@9.15.0 --activate`) gets you the exact version the repo pins. Always install with `--frozen-lockfile`: it fails the build when `pnpm-lock.yaml` does not satisfy the manifests, instead of silently resolving new versions.
+
+### Cache mounts and `pnpm fetch`
+
+BuildKit cache mounts persist a directory between builds without adding it to the image. Even when the lockfile changes and the layer cache misses, pnpm re-links from the store instead of re-downloading tarballs.
+
+```dockerfile
+# syntax=docker/dockerfile:1.7
+COPY pnpm-lock.yaml ./
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store && pnpm fetch
+
+COPY . .
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --offline --frozen-lockfile
+```
+
+`pnpm fetch` populates the store from the lockfile alone, with no `package.json` present. In a monorepo with twenty manifests, editing any one of them no longer invalidates the download step — only the cheap link step. And never copy host `node_modules` in: you get dangling symlinks, or macOS ARM native binaries running on Linux x86.
+
+## Monorepo builds
+
+Everything above assumes one `package.json` at the root of the context. A [monorepo](/blog/monorepo) breaks two assumptions at once.
+
+### The context must be the repo root
+
+`docker build` can only read files inside the context, so `COPY ../../pnpm-lock.yaml .` is an error, not a path. An app-level Dockerfile is still built from the root with `docker build -f apps/web/Dockerfile -t web:dev .` — `-f` points at the Dockerfile, the trailing `.` is the context, and every `COPY` path is relative to the repo root.
+
+```dockerfile
+FROM node:22-alpine AS builder
+WORKDIR /repo
+RUN corepack enable
+
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json nx.json tsconfig.base.json ./
+COPY apps/web/package.json        apps/web/
+COPY libs/types/package.json      libs/types/
+COPY libs/utils/package.json      libs/utils/
+COPY libs/components/package.json libs/components/
+
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store && pnpm install --frozen-lockfile
+
+COPY libs/ libs/
+COPY apps/web/ apps/web/
+RUN pnpm nx build web --skip-nx-cache
+```
+
+Copying manifests one by one before the source is verbose, but it keeps the install layer cached when only source changes. [Nx in a JavaScript monorepo](/blog/nx-monorepo) explains the project graph that makes `nx build web` enough — you do not enumerate library builds, Nx derives the order from imports.
+
+### Filters and `pnpm deploy`
+
+`pnpm --filter web... install` installs only what `web` depends on. `pnpm deploy --filter=web --prod /out` goes further: it resolves a workspace package plus its production dependencies into a plain directory of real files instead of symlinks, which copies cleanly into a runtime stage.
+
+```dockerfile
+RUN pnpm deploy --filter=web --prod /out
+
+FROM node:22-alpine AS runtime
+WORKDIR /app
+COPY --from=builder --chown=node:node /out ./
+USER node
+CMD ["node", "dist/server/index.js"]
+```
+
+Keep the image small in a large repo by copying only the libraries the target app imports, never copying the root `.nx` directory, and building one image per app. A single image that can "be any app" via an env var carries every app's dependencies.
+
+## Image size discipline
+
+Size is pull time on every deploy and every scaled-up replica. It is also attack surface.
+
+| Base | Approximate size | When to use |
+| --- | --- | --- |
+| `node:22` | ~1.1 GB | Never in production. Full Debian with build toolchains |
+| `node:22-slim` | ~220 MB | When you need glibc or native modules |
+| `node:22-alpine` | ~135 MB | Default otherwise. musl libc, tiny |
+| `gcr.io/distroless/nodejs22` | ~110 MB | Hardened. No shell, no package manager, hard to debug |
+| `nginx:1.27-alpine` | ~45 MB | Serving static output |
+
+Alpine uses musl instead of glibc, so native modules shipping prebuilt glibc binaries compile from source or fail — `sharp`, `canvas`, and older `node-gyp` packages are the usual suspects. If a build suddenly needs `python3 make g++`, that is why; prefer `-slim` over installing a compiler into a runtime image.
+
+### What actually shrinks an image
+
+1. **Multi-stage.** Leaving source, dev dependencies, and build tools behind is usually 80% of the win.
+2. **A smaller base.** Free, one line.
+3. **Production-only dependencies.** A React app's dev dependencies routinely outweigh its production ones ten to one.
+4. **Create and delete in the same `RUN`.** `apk add --no-cache`; `rm -rf /var/lib/apt/lists/*` in the same instruction as `apt-get install`.
+5. **A real `.dockerignore`.**
+
+What does not help: deleting files in a later layer, `docker rmi` on intermediates, or minifying harder.
+
+### Read the layers, then build multi-arch
+
+```bash
+docker history --no-trunc --human web:prod   # size per layer, with the instruction
+
+docker buildx create --use --name multi
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -t ghcr.io/acme/web:sha-1a2b3c4 --push .
+```
+
+The 400 MB line in `docker history` is almost always an install or a `COPY . .`; `dive` shows the same data as a browsable tree. `buildx` pushes a manifest list so clients pull the variant matching their architecture — cross-building through QEMU is slow, so in CI prefer native runners per architecture.
+
+## Local development with containers
+
+The honest take first: **for most frontend work, run the dev server natively and containerize only what you cannot install easily.** Vite on the host is faster, HMR is instant, your editor's TypeScript server sees the same `node_modules` your terminal does, and debugging is a normal Node process. Put Postgres, Redis, and the API in Compose; keep the frontend out. Containerize the dev server when the team is genuinely cross-platform, when there is a native toolchain nobody wants to install, or when CI must match exactly.
+
+```yaml
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: builder          # stop at an earlier stage of the same file
+    command: pnpm nx dev web --host 0.0.0.0
+    ports: ['5173:5173']
+    volumes:
+      - ./apps:/repo/apps
+      - ./libs:/repo/libs
+      - /repo/node_modules     # anonymous volume, so the host copy cannot shadow it
+    depends_on:
+      db: { condition: service_healthy }
+
+  api:
+    image: ghcr.io/acme/api:sha-1a2b3c4
+    ports: ['3001:3001']
+    environment:
+      - DATABASE_URL=postgres://app:app@db:5432/app
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+    volumes: ['pgdata:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U app']
+      interval: 5s
+      retries: 10
+
+volumes:
+  pgdata:
+```
+
+### Why HMR needs polling sometimes
+
+File watching uses `inotify`, and filesystem events do not cross the boundary between macOS or Windows and the Linux VM Docker Desktop runs — so a file you save on the host never fires an event inside the container and HMR looks dead. Polling is the workaround; it costs CPU, so raise the interval.
+
+```js
+// vite.config.ts
+export default defineConfig({
+  server: {
+    host: '0.0.0.0',                          // localhost binds to the container only
+    port: 5173,
+    watch: { usePolling: true, interval: 300 },
+    hmr: { clientPort: 5173 },
+  },
+});
+```
+
+`host: '0.0.0.0'` is not optional — Vite binds to localhost by default, and that is not reachable from your browser. See [Vite vs Webpack](/blog/vite) for the dev-server model underneath.
+
+## Environment variables
+
+This is the gotcha that produces the most bug reports on containerized frontends. `import.meta.env.VITE_API_URL` is not a lookup: Vite performs a **text replacement** during the build, so the bundle contains the literal string. Passing `-e VITE_API_URL=...` to `docker run` on a static image does nothing, because the value froze when `pnpm build` ran. Three ways out.
+
+### Option 1: build per environment
+
+```dockerfile
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+RUN pnpm build
+```
+
+Simple, and wrong for most pipelines: you now build a separate image per environment, so the artifact you tested is not the artifact you ship.
+
+### Option 2: runtime config from an entrypoint
+
+Build once, inject at container start. The app reads a global that a small script writes before the server boots.
+
+```bash
+#!/bin/sh
+# docker/entrypoint.sh
+set -e
+
+cat > /usr/share/nginx/html/config.js <<EOF
+window.__APP_CONFIG__ = {
+  apiUrl: "${API_URL:-http://localhost:3001}",
+  environment: "${APP_ENV:-production}"
+};
+EOF
+
+exec "$@"
+```
+
+```dockerfile
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+Load `config.js` with a plain script tag before your module bundle, and serve it with `Cache-Control: no-store` or a cached copy will outlive the deploy.
+
+### Option 3: server-rendered config
+
+With SSR you already run a server per request, so read `process.env` there and serialise the safe subset into the HTML. Cleanest option when you have it. In all three cases: anything reaching the browser is public, so a `VITE_`-prefixed secret is a published secret.
+
+## CI/CD
+
+```yaml
+name: build-image
+on:
+  push:
+    branches: [main]
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/web:sha-${{ github.sha }}
+            ghcr.io/${{ github.repository }}/web:main
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+```
+
+`cache-from` and `cache-to` are what make CI builds fast: a fresh runner has an empty layer store, so without them every build is effectively `--no-cache`, and `mode=max` also exports intermediate stage layers, which matters for multi-stage. See [What is CI (continuous integration)?](/blog/continuous-integration) for the surrounding pipeline.
+
+### Tagging strategy
+
+| Tag | Use it for |
+| --- | --- |
+| `sha-1a2b3c4` | The real identity. Deploy this. Immutable, traceable to a commit |
+| `v1.4.2` | Releases, if you version the app |
+| `main` | A convenience pointer for humans |
+| `latest` | Avoid. "Which build is running?" becomes unanswerable |
+
+Deploy by digest or SHA tag, so rollback means pointing at the previous SHA rather than rebuilding.
+
+### Compared to a platform build
+
+This site ships no container. It pushes to `main`, Netlify runs `pnpm nx build web`, and the output is served from a CDN.
+
+| | Container image | Platform build (Netlify) |
+| --- | --- | --- |
+| You control | OS, runtime version, every dependency | The build command and env vars |
+| Artifact | An image in a registry | A static bundle on a CDN |
+| Cold start | Container start | None, files sit at the edge |
+| Best for | SSR, background jobs, system dependencies, self-hosting | Static and prerendered sites |
+| Ownership cost | Registry, orchestrator, base image updates, scanning | Roughly zero |
+
+For a purely static site a container adds work and removes edge caching. Reach for Docker when you need a server process, a pinned system dependency, or portability across clouds.
+
+## Security
+
+Run as a non-root user and pin the base image by digest, because a tag can move between the build that passed CI and the rebuild that ships:
+
+```dockerfile
+FROM node:22-alpine@sha256:2d5a2f0a1f7f5a6a3a4a19a1cbb42c7bd4c5ec3b0a2f1e1a0b9c8d7e6f5a4b3c AS builder
+...
+USER node
+```
+
+Renovate or Dependabot can bump the digest on a schedule. At runtime add `--read-only --cap-drop=ALL --security-opt=no-new-privileges` where the workload allows. Scan in CI with `docker scout cves web:prod` or `trivy image --severity HIGH,CRITICAL web:prod` and fail on `CRITICAL`; most findings come from the base image, so the fix is usually "rebuild on a newer base", not a code change.
+
+### Never bake secrets into layers
+
+`ARG NPM_TOKEN` stays visible in `docker history` forever, even if a later `RUN` deletes the file. Use build secrets, which mount a file for one instruction and never enter a layer:
+
+```dockerfile
+# syntax=docker/dockerfile:1.7
+RUN --mount=type=secret,id=npmrc,target=/root/.npmrc \
+    pnpm install --frozen-lockfile
+```
+
+```bash
+docker build --secret id=npmrc,src=$HOME/.npmrc -t web:prod .
+```
+
+For private git dependencies over SSH, use `--mount=type=ssh` with `docker build --ssh default`.
+
+## Debugging
+
+```bash
+docker exec -it web sh                            # running container
+docker run --rm -it --entrypoint sh web:prod      # image that exits immediately
+docker build --progress=plain --no-cache -t web:dev . 2>&1 | tee build.log
+```
+
+Alpine has `sh`, not `bash`. Distroless has neither, so copy files out with `docker cp` or build a debug variant that adds a shell. `--progress=plain` disables the collapsing output so you see every line of every `RUN`.
+
+### Common errors
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `exec format error` | Image architecture does not match the host | Build multi-arch, or pass `--platform linux/amd64` |
+| `EACCES: permission denied, mkdir '/app/dist'` | `USER node` set before a root-owned directory existed | `mkdir` and `chown` before `USER`, or `COPY --chown=node:node` |
+| `sh: vite: not found` | Dev dependencies skipped in the stage that builds | Full install in the builder, prune only in runtime |
+| `gyp ERR! not found: make` | Native module compiling on Alpine | Add `python3 make g++` to the builder, or move to `-slim` |
+| `Cannot find module '/app/dist/server/index.js'` | Build output path differs from `CMD` | Shell in with `--entrypoint sh` and look |
+| Container exits immediately, no logs | Foreground process ended, or the shell form swallowed the error | Use the exec form, read `docker logs` and the exit code |
+| Build hangs on `transferring context` | No `.dockerignore` | Add one |
+| Refreshing a route 404s | Missing SPA history fallback | `try_files $uri $uri/ /index.html` |
+
+## Interview questions
+
+**Is a container a lightweight VM?** No. A VM runs its own kernel on virtualised hardware; a container is a host process isolated with namespaces and limited with cgroups, sharing the host kernel. That is why it starts in milliseconds and why a Linux image needs a VM to run on Windows.
+
+**Image versus container?** An image is an immutable stack of layers plus metadata. A container is a running instance with a thin writable layer on top. Many containers share one image; writes go to that layer and vanish when the container is removed.
+
+**Why copy the manifest and lockfile before the source?** Layer caching. The install layer's cache key is the content copied before it, so editing source no longer invalidates the install and dependencies reinstall only when the lockfile changes.
+
+**What does a multi-stage build buy you?** Separation of build-time and run-time contents. The builder holds dev dependencies, compilers, and source; the runtime stage copies only artifacts. Smaller image, faster pulls, less attack surface.
+
+**`CMD` versus `ENTRYPOINT`?** `ENTRYPOINT` is the executable, `CMD` the default arguments. Arguments after the image name replace `CMD`; overriding `ENTRYPOINT` needs a flag. Use the exec form for both so your process is PID 1 and receives `SIGTERM`.
+
+**Why does `docker run -e VITE_API_URL=...` not change my built app?** Vite replaces `import.meta.env.VITE_*` with literals during the build, so the bundle is static text by the time it is in the image. Inject runtime config from an entrypoint that writes `config.js`, or render it from a server.
+
+**Why must the build context be the repo root in a monorepo?** `COPY` cannot reach outside the context, and a workspace app needs the root lockfile, `pnpm-workspace.yaml`, and its sibling libraries. Point `-f` at the app's Dockerfile and pass `.` as the context.
+
+**How do you keep secrets out of an image?** BuildKit build secrets, mounted for a single `RUN` and never written to a layer. `ARG` and `ENV` values stay visible in `docker history` even if a later instruction deletes the file.
+
+**Your image is 1.2 GB — what do you check first?** `docker history --human` to find the layer. Then: is it multi-stage, is the base `-alpine` or `-slim`, are dev dependencies in the runtime stage, does a `.dockerignore` exist.
+
+**Why does HMR stop working in a container on macOS?** `inotify` events do not cross the host-to-VM filesystem boundary, so the watcher never fires. Set `server.watch.usePolling` and bind to `0.0.0.0` — or run the dev server natively and containerize only the backing services.
+
+## Related reading
+
+- [pnpm vs npm vs Yarn](/blog/pnpm-vs-npm-vs-yarn)
+- [What is a lockfile?](/blog/lockfile)
+- [Nx in a JavaScript monorepo](/blog/nx-monorepo)
+- [What is CI (continuous integration)?](/blog/continuous-integration)
+- [What is Corepack?](/blog/corepack)

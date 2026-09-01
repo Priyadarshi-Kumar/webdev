@@ -1,0 +1,490 @@
+---
+title: Web performance — Core Web Vitals, bundles, and React render cost
+description: Measure LCP, INP, and CLS with lab and field data, then cut bundle bytes and React render work with a fix-one-thing-at-a-time workflow.
+slug: web-performance
+date: 2026-09-01
+subject: browser
+tags:
+  - browser
+  - react
+  - tooling
+  - interview
+---
+
+Performance work goes wrong when you start with the fix. You install a bundle analyzer, delete a dependency, wrap three components in `memo`, and the page feels exactly the same. Start with the measurement and the fix picks itself.
+
+## Why performance is a product feature
+
+Slow pages lose people before they see anything. A user who leaves before first paint never enters the funnel, and nothing downstream recovers them. Interaction latency lands on checkout, search, and filters — a 300ms delay per keystroke does not read as "slow", it reads as "broken". And Core Web Vitals are a Google Search ranking signal, assessed on **field data**, not on the score you get locally.
+
+Your laptop is not your user.
+
+### Lab data vs field data
+
+**Lab data** is a synthetic run: Lighthouse, WebPageTest, a CI check. One device, one network profile, no real user. Reproducible, so it catches regressions. **Field data** is real sessions — the Chrome User Experience Report (CrUX), or your own Real User Monitoring. Noisy and not reproducible, but true.
+
+| | Lab | Field |
+| --- | --- | --- |
+| Source | Lighthouse, WebPageTest, CI | CrUX, your own RUM |
+| Devices | One simulated profile | Everything users own |
+| Reproducible | Yes | No |
+| Blocks a bad merge | Yes | No |
+| Measures INP properly | Barely — no real interactions | Yes |
+| Used for Search ranking | No | Yes |
+
+A 98 Lighthouse score alongside a 4.1s p75 LCP in CrUX is not a bug. It means your lab profile is faster than your median user, or real traffic lands on routes the lab run never visits.
+
+Lab data to debug, field data to decide. Field metrics are reported at the **75th percentile**, never the average — averages hide the tail, and the tail is the people leaving.
+
+## The Core Web Vitals
+
+Three metrics, three failure modes: loading, responsiveness, visual stability. All at p75 of your field traffic, split by mobile and desktop.
+
+| Metric | Measures | Good | Needs improvement | Poor |
+| --- | --- | --- | --- | --- |
+| LCP | Time until the largest content element paints | `<= 2.5s` | `2.5s – 4.0s` | `> 4.0s` |
+| INP | Interaction to the next painted frame | `<= 200ms` | `200ms – 500ms` | `> 500ms` |
+| CLS | Sum of unexpected layout shift scores | `<= 0.1` | `0.1 – 0.25` | `> 0.25` |
+
+### LCP
+
+Largest Contentful Paint is the render time of the largest image, video poster, or text block in the viewport — usually the hero image or headline. Not "load finished", but "the user believes the page arrived". Later, larger elements can take over the slot, so the reported value is the last candidate before the first interaction.
+
+### INP
+
+Interaction to Next Paint replaced First Input Delay in March 2024. FID measured only the *delay before* your handler ran, which was easy to pass while still feeling awful: input picked up in 20ms, then an 800ms freeze doing the actual work.
+
+INP measures the full round trip for every interaction and reports roughly the worst: **input delay** (the main thread was busy, your handler could not start), **processing** (your handler runs), and **presentation delay** (style, layout, paint, composite for the next frame).
+
+### CLS
+
+Cumulative Layout Shift scores unexpected movement of visible elements as `impact fraction × distance fraction`, taking the largest burst inside a 5-second window. Shifts within 500ms of an interaction are excluded — opening an accordion is expected. An image that loads and shoves your paragraph down 200px is not.
+
+### Supporting metrics
+
+| Metric | Meaning | Feeds |
+| --- | --- | --- |
+| TTFB | Time to first byte | LCP — everything waits on it |
+| FCP | First contentful paint, anything at all | LCP — its floor |
+| TBT | Main-thread blocking over 50ms during load | INP — the lab proxy |
+| Long tasks | Any task over 50ms | INP directly |
+
+The chain is **TTFB → FCP → LCP**. If TTFB is 1.8s, no image work gets you under 2.5s. TBT is the lab stand-in for INP because Lighthouse cannot click things — correlated, not identical. A page can have low TBT at load and terrible INP because the expensive work lives in a click handler.
+
+## How to measure
+
+### Lighthouse, WebPageTest, DevTools
+
+Use the Lighthouse CLI for anything you compare over time; DevTools runs are polluted by extensions and swing several points. PageSpeed Insights is worth a look because it shows CrUX field data above the lab run — the fastest way to see whether your lab setup lies. WebPageTest is for a real device on a real network in a specific location.
+
+```bash
+npx lighthouse https://example.com --preset=desktop \
+  --output=json --output-path=./lh.json --chrome-flags="--headless"
+```
+
+The DevTools Performance panel is where you actually debug. Record, then read the main-thread flame chart (long tasks get a red corner), the bottom-up view for self time, and the Interactions track for the INP breakdown. Set CPU throttling to 4x or 6x — your desktop is not a mid-range Android.
+
+### `web-vitals` in production
+
+For your own field data, use the official library. It matches the definitions Chrome reports to CrUX.
+
+```ts
+// apps/web/src/vitals.ts
+import { onCLS, onFCP, onINP, onLCP, onTTFB, type Metric } from 'web-vitals';
+
+function send({ name, value, rating }: Metric) {
+  const body = JSON.stringify({ name, value, rating, path: location.pathname });
+  // sendBeacon survives the page being closed
+  if (navigator.sendBeacon) navigator.sendBeacon('/api/vitals', body);
+  else void fetch('/api/vitals', { body, method: 'POST', keepalive: true });
+}
+
+export const reportVitals = () =>
+  [onLCP, onINP, onCLS, onTTFB, onFCP].forEach((on) => on(send));
+```
+
+Call it once, client-only, never on the shared render path. Two traps: these callbacks fire **late** — CLS and INP are final only when the page hides, which is why `sendBeacon` matters — and you must store raw values, because you cannot compute a percentile from a mean.
+
+### PerformanceObserver
+
+For anything the library does not expose, go to the underlying API.
+
+```ts
+new PerformanceObserver((list) => {
+  for (const entry of list.getEntries()) {
+    if (entry.duration > 50) console.warn('long task', entry.duration);
+  }
+}).observe({ type: 'longtask', buffered: true });
+```
+
+Useful types: `largest-contentful-paint`, `layout-shift`, `event`, `longtask`, `navigation`, `resource`. Always pass `buffered: true` so you get entries recorded before the observer existed. Aggregate by route, not site-wide: a p75 LCP of 3.1s across the site tells you nothing, but split by page it tells you search results are the problem.
+
+## The critical rendering path
+
+```txt
+HTML → DOM
+CSS  → CSSOM
+DOM + CSSOM → render tree → layout → paint → composite
+```
+
+The render tree needs both trees, so **CSS is render-blocking**: a stylesheet in the document head stops first paint until it parses. **Synchronous JS is parser-blocking**, and because scripts can read styles it also waits on pending CSS.
+
+### `defer` vs `async`
+
+| Attribute | Blocks parsing | Order | Use for |
+| --- | --- | --- | --- |
+| none | Yes | Document order | Nothing, ideally |
+| `async` | No | Whenever it lands | Independent third-party scripts |
+| `defer` | No | Document order, before `DOMContentLoaded` | Your application code |
+| `type="module"` | No | Deferred by default | Modern builds |
+
+Vite emits `type="module"` for your entry, so this is handled — until someone pastes a vendor snippet into the head. See [Vite vs Webpack](/blog/vite) for how the dev-versus-build split changes what actually ships.
+
+### Resource hints
+
+```html
+<link rel="dns-prefetch" href="https://cdn.example.com" />
+<link rel="preconnect" href="https://cdn.example.com" crossorigin />
+<link rel="preload" as="image" href="/hero.avif" fetchpriority="high" />
+<link rel="preload" as="font" type="font/woff2" href="/fonts/inter.woff2" crossorigin />
+```
+
+`dns-prefetch` resolves DNS. `preconnect` also does TCP and TLS but holds a connection open, so limit it to two or three origins. `preload` fetches now at high priority and needs a correct `as`; preloading something you do not use in the first seconds is worse than not preloading at all.
+
+### Fonts
+
+Web fonts damage both LCP and CLS: invisible text delays the paint, swapped text moves the layout.
+
+```css
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/inter-subset.woff2') format('woff2');
+  font-display: swap;
+  font-weight: 100 900;
+  size-adjust: 105%;
+}
+```
+
+Self-host — a third-party font origin costs DNS, TCP, TLS, and a CSS round trip before the font request even starts. Subset it, since Latin-only is often a quarter of the size. `font-display: swap` shows fallback text immediately, which is good for LCP and bad for CLS unless you match fallback metrics with `size-adjust`, `ascent-override`, and `descent-override`. One variable `woff2` beats six static weights.
+
+`font-display: optional` is the CLS-safe choice: if the font is not ready in roughly 100ms the fallback is used for the whole page view and nothing swaps.
+
+## Improving LCP
+
+Work the chain in order. Each step is pointless if the one before it is broken.
+
+**Cut server response time.** TTFB is the floor. Render on the server or pre-render at build time so static HTML comes from a CDN edge, cache the expensive parts, and keep database queries out of the request path. This site pre-renders, which is why article text is in the HTML before any JS runs — see [what is hydration?](/blog/hydration) for what happens next.
+
+**Prioritize the hero.** The browser guesses priorities badly for images it has not laid out yet.
+
+```html
+<img src="/hero-800.avif"
+  srcset="/hero-400.avif 400w, /hero-800.avif 800w, /hero-1600.avif 1600w"
+  sizes="(max-width: 700px) 100vw, 800px"
+  width="1600" height="900" fetchpriority="high" alt="Dashboard overview" />
+```
+
+`fetchpriority="high"` moves the hero ahead of other images. **Never** put `loading="lazy"` on an above-the-fold image — it delays the request until layout, which is the exact delay you are trying to remove. Lazy-load below the fold only, and add `decoding="async"` there.
+
+**Ship fewer image bytes.** WebP is roughly 30% smaller than JPEG and AVIF roughly 50%, both supported everywhere current, so serve a `picture` element with AVIF and WebP sources and a JPEG fallback. `srcset` plus `sizes` is the part people skip and usually the biggest win: a 1600px image on a 390px phone wastes about 90% of the bytes. Then long-lived caching and a CDN, covered below.
+
+If the LCP element is text, the levers are the font rules plus TTFB. Nothing else is in the path.
+
+## Improving INP
+
+INP is a main-thread problem. While one task runs, nothing else can — no input handling, no frame. **Long tasks are the enemy.** Anything over 50ms is a window where a tap does nothing.
+
+**Break up long work.** Chunk it and yield between chunks.
+
+```ts
+function yieldToMain(): Promise<void> {
+  const s = (globalThis as any).scheduler;
+  return s?.yield ? s.yield() : new Promise((r) => setTimeout(r, 0));
+}
+
+async function processAll(items: Item[]) {
+  for (let i = 0; i < items.length; i += 50) {
+    for (const item of items.slice(i, i + 50)) expensive(item);
+    await yieldToMain();
+  }
+}
+```
+
+`scheduler.yield()` beats `setTimeout(0)` because it resumes your continuation ahead of newly queued tasks, so you do not lose your slot. `navigator.scheduling.isInputPending()` lets you yield only when someone is actually waiting.
+
+**Do less per event.** Debounce for "when they stop" (search-as-you-type); throttle for "at most this often" (scroll, resize, pointermove). Neither makes the work cheaper, they make it rarer.
+
+**Get CPU work off the thread.** Parsing a large file, diffing, image processing, crypto — move it to a [Web Worker](/blog/web-worker) and the main thread keeps painting. Vite understands the `new URL(..., import.meta.url)` form and bundles the worker for you.
+
+```ts
+const worker = new Worker(new URL('./parse.worker.ts', import.meta.url), { type: 'module' });
+worker.postMessage(rawCsv);
+worker.onmessage = (e: MessageEvent<Row[]>) => setRows(e.data);
+```
+
+**Let React deprioritize.** Keep the input urgent and make the expensive render interruptible.
+
+```tsx
+const [query, setQuery] = useState('');
+const deferredQuery = useDeferredValue(query);
+const results = useMemo(() => filterRows(rows, deferredQuery), [rows, deferredQuery]);
+
+return (
+  <>
+    <input value={query} onChange={(e) => setQuery(e.target.value)} />
+    <Results rows={results} stale={query !== deferredQuery} />
+  </>
+);
+```
+
+`useTransition` is the same tool when you control the update site rather than a derived value — see [concurrent rendering](/blog/concurrent-rendering). What none of this fixes is a synchronous update that re-renders 4,000 rows. Concurrency spreads work across frames; it does not delete it.
+
+## Improving CLS
+
+The easiest vital to fix, because the causes are a short list.
+
+**Reserve space for media.** Setting `width` and `height` attributes lets the browser allocate the box before bytes arrive, and it still works with responsive CSS — `height: auto` keeps the ratio. For embeds without intrinsic size, use `aspect-ratio: 16 / 9`.
+
+**Reserve space for injected content.** Ads, embeds, cookie banners, and A/B variants all insert into a laid-out page. Give the slot a `min-height`. If it might stay empty, whitespace still beats the article jumping.
+
+**Do not insert above existing content.** A banner that appears at the top after load pushes everything down. Render it in the initial HTML, overlay it so it does not participate in layout, or anchor it to the bottom. Same for validation messages: reserve the row, or absolutely position it inside a relative wrapper.
+
+**Contain the damage.**
+
+```css
+.card { contain: layout paint; }
+
+.below-fold-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 500px;
+}
+```
+
+`contain: layout` promises that nothing inside affects layout outside, so an internal change cannot shift the page. `content-visibility: auto` skips rendering off-screen sections entirely — always pair it with `contain-intrinsic-size` so the scrollbar does not jump.
+
+## JavaScript bundle size
+
+Bytes cost twice: once to download, again to parse, compile, and execute. The second cost scales with CPU rather than bandwidth, which is why a 500KB bundle that feels fine on your laptop is a two-second stall on a mid-range Android. Compressed size is what you pay on the network; **uncompressed** size is what you pay in parse and execute. Track both.
+
+Reasonable first-load budgets: 100–170KB of JS on a content page, around 250KB on an app shell, 30KB of CSS, 150KB for the hero image. Starting points, not laws — pick numbers and enforce them.
+
+### Seeing what is in the bundle
+
+```ts
+// vite.config.ts
+import { visualizer } from 'rollup-plugin-visualizer';
+
+export default defineConfig({
+  build: { sourcemap: true },
+  plugins: [visualizer({ filename: 'dist/stats.html', gzipSize: true, template: 'treemap' })],
+});
+```
+
+```bash
+npx vite-bundle-visualizer                    # one-off, no config change
+npx source-map-explorer 'dist/assets/*.js'    # map a shipped chunk back to source
+```
+
+The `Import Cost` editor extension shows a module's size inline as you type the import — good for catching a 300KB dependency the moment you add it, useless for analyzing an existing bundle.
+
+Read the treemap looking for one thing: **a box much bigger than its importance to the page.** A date library outweighing your router is the finding.
+
+## Code splitting
+
+The goal is not a smaller total. It is a smaller *first load*.
+
+**By route** is the highest-leverage split, because most users touch few routes. In a file-routed framework like Vike each page is already its own entry, so you get it without writing `lazy`.
+
+```tsx
+const Reports = lazy(() => import('./pages/Reports'));
+
+<Suspense fallback={<PageSkeleton />}>
+  <Reports />
+</Suspense>;
+```
+
+**By component** for anything heavy and not visible at first paint: a rich text editor, a charting library, a map, a syntax highlighter, a modal most users never open. Make the fallback the same size as the real thing, or you have traded bundle size for CLS.
+
+**Dynamic `import()`** works outside React too. The PDF generator below downloads on the first Export click and never for anyone else. This only works with ESM — see [JavaScript modules](/blog/javascript-modules).
+
+```ts
+async function exportPdf(rows: Row[]) {
+  const { generate } = await import('./pdf');
+  return generate(rows);
+}
+```
+
+**Prefetch** to hide the round trip that splitting adds:
+
+```tsx
+const load = () => import('./pages/Reports');
+const Reports = lazy(load);
+
+<a href="/reports" onMouseEnter={load} onFocus={load}>Reports</a>;
+```
+
+Hover prefetch typically buys 100–300ms, often the entire perceived delay. For lower-confidence guesses use `requestIdleCallback`, and prefetch two or three likely routes rather than everything — on mobile you are spending someone's data on a guess. A [Service Worker](/blog/service-worker) can keep those chunks warm across visits.
+
+## Tree shaking and side effects
+
+Tree shaking is dead-code elimination across module boundaries. It works only when the bundler can statically prove exports are unused, which means **ESM only**. A CommonJS dependency ships whole.
+
+**Declare side effects honestly.** `"sideEffects": false` in `package.json` says a file can be dropped entirely when nothing imports a binding from it. If some files do have side effects, list them rather than lying:
+
+```json
+{ "sideEffects": ["./src/polyfills.ts", "*.css"] }
+```
+
+Missing `sideEffects: false` bloats every consumer. A false `false` silently deletes your CSS imports.
+
+**Barrel files** are a common cause of oversized bundles. Importing one helper pulls a module that references every sibling; bundlers shake most of it, but any module with a top-level side effect anchors itself and its whole graph. Barrels also slow builds. Deep imports avoid the question:
+
+```ts
+import { formatDate } from '@webdev/utils';       // pulls the barrel graph
+import { formatDate } from '@webdev/utils/date';  // pulls one module
+```
+
+**Replace heavy dependencies.**
+
+| Instead of | Use | Why |
+| --- | --- | --- |
+| `moment` | `date-fns`, `dayjs`, `Temporal` | CJS, mutable, not tree-shakeable |
+| `lodash` | `lodash-es` named imports | the default build is CJS and pulls everything |
+| `axios` | `fetch` | native, zero bytes |
+| `uuid` | `crypto.randomUUID()` | native, zero bytes |
+| A full icon package | Per-icon imports | one icon should not cost 400KB |
+
+Before adding anything, check whether the platform already does it: `Intl.NumberFormat`, `Intl.RelativeTimeFormat`, `structuredClone`, `URLSearchParams`, and `AbortController` have all replaced popular packages.
+
+## Caching and delivery
+
+Vite names built assets with a content hash — `app-B3xK9c2f.js` — so changed content means a changed name, which makes aggressive caching safe.
+
+```txt
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+```
+
+`immutable` stops revalidation even on a hard reload. HTML is the only thing that needs checking and it is the smallest file, so a repeat visitor downloads a few KB and reuses everything else.
+
+Compression is not optional: gzip saves roughly 70% on JS, brotli 75–80%. Brotli at maximum quality is too slow on the fly but ideal for static assets compressed once at build time. Verify the `Content-Encoding` header — a missing one is a silent 4x regression. Do not compress images or `woff2`; you will make them bigger.
+
+HTTP/2 multiplexes over one connection, which killed the advice to concatenate everything into one file. HTTP/3 over QUIC removes TCP head-of-line blocking, mostly helping lossy mobile networks. Practically: many medium chunks are fine, and better for caching than one huge file, but thousands of tiny ones still cost per-request overhead.
+
+## React rendering cost
+
+When state changes, React re-renders that component and its subtree by default: it calls your function, produces elements, diffs against the previous tree, then commits differences to the DOM.
+
+Calling a component is usually cheap. The expensive parts are real computation in the render body, an enormous node count, and large DOM commits that trigger layout and paint. A re-render producing identical output still costs the call and the diff, but touches no DOM — which is why "it re-rendered" is not automatically a bug. [When React re-renders](/blog/react-rerender-internals) covers the trigger rules.
+
+### When memoization helps
+
+`memo`, `useMemo`, and `useCallback` cost a comparison, a memory slot, and a dependency array you can get wrong. They pay off in three cases: the computation is genuinely expensive; the value feeds something that cares about identity (an effect dependency, a prop to a `memo`'d child); or a large subtree re-renders often for no reason.
+
+```tsx
+const Row = memo(function Row({ item, onSelect }: RowProps) {
+  return <li onClick={() => onSelect(item.id)}>{item.label}</li>;
+});
+```
+
+That `memo` does nothing unless `onSelect` is stable. Half-applied memoization gets all the cost and none of the benefit.
+
+The React Compiler changes the calculus: it auto-memoizes at build time from real dataflow instead of hand-written dependency arrays, so most manual `useMemo` and `useCallback` disappear. It is correct only if your components follow the Rules of React, and it does not decide what is expensive — it removes the boilerplate, not the need to profile. See [what is the React Compiler?](/blog/react-compiler).
+
+### Virtualize long lists
+
+Rendering 5,000 rows creates 5,000 components and at least as many DOM nodes. Render the visible window instead.
+
+```tsx
+const virtualizer = useVirtualizer({
+  count: items.length,
+  getScrollElement: () => parentRef.current,
+  estimateSize: () => 40,
+  overscan: 8,
+});
+
+const rows = virtualizer
+  .getVirtualItems()
+  .map((row) => <Row key={items[row.index].id} offset={row.start} item={items[row.index]} />);
+```
+
+Thirty rendered rows beat 5,000 perfectly memoized ones.
+
+### Context, keys, and selectors
+
+Every consumer of a context re-renders when the value changes, regardless of which field it reads. Bundling `user`, `theme`, and `cursor` into one provider re-renders everything on every mouse move. Split contexts so unrelated data does not travel together, or use an external store with selectors so a component subscribes only to the slice it reads. Memoize the provider value too — an object literal in JSX is a new reference every render, which defeats the whole thing.
+
+An array index as a key makes React reuse the wrong DOM node on reorder: wrong state in the wrong row, plus pointless DOM work. Use a stable id. And a selector that builds a new object or array every call breaks equality downstream:
+
+```ts
+const ids = useStore((s) => s.items.map((i) => i.id));       // new identity every render
+
+const items = useStore((s) => s.items);
+const ids = useMemo(() => items.map((i) => i.id), [items]);  // stable
+```
+
+The React DevTools Profiler tells you which components rendered, how long each took, and why. "Highlight updates when components render" is the fastest way to spot a component re-rendering on every keystroke.
+
+## An optimization workflow
+
+1. **Measure in the field.** Which route, which metric, which percentile?
+2. **Reproduce in the lab.** Get a profile showing the same problem, throttling on.
+3. **Find the single biggest cost.** One number, not a list.
+4. **Fix that one thing.**
+5. **Re-measure** under the same conditions. If it did not move, revert it.
+6. **Repeat or stop** — stop when you are inside budget.
+
+Step 4 says one thing for a reason. Change three and you learn nothing about which worked, and you keep two changes that made the code worse for free.
+
+### Budgets in CI
+
+Turn the goal into a check that fails a pull request, run against a preview deploy rather than a dev server — dev builds are unminified and unbundled, so the numbers are meaningless.
+
+```json
+{
+  "assert": {
+    "assertions": {
+      "largest-contentful-paint": ["error", { "maxNumericValue": 2500 }],
+      "cumulative-layout-shift": ["error", { "maxNumericValue": 0.1 }],
+      "total-blocking-time": ["error", { "maxNumericValue": 300 }]
+    }
+  }
+}
+```
+
+A bundle-size gate with `size-limit` is cheaper to run and catches the most common regression: a limit of `160 kB` gzipped on `dist/assets/index-*.js` fails the build the day someone adds a chart library to the shell.
+
+## Myths and mistakes
+
+- **Memoizing everything.** You add comparison cost on every render to skip renders that were mostly cheap. Profile, then memoize the boundary that showed up.
+- **Optimizing without profiling.** The bottleneck is almost never where you guessed.
+- **Chasing a 100 Lighthouse score.** It is a weighted composite of lab metrics on one simulated device. Going 92 to 100 often means nothing while your p75 INP stays terrible.
+- **Lazy loading the hero image.** `loading="lazy"` on the LCP element delays the request until layout. Below the fold only.
+- **Polyfilling for browsers you do not support.** An old `@babel/preset-env` target can add 40KB of transforms and core-js for zero traffic. Set `build.target` to something modern and check analytics before widening it.
+- **Treating bundle size as the only metric.** A 90KB bundle that blocks the main thread for 800ms at startup is worse than a 200KB bundle that does not.
+- **Micro-optimizing JS while shipping a 3MB PNG.** Images and fonts are usually most of the bytes. Sort the network waterfall by size first.
+- **Assuming SSR fixes everything.** Server rendering paints sooner, but hydration still costs main-thread time and can hurt INP when a page looks interactive before it is. See [what is hydration?](/blog/hydration).
+
+## Interview questions
+
+- **What are the Core Web Vitals and their thresholds?** LCP `<= 2.5s`, INP `<= 200ms`, CLS `<= 0.1`, all at the 75th percentile of real users, split by mobile and desktop.
+- **Why did INP replace FID?** FID measured only the delay before the handler started, so a page could score well and still freeze for a second doing the work. INP measures input delay plus processing plus the next paint, across all interactions.
+- **Good LCP in Lighthouse, bad in CrUX. Why?** The lab profile is faster than the p75 user: better CPU, better network, warm cache, or a location near the origin. Real traffic may also hit routes the lab run never tested.
+- **What makes a script render-blocking?** A plain `script` tag blocks HTML parsing and waits on pending CSS. Use `defer` for your own code, `async` for independent third-party scripts, `type="module"` which defers by default.
+- **How would you diagnose bad INP?** Confirm it in field data by route, then record a Performance profile of the interaction with CPU throttling: the Interactions track gives the input-delay, processing, and presentation split, the flame chart gives the long tasks. Fix by chunking with `scheduler.yield()`, moving pure computation to a worker, or deferring the render.
+- **Why do bytes cost twice?** Download, then parse, compile, and execute. The second cost scales with CPU, so it is far worse on low-end mobile than transfer time suggests.
+- **What breaks tree shaking?** CommonJS modules, missing or wrong `sideEffects`, top-level side effects, and barrel files that anchor a large graph. Fix with ESM, accurate `sideEffects`, and deep imports.
+- **When does `memo` do nothing?** When the parent passes a new object, array, or inline function every render. The shallow comparison fails and you have added cost for nothing.
+- **A long list is janky. First move?** Virtualize it. Thirty visible rows beat five thousand memoized ones.
+- **How do you stop performance regressing?** Budgets enforced in CI — Lighthouse assertions against a preview deploy plus a bundle-size gate — so it fails the pull request instead of producing a report nobody reads.
+
+## Related reading
+
+- [Web Workers](/blog/web-worker)
+- [When React re-renders](/blog/react-rerender-internals)
+- [What is the React Compiler?](/blog/react-compiler)
+- [Concurrent rendering](/blog/concurrent-rendering)
+- [Vite vs Webpack](/blog/vite)

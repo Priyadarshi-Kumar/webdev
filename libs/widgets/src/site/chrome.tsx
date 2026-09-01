@@ -6,7 +6,7 @@ import { SITE } from "./config";
 
 const nav = [
   { href: "/portfolio/experience", label: "Portfolio" },
-  { href: "/blog", label: "Blog" },
+  { href: "/blog", label: "Notes" },
   { href: "/practice", label: "Practice" },
   { href: "/tools", label: "Tools" },
 ];

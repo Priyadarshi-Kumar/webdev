@@ -247,3 +247,5 @@ Classic workers load one script and use `importScripts` for more files. Module w
 Create the worker in `useEffect`, store it in a ref, call `terminate()` in the effect cleanup. Avoid spawning unbounded workers per render or per keystroke.
 
 </details>
+
+Related: [The event loop](/blog/event-loop) (what "blocking the main thread" means), [Web performance](/blog/web-performance) (INP and long tasks), [Shared Workers](/blog/shared-worker).
