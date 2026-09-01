@@ -1,0 +1,897 @@
+---
+title: Web authentication — sessions, JWTs, OAuth 2.0, and OIDC
+description: Password hashing, server sessions, JWT verification and revocation, token storage tradeoffs, Authorization Code + PKCE with real URLs, OIDC, the BFF pattern, and passkeys.
+slug: auth-sessions-oauth
+date: 2026-09-01
+subject: backend
+tags:
+  - api
+  - security
+  - browser
+  - interview
+---
+
+Auth is where a bug becomes an incident. It is also where the vocabulary lies: "JWT" is not an auth system, "OAuth" is not a login form, and "we use tokens" tells you nothing about who can revoke them.
+
+Examples use `app.example` (your site), `api.example` (your API), and `auth.example` (an authorization server).
+
+## Authentication vs authorization
+
+**Authentication** answers "who is this?" — a password check, a passkey, a Google login. **Authorization** answers "may they do this?" — roles, ownership, scopes.
+
+They fail differently. Broken authentication means someone else is you. Broken authorization means you are yourself but reading someone else's invoices. The second is far more common, because it is scattered across every handler instead of centralised in one login route.
+
+### Identity vs access
+
+| Token | Answers | Audience | Read by |
+| --- | --- | --- | --- |
+| ID token (OIDC) | Who is the user? | Your client app | Your app, once, at login |
+| Access token (OAuth) | What may the bearer do? | A resource server | The API being called |
+
+An ID token is a login receipt: "auth.example verified this person at this time". You consume it, create your own session, discard it. You do **not** send it to APIs.
+
+An access token is a key to an API, meant to be sent to `api.example` and verified there. Accepting an ID token as an API credential is a real vulnerability class — the API trusts a token minted for a different audience.
+
+### Stateless HTTP needs a carrier
+
+Every request must independently prove who sent it. Only two shapes exist: a **reference credential** (an opaque session ID; the server looks up the truth) or a **self-contained credential** (a signed JWT; the server verifies and trusts the contents). Everything below is a variation on those two, plus protocols for getting one issued.
+
+## Passwords, done right
+
+### Hash, never store
+
+You store a **verifier**. Use a slow, memory-hard password hash: `argon2id` first, `bcrypt` acceptable, `scrypt` fine. Never MD5, SHA-1, plain SHA-256, or "SHA-256 but we loop it ourselves".
+
+```ts
+import argon2 from 'argon2';
+
+const hash = await argon2.hash(password, {
+  type: argon2.argon2id,
+  memoryCost: 19456, // 19 MiB
+  timeCost: 2,
+  parallelism: 1,
+});
+
+const ok = await argon2.verify(hash, submitted);
+```
+
+A GPU rig does billions of SHA-256 guesses per second. Argon2 at 19 MiB per guess turns that into thousands. That gap is the whole defense.
+
+### Salts, encoded for you
+
+A **salt** is random per-user data mixed in. Without it, identical passwords hash identically, so one crack breaks every account sharing it and rainbow tables work. Modern libraries generate it and encode it in the output with the algorithm and parameters:
+
+```txt
+$argon2id$v=19$m=19456,t=2,p=1$c29tZXNhbHQ$RdescudvJCsgt3ub+b+dWRWJTmaaJObG
+ ^ algorithm  ^ parameters       ^ salt       ^ hash
+```
+
+That self-describing format is what lets you raise the cost later: on the next successful login, if stored parameters are below your target, re-hash the password you just verified.
+
+### Timing-safe comparison
+
+Never compare secrets with `===` — it short-circuits on the first differing byte, leaking how much of a guess was right.
+
+```ts
+import { timingSafeEqual } from 'node:crypto';
+
+export function safeEqual(a: string, b: string) {
+  const [x, y] = [Buffer.from(a), Buffer.from(b)];
+  return x.length === y.length && timingSafeEqual(x, y);
+}
+```
+
+`argon2.verify` and `bcrypt.compare` already do this. You need `timingSafeEqual` for what you hand-roll: API keys, reset tokens, webhook signatures, TOTP codes.
+
+### Rate limiting and enumeration
+
+Slow hashing protects a leaked database, not a live endpoint. Limit per account (stops brute force against one user) **and** per IP or ASN (stops credential stuffing, where a botnet sprays one common password across ten thousand accounts).
+
+Make failures indistinguishable, too. `"No such user"` versus `"Wrong password"` is a free user list, and so is a faster response on the missing-user path.
+
+```ts
+const user = await findUser(email);
+const stored = user?.passwordHash ?? DUMMY_ARGON2_HASH;
+const ok = await argon2.verify(stored, password ?? '');
+if (!user || !ok) return fail('Invalid email or password');
+```
+
+### Breach lists beat complexity rules
+
+"One uppercase, one symbol" produces `Password1!`. Current guidance: require length (12+), allow spaces and long passphrases, cap generously at 128, and reject known-breached passwords. The Pwned Passwords k-anonymity API takes the first five hex characters of the SHA-1 and returns a bucket of suffixes you match locally, so no full hash leaves your server.
+
+### You probably should not build this yourself
+
+The full feature is registration, email verification, reset with single-use expiring tokens, recovery, MFA enrollment plus recovery codes, session listing and revocation, device management, suspicious-login mail, and lockout that cannot be turned into denial of service. That is a product, not a route. Unless auth *is* your product, delegate it and spend your effort on authorization, which nobody can outsource for you.
+
+## Session-based auth
+
+### The flow
+
+```http
+POST /login HTTP/1.1
+Host: app.example
+Content-Type: application/x-www-form-urlencoded
+
+email=ada@example.com&password=correct-horse
+```
+
+```http
+HTTP/1.1 303 See Other
+Location: /dashboard
+Set-Cookie: __Host-sid=oM3xZ9pQ7fK2vL8t; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=1209600
+```
+
+The cookie value is opaque and high-entropy — at least 128 bits from a CSPRNG. It means nothing alone. The server holds the truth:
+
+```json
+{ "userId": 4711, "createdAt": 1772000000, "lastSeenAt": 1772003600, "mfaVerified": true }
+```
+
+Every later request carries the cookie automatically, and middleware turns the ID into a user.
+
+### The session store
+
+| Store | Good for | Watch out for |
+| --- | --- | --- |
+| In-process memory | Local dev only | Lost on restart, breaks with two instances |
+| Redis / Valkey | Almost everything | Configure persistence, or a restart logs everyone out |
+| SQL table | Low traffic, database already there | A write per request unless you throttle `lastSeenAt` |
+| Signed cookie only | Tiny state | No revocation, size limits, contents readable |
+
+The `MemoryStore` warning in `express-session` is real: two pods means half your requests see no session. See [SQL](/blog/sql) if you go the table route — index the ID and sweep expired rows.
+
+### Cookie flags that matter
+
+| Flag | Effect |
+| --- | --- |
+| `HttpOnly` | `document.cookie` cannot read it. XSS can still *use* the session but not exfiltrate it. |
+| `Secure` | HTTPS only, so a downgraded request cannot leak it. |
+| `SameSite=Lax` | Not sent on cross-site POST or subresource requests. Kills most classic CSRF. |
+| `SameSite=Strict` | Also withheld on cross-site top-level navigation, so inbound links land logged out. |
+| `Path` / `Domain` | Scope. `Domain=.example` reaches every subdomain, including the one you gave a contractor. |
+| `__Host-` prefix | Browser enforces `Secure`, `Path=/`, no `Domain`. Free hardening. |
+
+Cookies ignore ports and only partly respect schemes, so a session cookie is shared across your whole host. That is why subdomain takeover is an auth bug.
+
+### Session fixation and rotation
+
+Fixation: an attacker establishes a session ID, plants it in the victim's browser, and waits for them to log in. If the server reuses that ID, the attacker's copy is now authenticated. One rule fixes it — **issue a new session ID on every privilege change**: login, step-up MFA, password change, email change, role escalation.
+
+```ts
+app.post('/login', async (req, res) => {
+  const user = await verifyCredentials(req.body);
+  if (!user) return res.status(401).json({ error: 'invalid_credentials' });
+
+  req.session.regenerate((err) => {
+    if (err) return res.status(500).end();
+    req.session.userId = user.id;
+    req.session.save(() => res.redirect('/dashboard'));
+  });
+});
+```
+
+Without `regenerate`, assigning `userId` just upgrades whatever session the browser arrived with.
+
+### Logout and revocation
+
+This is the feature JWTs lose. Logout is a delete, and because the store is the source of truth you get what users ask for: "sign out all other devices" is a delete by `userId`, banning an account takes effect on the next request, and a leaked session dies instantly.
+
+```ts
+app.post('/logout', (req, res) => {
+  req.session.destroy(() => {
+    res.clearCookie('__Host-sid', { path: '/' });
+    res.status(204).end();
+  });
+});
+```
+
+Keep two lifetimes: **absolute** (dies after 14 days regardless) and **idle** (dies after 2 hours of inactivity). Slide the idle window on request, but throttle the write.
+
+## Token-based auth with JWT
+
+### Structure
+
+Three base64url segments joined by dots — `header.payload.signature`:
+
+```json
+{ "alg": "RS256", "typ": "JWT", "kid": "2026-09" }
+```
+
+```json
+{
+  "iss": "https://auth.example", "aud": "api.example", "sub": "4711",
+  "iat": 1772003600, "exp": 1772004500, "jti": "b2f1c9e4-7a3d-4a1e",
+  "scope": "invoices:read invoices:write"
+}
+```
+
+`iss` is who minted it, `aud` who may accept it, `sub` the stable user ID, `iat` when issued, `exp` when it dies, `jti` a unique ID you can denylist.
+
+### base64url is not encryption
+
+Anyone holding the token reads every claim — paste one into a decoder and it is plaintext. A signed JWT gives **integrity and authenticity**, not confidentiality. So no PII you would not put in a log, no internal flags, no secrets. JWE exists for encrypted claims, but the usual answer is to keep sensitive data server-side behind `sub`.
+
+### Signing algorithms
+
+| Family | Key model | Use when |
+| --- | --- | --- |
+| `HS256` | One shared secret signs and verifies | The same service issues and verifies |
+| `RS256` | Private key signs, public key verifies | Many verifiers, one issuer. Standard for OIDC. |
+| `ES256` | Same split, elliptic curve | As above, much smaller keys and signatures |
+
+The question is **who needs to verify**. Five microservices verifying `HS256` are five services that can forge an admin token. With `RS256` or `ES256` they hold only the public key. If you do use `HS256`, the secret must be 32+ random bytes — `"secret"` or your app name is cracked offline in seconds from one captured token.
+
+### Verification steps
+
+Verification is not "decode and read `sub`". All of these are required: pick the key by `kid` from a key set **you** trust; check `alg` against an allowlist you control; verify the signature; check `iss` matches exactly; check `aud` contains your service; check `exp` and `nbf` with at most 60 seconds of skew; then check what your app needs (`scope`, `amr`, `sid`).
+
+Skip the `aud` check and any token from that issuer works on your API, including one a less-trusted client obtained for a different service.
+
+### The `alg: none` and confusion attacks
+
+Both come from trusting the header. **`alg: none`** is an unsecured mode in the spec; a library that honours it accepts a rewritten payload with an empty signature, and `"sub": "1"` is an admin. **`RS256` to `HS256` confusion** exploits the fact that your public key is public: the attacker rewrites the header to `HS256` and HMAC-signs the tampered payload using your public key bytes as the secret. A naive implementation reads `alg`, fetches "the key", and verifies successfully.
+
+One defense for both — pin the algorithm at the call site:
+
+```ts
+import { jwtVerify, createRemoteJWKSet } from 'jose';
+
+const JWKS = createRemoteJWKSet(new URL('https://auth.example/.well-known/jwks.json'));
+
+const { payload } = await jwtVerify(token, JWKS, {
+  algorithms: ['RS256'], // allowlist, not the token's claim
+  issuer: 'https://auth.example',
+  audience: 'api.example',
+  clockTolerance: 30,
+});
+```
+
+### Key rotation with JWKS
+
+The issuer publishes public keys at a well-known URL, so rotation is a non-event:
+
+```json
+{
+  "keys": [
+    { "kty": "RSA", "kid": "2026-09", "use": "sig", "alg": "RS256", "n": "0vx7...", "e": "AQAB" },
+    { "kty": "RSA", "kid": "2026-06", "use": "sig", "alg": "RS256", "n": "sXchD...", "e": "AQAB" }
+  ]
+}
+```
+
+Verifiers cache the set, look up by `kid`, and re-fetch on an unknown `kid` — rate-limited, so a bogus `kid` flood is not a denial of service. The issuer publishes the new key, waits for caches to warm, starts signing with it, and keeps the old one listed until every token signed with it has expired.
+
+## The hard truth about JWT revocation
+
+A JWT is valid because the maths says so. Nothing consults your database. Fire someone and their token works until `exp`. Reset a password after phishing and the stolen token works until `exp`. Delete an account and requests keep succeeding.
+
+There is no clean fix inside the design, only mitigations:
+
+- **Short lifetimes** — 5 to 15 minutes. That number *is* your revocation delay.
+- **A `jti` denylist** — works, and reintroduces the shared state you adopted JWTs to avoid. If you check Redis every request, you have chosen sessions with extra steps.
+- **Refresh tokens** — keep access tokens short and buy new ones with a long-lived, opaque, revocable refresh token.
+
+```http
+POST /oauth/token HTTP/1.1
+Host: auth.example
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=refresh_token&refresh_token=v1.MRq7Fw2x&client_id=app-web
+```
+
+```json
+{ "access_token": "eyJhbGciOiJSUzI1NiIs...", "token_type": "Bearer",
+  "expires_in": 900, "refresh_token": "v1.Kd93Lp8q", "scope": "invoices:read" }
+```
+
+Revocation now happens at the refresh step — the only moment the authorization server is in the loop.
+
+### Rotation and reuse detection
+
+That response returned a **new** refresh token. Each refresh invalidates the one used and issues a successor; keep the chain server-side as a family.
+
+Then detect reuse. An already-rotated token presented again means either a client retried after a dropped response or a stolen token is being replayed. You cannot tell which, so treat it as theft and revoke the whole family:
+
+```txt
+RT1 → RT2 → RT3 (current)
+      ^ attacker replays RT2, which is already used
+      → revoke family: RT1, RT2, RT3 all dead; everyone re-authenticates
+```
+
+A brief logout for a legitimate user beats an attacker holding a renewable session forever. Bind the family to a device where you can, and give public clients their refresh token in an `HttpOnly` cookie, never in JavaScript.
+
+## Where to store tokens in a browser
+
+If a token is readable by JavaScript, one XSS is credential theft — and unlike session hijacking, the attacker takes a portable credential off-device.
+
+| Location | XSS can read it | Sent automatically | CSRF surface | Survives reload |
+| --- | --- | --- | --- | --- |
+| `localStorage` | Yes | No | No | Yes |
+| `sessionStorage` | Yes | No | No | Per tab |
+| Variable in memory | Yes, while the page lives | No | No | No |
+| `HttpOnly` cookie | No | Yes | Yes, needs defense | Yes |
+
+`localStorage` is the popular choice and the worst: readable by any script on the origin, including a compromised npm dependency or an analytics snippet, and it persists, so the theft window is unbounded. Memory-only is better — nothing persists, a reload triggers silent re-auth — but the token is still in the heap during the page's life.
+
+`HttpOnly` cookies cannot be read by script at all. In exchange you take on CSRF, which is solved: `SameSite`, plus a synchroniser or double-submit token on state-changing routes. See [Web security](/blog/web-security) for the mechanics.
+
+**Recommendation:** do not store tokens in the browser. Keep them server-side and give the browser an `HttpOnly`, `Secure`, `SameSite` cookie pointing at that state — the BFF pattern below. If you truly cannot, put the refresh token in an `HttpOnly` cookie and the access token in memory only.
+
+## Sessions vs JWT
+
+| Concern | Server sessions | JWT |
+| --- | --- | --- |
+| Revocation | Instant, delete a row | Not until `exp` without added shared state |
+| Verification | Store lookup per request | Local signature check, no I/O |
+| Scaling | Needs a shared store | Stateless across many services |
+| Size on the wire | ~32 bytes | 400 bytes to 2 KB, every request |
+| Visible to the user | No, opaque | Yes, base64url is readable |
+| Mobile and third-party clients | Awkward, cookies are browser-shaped | Natural, a header works anywhere |
+| Complexity to get right | Low | High: algorithms, `aud`, rotation, reuse detection |
+
+**Default to sessions with cookies for first-party web apps.** Your frontend and API on the same site do not need a stateless credential; you need revocation, and you already run Redis or Postgres.
+
+Reach for JWTs when the constraint is real: service-to-service calls, third-party API clients, mobile apps with no cookie jar, or a gateway that must authorize without a store lookup. Even then the JWT is usually the *access token*, while the user's login stays a session on your own server.
+
+## OAuth 2.0
+
+### Delegated authorization, not login
+
+OAuth 2.0 answers one question: how does an app get limited access to a user's data on another service without the user handing over their password? It replaced "type your Gmail password into this contacts importer" with a redirect, a consent screen, and a scoped, revocable token.
+
+That is authorization. It says nothing verifiable about who the user is — the login screen along the way is incidental. "Log in with OAuth" is the phrase behind a generation of broken implementations. For login you need OpenID Connect.
+
+### Roles
+
+| Role | Who | Example |
+| --- | --- | --- |
+| Resource owner | The user who owns the data | Ada |
+| Client | The app requesting access | `app.example` |
+| Authorization server | Authenticates the user, issues tokens | `auth.example` |
+| Resource server | The API that accepts the token | `api.example` |
+
+Clients are **confidential** (can keep a secret: a server-side app, a backend service) or **public** (cannot: an SPA, mobile, a CLI — anything shipped to a device, because the user can read the bundle). That split drives every other decision.
+
+### Scopes
+
+A **scope** names a slice of access, requested by the client and shown at consent: `scope=openid profile email invoices:read`.
+
+Keep them action-shaped (`invoices:read`, `invoices:write`) rather than role-shaped (`admin`), and request the minimum for the current feature — incremental consent gives a comprehensible screen instead of a wall of permissions at launch.
+
+Scopes are what the client may *attempt*; they are not your authorization model. `invoices:read` does not mean "may read invoice 883". The resource server still checks that this `sub` owns that row.
+
+### The token endpoint
+
+`POST /oauth/token` is where credentials of one kind become tokens of another, and every grant type ends there. Always POST, always `application/x-www-form-urlencoded`, always TLS, and for confidential clients always authenticated — HTTP Basic with client ID and secret, or private key JWT.
+
+## OAuth 2.0 grant types
+
+### Authorization Code with PKCE
+
+The right choice for essentially every user-facing app now: server-rendered apps, SPAs, mobile, desktop, and CLIs with a loopback redirect. The user authenticates at the authorization server and returns with a short-lived **authorization code**, which the client exchanges for tokens over a back channel. No token ever travels in a URL.
+
+**PKCE** (Proof Key for Code Exchange) closes the gap for public clients: with no secret, a stolen code could be redeemed by anyone, so the client proves it is the party that started the flow. Confidential clients should use it too — a code leaked into a log or referrer becomes useless without the verifier.
+
+### Client credentials
+
+No user involved; a service authenticates as itself:
+
+```http
+POST /oauth/token HTTP/1.1
+Host: auth.example
+Authorization: Basic YmlsbGluZy1qb2I6c3VwZXItc2VjcmV0
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&scope=invoices:read
+```
+
+Use it for cron jobs, backend-to-backend calls, and CI. There is no refresh token — request a new one when it expires. Do not use it to act for a user: the token has no `sub`, so your audit log says "the billing service did it" forever.
+
+### Device authorization
+
+For inputs you cannot type on — TVs, consoles, headless CLIs. The device requests a code and polls while the user finishes on a phone:
+
+```json
+{ "device_code": "GmRhmhcxhwEzkoEqiMEg", "user_code": "WDJB-MJHT",
+  "verification_uri": "https://auth.example/device", "expires_in": 1800, "interval": 5 }
+```
+
+The screen shows "go to auth.example/device and enter WDJB-MJHT". The device polls the token endpoint with `grant_type=urn:ietf:params:oauth:grant-type:device_code`, receiving `authorization_pending` until approval. Respect `interval` and back off on `slow_down`.
+
+### Deprecated: implicit and password
+
+**Implicit** (`response_type=token`) returned the access token in the URL fragment, so tokens landed in history, referrers, and logs, with no client authentication and no way to bind response to request. Dead.
+
+**Password** (`grant_type=password`) had the app collect the user's identity-provider password and forward it, defeating OAuth's purpose and making MFA, consent, and federation impossible. Dead.
+
+Both are removed in OAuth 2.1. If a vendor's guide still recommends them, that is information about the vendor.
+
+## Authorization Code + PKCE, end to end
+
+### Step 1: verifier and challenge
+
+```ts
+const b64url = (b: Uint8Array) =>
+  btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
+const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+const challenge = b64url(new Uint8Array(digest));
+
+const state = b64url(crypto.getRandomValues(new Uint8Array(16)));
+const nonce = b64url(crypto.getRandomValues(new Uint8Array(16)));
+```
+
+Keep `verifier`, `state`, and `nonce` where only you can read them for the flow's duration. In a BFF that is the server session; in a pure SPA it is `sessionStorage`, which is one reason a pure SPA is the weaker design.
+
+### Step 2: redirect to the authorization endpoint
+
+```txt
+https://auth.example/oauth/authorize
+  ?response_type=code
+  &client_id=app-web
+  &redirect_uri=https%3A%2F%2Fapp.example%2Fcallback
+  &scope=openid%20profile%20email%20invoices%3Aread
+  &state=Xt7pQ2mK9vL4nR8s
+  &nonce=Zk3wY8bN1cV6tH2j
+  &code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
+  &code_challenge_method=S256
+```
+
+| Parameter | Job |
+| --- | --- |
+| `response_type=code` | Ask for a code, not a token. Never `token`. |
+| `redirect_uri` | Where to return. Must exactly match a pre-registered URI. |
+| `scope` | Requested access. `openid` also makes this an OIDC request. |
+| `state` | Opaque value you verify on return. Your CSRF defense. |
+| `nonce` | Bound into the `id_token` so you can detect replay. |
+| `code_challenge` | Base64url SHA-256 of the verifier. |
+| `code_challenge_method=S256` | Always `S256`. `plain` provides nothing. |
+
+### Step 3: the redirect back
+
+```http
+GET /callback?code=SplxlOBeZQQYbYS6WxSbIA&state=Xt7pQ2mK9vL4nR8s HTTP/1.1
+Host: app.example
+```
+
+Before anything else, compare `state` with the stored value and delete it so it cannot be replayed. A mismatch means someone is injecting their authorization code into your user's session. Errors arrive at the same URL: `?error=access_denied&error_description=User%20declined&state=...`.
+
+### Step 4: exchange the code
+
+```http
+POST /oauth/token HTTP/1.1
+Host: auth.example
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code
+&code=SplxlOBeZQQYbYS6WxSbIA
+&redirect_uri=https%3A%2F%2Fapp.example%2Fcallback
+&client_id=app-web
+&code_verifier=dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk
+```
+
+The server hashes `code_verifier`, compares it to the stored challenge, and checks the code is unused, unexpired, and paired with the same `redirect_uri`.
+
+```json
+{ "access_token": "eyJhbGciOiJSUzI1NiIs...", "token_type": "Bearer", "expires_in": 900,
+  "refresh_token": "v1.MRq7Fw2x", "id_token": "eyJhbGciOiJSUzI1NiIs...",
+  "scope": "openid profile email invoices:read" }
+```
+
+Codes are single-use and live about 60 seconds. If one is presented twice, the authorization server should revoke everything issued from it.
+
+### Step 5: call the API, then refresh
+
+```http
+GET /invoices HTTP/1.1
+Host: api.example
+Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
+```
+
+Expiry gives you a hinted `401`:
+
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer realm="api.example", error="invalid_token", error_description="expired"
+```
+
+Refresh, store the rotated token, retry the original request **once**. Make concurrent 401s share a single in-flight refresh — ten parallel requests firing ten refreshes look like token reuse and will nuke the family.
+
+### Redirect URI validation
+
+The authorization server must compare `redirect_uri` to the registered value with an **exact string match**. No prefixes, no wildcards, no "any path on this host".
+
+Loose matching is how accounts get taken over: allow `https://app.example/*` and any open redirect or user-controlled path on your site lets an attacker receive a valid code for your client. Register full callback URLs, one per environment.
+
+## OpenID Connect
+
+OIDC is a thin identity layer on the same endpoints and the same PKCE flow, adding an ID token, standard claims, a userinfo endpoint, and discovery. This is what you want for login.
+
+### The `id_token`
+
+Add `openid` to `scope` and the token response includes a signed JWT describing the authentication event:
+
+```json
+{
+  "iss": "https://accounts.google.com", "aud": "app-web.apps.googleusercontent.com",
+  "sub": "108234871234098712340", "email": "ada@example.com", "email_verified": true,
+  "name": "Ada Lovelace", "iat": 1772003600, "exp": 1772007200,
+  "nonce": "Zk3wY8bN1cV6tH2j", "auth_time": 1772003590, "amr": ["pwd", "otp"]
+}
+```
+
+Verify it with the full checklist from earlier, plus two OIDC checks: `nonce` must equal the value you generated, and `aud` must be *your* client ID.
+
+Two rules that bite people. `sub` is stable and unique **per issuer**, so store the pair `(iss, sub)`. And never key your users table on `email` — addresses change, get reassigned in corporate directories, and are not verified by every provider. Check `email_verified` before matching an existing account, or you have built account takeover by email claim.
+
+### The userinfo endpoint
+
+ID token claims are a snapshot from login time. For current profile data, call userinfo with the **access token**:
+
+```http
+GET /userinfo HTTP/1.1
+Host: auth.example
+Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
+```
+
+Which claims come back depends on granted scopes: `profile` for name and picture, `email` for email, `address` and `phone` for those.
+
+### Discovery
+
+Every compliant provider serves metadata, so you configure one URL instead of eight:
+
+```json
+{
+  "issuer": "https://auth.example",
+  "authorization_endpoint": "https://auth.example/oauth/authorize",
+  "token_endpoint": "https://auth.example/oauth/token",
+  "userinfo_endpoint": "https://auth.example/userinfo",
+  "jwks_uri": "https://auth.example/.well-known/jwks.json",
+  "end_session_endpoint": "https://auth.example/logout",
+  "id_token_signing_alg_values_supported": ["RS256", "ES256"],
+  "code_challenge_methods_supported": ["S256"]
+}
+```
+
+Fetch `/.well-known/openid-configuration` at startup, cache it, and read `jwks_uri` from it instead of hardcoding. That is how key rotation happens without a deploy.
+
+### How "Sign in with Google" actually works
+
+1. Your server generates `state`, `nonce`, and a PKCE verifier and stores them.
+2. Redirect to Google's authorization endpoint with `scope=openid email profile`, your `client_id`, your exact registered `redirect_uri`, and `code_challenge`.
+3. Google authenticates the user — often via an existing session, so no password is typed — and shows consent on first authorization.
+4. Google redirects to `https://app.example/callback?code=...&state=...`.
+5. Your server checks `state`, then POSTs the code plus `code_verifier` and its client secret to Google's token endpoint.
+6. Your server verifies the `id_token`: signature against Google's JWKS, then `iss`, `aud`, `exp`, `nonce`.
+7. Your server finds or creates a user by `(iss, sub)` and **creates its own session** with an `HttpOnly` cookie.
+8. Google's tokens are stored server-side if you need its APIs, discarded if you only needed the login.
+
+Step 7 is the one people skip. Google's tokens are not your session. Authenticate your own requests with your own credential so you control expiry, revocation, and step-up MFA.
+
+## The BFF pattern
+
+Backend-for-frontend inverts the question. Instead of "where does my JavaScript keep the token?", you stop giving JavaScript a token.
+
+```txt
+Browser                     BFF (your server)              Auth / APIs
+  |  Cookie: __Host-sid --->  |                                 |
+  |                           |  Authorization: Bearer ... --->  |
+  |  <---------------- JSON   |  <----------------------- JSON   |
+```
+
+The BFF is a small server on the same site as your frontend. It runs Authorization Code + PKCE, holds access and refresh tokens in server-side session storage, and exposes a same-origin API. The browser gets one `HttpOnly`, `Secure`, `SameSite=Lax` cookie.
+
+What that buys: no token is reachable from JavaScript, so XSS cannot exfiltrate a portable credential; revocation is a session delete; refresh happens server-side with no races or rotation logic in the client; same-origin calls avoid CORS preflights and the death of third-party cookies; and the client secret can actually be secret, making your client confidential rather than public.
+
+The costs: a stateful server tier with a shared session store, one extra network hop, and proxy routes to write. The remaining threat is CSRF, handled by `SameSite` plus a token on state-changing routes. This is the current recommendation for browser-based apps — if your SPA is served from a site you control, use a BFF.
+
+## Implementation notes
+
+### Express with server sessions
+
+```ts
+import express from 'express';
+import session from 'express-session';
+import { RedisStore } from 'connect-redis';
+import { createClient } from 'redis';
+
+const redis = createClient({ url: process.env.REDIS_URL });
+await redis.connect();
+
+const app = express();
+app.set('trust proxy', 1); // behind a TLS-terminating proxy
+app.use(express.json());
+
+app.use(
+  session({
+    store: new RedisStore({ client: redis, prefix: 'sess:' }),
+    name: '__Host-sid',
+    secret: process.env.SESSION_SECRET.split(','), // array enables secret rotation
+    resave: false,
+    saveUninitialized: false, // anonymous visitors create no store entries
+    rolling: true, // slides the idle window
+    cookie: { httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 7_200_000 },
+  }),
+);
+
+function requireUser(req, res, next) {
+  if (!req.session.userId) return res.status(401).json({ error: 'unauthenticated' });
+  if (Date.now() > req.session.absoluteExpiry) {
+    return req.session.destroy(() => res.status(401).json({ error: 'session_expired' }));
+  }
+  next();
+}
+
+app.get('/api/me', requireUser, async (req, res) => {
+  res.json(await publicProfile(req.session.userId));
+});
+```
+
+`rolling` handles the idle timeout; the separate `absoluteExpiry` you set at login caps total lifetime regardless of activity.
+
+### A FastAPI dependency that verifies a JWT
+
+For an API consumed by mobile or third parties, a bearer token is the right shape. See [FastAPI](/blog/fastapi) for the dependency system this builds on.
+
+```python
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import jwt, JWTError
+from functools import lru_cache
+import httpx
+
+ISSUER, AUDIENCE, ALGORITHMS = "https://auth.example", "api.example", ["RS256"]
+app, bearer = FastAPI(), HTTPBearer(auto_error=True)
+
+
+@lru_cache(maxsize=1)
+def jwks() -> dict:
+    meta = httpx.get(f"{ISSUER}/.well-known/openid-configuration", timeout=5).json()
+    return httpx.get(meta["jwks_uri"], timeout=5).json()
+
+
+def key_for(kid: str) -> dict:
+    key = next((k for k in jwks()["keys"] if k["kid"] == kid), None)
+    if key is None:
+        jwks.cache_clear()  # the key may have just rotated
+        key = next((k for k in jwks()["keys"] if k["kid"] == kid), None)
+    if key is None:
+        raise JWTError("unknown kid")
+    return key
+
+
+def current_claims(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> dict:
+    try:
+        header = jwt.get_unverified_header(creds.credentials)
+        if header.get("alg") not in ALGORITHMS:
+            raise JWTError("unexpected alg")
+        return jwt.decode(
+            creds.credentials,
+            key_for(header.get("kid")),
+            algorithms=ALGORITHMS,
+            issuer=ISSUER,
+            audience=AUDIENCE,
+            options={"require": ["exp", "iat", "sub", "aud", "iss"]},
+        )
+    except JWTError as exc:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "invalid_token",
+            headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
+        ) from exc
+
+
+def require_scope(scope: str):
+    def dep(claims: dict = Depends(current_claims)) -> dict:
+        if scope not in claims.get("scope", "").split():
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "insufficient_scope")
+        return claims
+    return dep
+
+
+@app.get("/invoices")
+def list_invoices(claims: dict = Depends(require_scope("invoices:read"))):
+    return fetch_invoices_for(owner_id=claims["sub"])
+```
+
+Two details. `401` means "your token is bad" and `403` means "valid but not enough", so clients refresh on the first and prompt on the second. And `owner_id=claims["sub"]` is the authorization check — the scope allowed the call, ownership decides the rows.
+
+### React that does not store tokens
+
+With a BFF the client has no auth code at all. It sends cookies and reads a `401`.
+
+```tsx
+import { createContext, useContext, useEffect, useState } from 'react';
+
+type User = { id: string; name: string; email: string };
+const UserContext = createContext<User | null>(null);
+export const useUser = () => useContext(UserContext);
+
+export async function api(path: string, init?: RequestInit) {
+  const res = await fetch(path, {
+    ...init,
+    credentials: 'same-origin', // the cookie goes automatically
+    headers: { 'Content-Type': 'application/json', ...init?.headers },
+  });
+  if (res.status === 401) {
+    location.href = `/login?next=${encodeURIComponent(location.pathname)}`;
+    throw new Error('unauthenticated');
+  }
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export function AuthProvider(props: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    api('/api/me')
+      .then((u) => live && setUser(u))
+      .catch(() => live && setUser(null))
+      .finally(() => live && setReady(true));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  if (!ready) return <p>Loading…</p>;
+  return <UserContext.Provider value={user}>{props.children}</UserContext.Provider>;
+}
+```
+
+No `localStorage.setItem('token', ...)`, no `Authorization` header, no refresh timer, no token in a Redux store or query cache. Login is a full navigation to a server route that starts the flow; logout is `POST /api/logout`.
+
+The client `user` object is for **rendering**, not enforcement. Hiding the admin button is UX; the server still checks permissions on every call, because anyone can edit state in DevTools.
+
+## MFA, TOTP, and passkeys
+
+| Factor | Phishing-resistant | Notes |
+| --- | --- | --- |
+| SMS code | No | SIM swap, SS7 interception. Do not build new. |
+| TOTP app | No | Shared secret, 30-second codes. Good and widely understood. |
+| Push approval | Partly | Vulnerable to fatigue attacks. Add number matching. |
+| WebAuthn / passkey | Yes | Origin-bound key pair. The current best answer. |
+
+### TOTP
+
+Enrollment generates a shared secret and shows it as an `otpauth://totp/...` QR code; the app derives a 6-digit code from the secret and the current 30-second window. Verify with a window of plus or minus one step for drift, compare timing-safely, and record the last accepted step so a code cannot be replayed. Always issue single-use recovery codes, hashed like passwords, or your support queue becomes an identity-verification business.
+
+### WebAuthn and passkeys
+
+WebAuthn replaces the shared secret with a key pair. The authenticator — Touch ID, Windows Hello, a security key, a phone — keeps the private key and gives your server the public one.
+
+```ts
+const credential = await navigator.credentials.create({
+  publicKey: {
+    challenge: challengeFromServer, // fresh random bytes, generated server-side
+    rp: { name: 'App Example', id: 'app.example' },
+    user: { id: userIdBytes, name: 'ada@example.com', displayName: 'Ada Lovelace' },
+    pubKeyCredParams: [
+      { type: 'public-key', alg: -7 }, // ES256
+      { type: 'public-key', alg: -257 }, // RS256
+    ],
+    authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' },
+  },
+});
+```
+
+The property that matters: the signature is bound to the **origin**, so a phishing page on `app-example.com` cannot obtain an assertion for `app.example` no matter how convincing it looks. Phishing fails structurally, not through user vigilance.
+
+**Passkeys** are WebAuthn credentials that sync through a platform keychain, so losing a phone does not lose the account. That is what moved WebAuthn from "security keys for admins" to a password replacement. The direction of travel is passkey as primary factor, password removed, email or a second passkey as recovery. Ship them as a second factor, then as a password alternative, then consider dropping the password — and use a library, because attestation and signature-counter handling are easy to get subtly wrong.
+
+## Common vulnerabilities and defenses
+
+### XSS stealing credentials
+
+One script on your origin reads every JS-accessible token. Defenses: `HttpOnly` cookies so there is nothing to read, a strict `Content-Security-Policy`, framework escaping with no `dangerouslySetInnerHTML` on user data, and dependency review — a compromised package runs with your origin's full authority. Details in [Web security](/blog/web-security).
+
+### CSRF on cookie auth
+
+Automatic cookies mean a cross-site form post carries the session. Defenses: `SameSite=Lax` or `Strict`, a synchroniser or double-submit token on every state-changing route, never `GET` for mutations, and an `Origin` check on unsafe methods. Requiring `Content-Type: application/json` helps, since a plain HTML form cannot send it, but it is a secondary control.
+
+### Open redirects on `redirect_uri` and `next`
+
+Same root cause, two places. Loose `redirect_uri` matching lets an attacker receive your authorization code; a `?next=` parameter accepting absolute URLs turns your login page into a phishing-link launderer. Validate against an allowlist, or accept only same-site relative paths beginning with a single `/` — reject `//evil.example`, backslashes, and anything carrying a scheme.
+
+### Missing or unchecked `state`
+
+Without it, an attacker completes a flow with their own account, captures the `code`, and feeds it to the victim's browser. The victim's session ends up bound to the attacker's identity, or their third-party account gets linked to the attacker's. Generate `state` per flow, store it server-side, compare, delete.
+
+### Tokens in URLs, logs, and referrers
+
+A credential in a query string ends up in access logs, history, analytics, error trackers, and `Referer` headers. That is why implicit died. Use headers or `HttpOnly` cookies, redact `Authorization` and `Set-Cookie` in logging middleware, and set `Referrer-Policy: strict-origin-when-cross-origin`. Magic links are the exception that proves the rule: single-use, short-lived, consumed by a POST.
+
+### Over-broad scopes and confused deputies
+
+A token minted for `api.example` must not work at `internal.example` — that is what `aud` is for, and why every resource server checks it. Request the narrowest scope, so a leak is cheaper. The confused deputy: your service holds a powerful token and exposes an endpoint that uses it for a caller without checking the caller's own authority. Re-derive authorization from the end user's identity, never from the fact that your service *can*.
+
+## Shipping checklist
+
+```txt
+Passwords
+  [ ] argon2id or bcrypt, parameters tuned and upgraded on login
+  [ ] identical error and timing for unknown user vs wrong password
+  [ ] rate limit per account and per IP; breach-list check on set
+  [ ] reset tokens random, hashed at rest, single-use, short TTL
+
+Sessions
+  [ ] opaque 128-bit+ ID in a shared store, never in-memory in production
+  [ ] HttpOnly, Secure, SameSite, __Host- prefix, no Domain attribute
+  [ ] regenerate the ID on login and every privilege change
+  [ ] idle and absolute timeouts; server-side destroy on logout
+  [ ] "sign out other devices" actually works
+
+JWT, if you use them
+  [ ] algorithm allowlist at the verify call; alg: none rejected
+  [ ] iss and aud verified; exp checked with small clock skew
+  [ ] keys from JWKS by kid, cached, refetched once on unknown kid
+  [ ] access tokens 5-15 minutes; refresh rotation with reuse detection
+  [ ] no PII or secrets in claims
+
+OAuth and OIDC
+  [ ] Authorization Code + PKCE (S256); no implicit, no password grant
+  [ ] state and nonce per flow, stored server-side, single-use
+  [ ] redirect_uri exact-match registered per environment
+  [ ] id_token fully verified; users keyed on (iss, sub), not email
+  [ ] discovery document cached, endpoints not hardcoded
+
+Browser
+  [ ] no tokens in localStorage or sessionStorage
+  [ ] BFF holds tokens; browser holds only an HttpOnly cookie
+  [ ] CSRF token on state-changing routes; strict CSP; Referrer-Policy set
+
+Operations
+  [ ] TLS everywhere with HSTS; Authorization and Set-Cookie redacted from logs
+  [ ] auth events audited: login, logout, MFA change, token issue, revoke
+  [ ] MFA available; recovery codes issued and hashed
+  [ ] key and secret rotation rehearsed, not theoretical
+```
+
+## Interview questions
+
+### Why can you not simply revoke a JWT?
+
+Verification is offline: a resource server checks a signature and expiry and never consults your database, which is exactly why JWTs scale. Revocation needs shared state, which cancels that benefit. The practical answer is short-lived access tokens plus a revocable refresh token, so the stale-access window equals the access token lifetime.
+
+### `HS256` or `RS256`?
+
+`HS256` uses one secret for signing and verification, so every verifier can also forge tokens — fine when one service does both. `RS256` and `ES256` split the keys, so many services verify with a public key while only the issuer signs. Use asymmetric signing whenever more than one party verifies, which includes every OIDC deployment.
+
+### Describe the algorithm-confusion attack.
+
+The verifier trusts the token's own `alg`. An attacker takes an `RS256` token, rewrites the header to `HS256`, and HMAC-signs the tampered payload using the issuer's **public** key bytes as the secret. A library that reads `alg` and looks up "the key" verifies it. Fix: pass an explicit algorithm allowlist to the verify call.
+
+### Where should a browser keep an access token?
+
+Ideally nowhere — use a BFF, so tokens live server-side and the browser holds an `HttpOnly`, `Secure`, `SameSite` cookie. `localStorage` is readable by any script on the origin, so one XSS or bad dependency exfiltrates a portable credential. If a BFF is impossible, access token in memory, refresh token in an `HttpOnly` cookie.
+
+### What does PKCE protect against, and why do confidential clients want it?
+
+It binds the authorization code to the client instance that began the flow. A public client has no secret, so without PKCE an intercepted code — via a malicious app claiming the same custom scheme, a log, a referrer — is redeemable by anyone. Confidential clients benefit because a leaked code is useless without the `code_verifier`.
+
+### What is `state` for, and what happens without it?
+
+It is a per-flow random value you store and compare on the callback: the CSRF defense for the authorization request. Without it, an attacker can inject their own code into the victim's browser, binding the victim's session to the attacker's identity or linking the victim's account to the attacker's.
+
+### How does OAuth 2.0 differ from OpenID Connect?
+
+OAuth 2.0 is delegated authorization producing access tokens for APIs, and says nothing verifiable about the user. OIDC adds identity: a signed `id_token` with standard claims, a userinfo endpoint, and discovery. Treating a raw access token as proof of identity is the classic mistake, because it is a bearer credential with no audience binding to your client.
+
+### Sessions or JWTs for a new first-party web app?
+
+Sessions: instant revocation, tiny cookies, opaque state, far fewer ways to get it wrong. The stateless-scaling argument rarely applies when you already run Redis or Postgres. Choose JWTs for third-party clients, mobile clients without a cookie jar, or service calls that must authorize without a store lookup.
+
+### Why do passkeys stop phishing when TOTP does not?
+
+TOTP produces a code the user reads and types, so a proxy phishing page collects and replays it inside the 30-second window. WebAuthn signs a server challenge with a private key that never leaves the device, and the assertion is bound to the requesting origin, so a look-alike domain cannot obtain a valid one.
+
+## Related reading
+
+- [Web security](/blog/web-security) — XSS, CSRF, CSP, and the cookie flags this note relies on
+- [FastAPI](/blog/fastapi) — the dependency system behind the JWT verifier above
+- [What is JSON-RPC?](/blog/json-rpc) — how another protocol carries credentials over HTTP
+- [SQL](/blog/sql) — indexing and expiry sweeps if your session store is a database table

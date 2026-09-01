@@ -1,0 +1,736 @@
+---
+title: CORS and cookies — same-origin policy, preflight, and credentials
+description: How origins, preflight requests, CORS headers, and SameSite cookies actually interact — with real header exchanges, DevTools errors mapped to fixes, and server config.
+slug: cors-and-cookies
+date: 2026-09-01
+subject: browser
+tags:
+  - browser
+  - web-apis
+  - security
+  - interview
+---
+
+Almost every "CORS error" you have debugged was not a bug in your frontend. It was a server that did not grant access, or a cookie that did not qualify to be sent.
+
+This note separates the two systems people constantly conflate. **CORS decides whether your JavaScript may read a cross-origin response.** **Cookies decide whether the request carries a session at all.** They are configured in different places, fail with different symptoms, and need to be fixed independently.
+
+Examples use `https://app.example` (your frontend) and `https://api.example` (your API).
+
+## Origins and the same-origin policy
+
+### What an origin is
+
+An origin is the triple scheme + host + port. All three must match, exactly, byte for byte on the host.
+
+```txt
+https://app.example            → https, app.example, 443
+https://app.example:443        → same origin (443 is implied for https)
+https://app.example/dashboard  → same origin (path is not part of an origin)
+http://app.example             → different: scheme
+https://api.example            → different: host
+https://app.example:8443       → different: port
+https://APP.example            → same origin (host is case-insensitive)
+```
+
+Subdomains are **different origins**. `app.example` and `api.example` are as cross-origin to each other as `app.example` and `google.com`. There is no "close enough."
+
+"Site" is a looser concept used only by cookies: everything under the same registrable domain plus scheme. `app.example` and `api.example` are **same-site**, **cross-origin**. That distinction is the source of half the confusion in this topic, so hold onto it.
+
+### What the same-origin policy blocks
+
+The same-origin policy (SOP) is the browser's default. It is not a network firewall; it is a rule about what script in one document may *read* from another origin.
+
+SOP blocks:
+
+- Reading the body or most headers of a cross-origin `fetch` or `XMLHttpRequest` response
+- Reading the DOM of a cross-origin iframe or popup (`frame.contentDocument`)
+- Reading `localStorage`, `sessionStorage`, IndexedDB, or cookies belonging to another origin
+- Reading pixels out of a cross-origin image drawn into a canvas (it taints the canvas)
+
+### What the same-origin policy allows
+
+This is the part that surprises people. SOP does **not** stop the request from happening.
+
+- `<img src="https://api.example/track">` loads and executes server-side effects
+- `<script src="https://cdn.example/lib.js">` runs with your origin's privileges
+- `<link rel="stylesheet">`, `<video>`, and web fonts load cross-origin
+- A plain `<form method="POST" action="https://api.example/transfer">` submits, **with cookies**
+- `fetch` with `mode: "no-cors"` sends the request; you just get an opaque response
+
+So a cross-origin request usually **reaches your server and runs**. The browser only withholds the response from JavaScript. That is why CORS is not authorization, and why CSRF exists at all. See [Web security](/blog/web-security) for the attack side of this.
+
+## CORS is the server granting access
+
+Cross-Origin Resource Sharing is a protocol for a server to say "this origin may read my responses."
+
+Two properties matter and both get forgotten:
+
+1. **The server grants.** No header from the browser and no flag in `fetch` can grant access. If `api.example` does not send the right response header, nothing you write in the client will fix it.
+2. **The browser enforces.** curl, Postman, a mobile app, and a server-side script ignore CORS entirely. CORS protects *users* from having their credentials used by other sites, not your API from unauthorized clients.
+
+The consequence: a CORS failure is always a server change, a proxy change, or a request change. It is never a client-side "disable CORS" change (outside of a throwaway browser flag you must never ship).
+
+### The request side: `Origin`
+
+When a request is cross-origin, the browser attaches `Origin` automatically. You cannot set it from JavaScript; it is a forbidden header.
+
+```http
+GET /me HTTP/1.1
+Host: api.example
+Origin: https://app.example
+Accept: application/json
+```
+
+The server reads `Origin`, decides, and answers. If it approves:
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+Access-Control-Allow-Origin: https://app.example
+Vary: Origin
+```
+
+If the server omits `Access-Control-Allow-Origin`, the response still arrived — the browser just refuses to hand it to your code.
+
+## Simple requests vs preflighted requests
+
+A "simple" request goes out directly. Anything else triggers an `OPTIONS` preflight first. The rules are precise, and knowing them exactly is what lets you predict whether a preflight will appear.
+
+### The exact conditions for a simple request
+
+All of the following must be true:
+
+| Requirement | Allowed values |
+| --- | --- |
+| Method | `GET`, `HEAD`, or `POST` |
+| Headers | Only CORS-safelisted request headers: `Accept`, `Accept-Language`, `Content-Language`, `Content-Type`, `Range` (plus browser-set ones like `Origin`, `User-Agent`) |
+| `Content-Type` | Only `application/x-www-form-urlencoded`, `multipart/form-data`, or `text/plain` |
+| Upload stream | No `ReadableStream` body |
+| Event listeners | No listener registered on `XMLHttpRequest.upload` |
+
+Break any one and you get a preflight.
+
+```js
+// Simple: no preflight
+fetch("https://api.example/items");
+
+// Simple: POST with a form content type
+fetch("https://api.example/items", {
+  method: "POST",
+  headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  body: "name=widget",
+});
+
+// Preflighted: JSON content type is not safelisted
+fetch("https://api.example/items", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ name: "widget" }),
+});
+
+// Preflighted: custom header
+fetch("https://api.example/items", {
+  headers: { "X-Request-Id": "abc" },
+});
+
+// Preflighted: method is not in the safelist
+fetch("https://api.example/items/1", { method: "DELETE" });
+```
+
+Note the practical implication: **`Content-Type: application/json` alone forces a preflight**, so essentially every real JSON API is preflighted. Also note `Authorization` is not safelisted, so bearer tokens force a preflight too.
+
+### What a preflight looks like
+
+The browser sends `OPTIONS` with no body, describing the request it *intends* to make:
+
+```http
+OPTIONS /items/1 HTTP/1.1
+Host: api.example
+Origin: https://app.example
+Access-Control-Request-Method: DELETE
+Access-Control-Request-Headers: authorization,content-type
+```
+
+A successful preflight response:
+
+```http
+HTTP/1.1 204 No Content
+Access-Control-Allow-Origin: https://app.example
+Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE
+Access-Control-Allow-Headers: Authorization, Content-Type
+Access-Control-Max-Age: 600
+Vary: Origin
+```
+
+Only then does the real `DELETE` go out. If the preflight fails, **the real request is never sent** — your server sees only the `OPTIONS`. That is why "my server never got the POST" and "CORS error" are usually the same incident.
+
+Preflight responses must be `2xx` and must not require authentication. A preflight carries no cookies and no `Authorization` header, so an auth middleware that rejects unauthenticated requests with `401` will break every preflight. Let `OPTIONS` through before your auth layer.
+
+## Every header that matters
+
+### `Access-Control-Allow-Origin`
+
+The core grant. Either a single exact origin or `*`. A list is not valid.
+
+```http
+Access-Control-Allow-Origin: https://app.example
+```
+
+```http
+Access-Control-Allow-Origin: *
+```
+
+Wildcards inside a value do not work. `https://*.example` is not a thing. To support multiple origins, keep an allowlist server-side and echo the matching one:
+
+```js
+const ALLOWED = new Set(["https://app.example", "https://admin.example"]);
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && ALLOWED.has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+  }
+  next();
+});
+```
+
+Never reflect `Origin` unconditionally while also allowing credentials. That turns your API into a data-exfiltration endpoint for any site the user visits.
+
+### `Access-Control-Allow-Methods`
+
+Preflight-only. Lists the methods allowed for the actual request.
+
+```http
+Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE
+```
+
+`*` is allowed here, but is ignored when credentials are involved.
+
+### `Access-Control-Allow-Headers`
+
+Preflight-only. Must cover every non-safelisted header in `Access-Control-Request-Headers`. Missing one entry fails the whole preflight.
+
+```http
+Access-Control-Allow-Headers: Authorization, Content-Type, X-Request-Id
+```
+
+Header names are case-insensitive, but the *set* must be complete. This is the single most common preflight failure: you added a tracing header in a client interceptor and forgot the server.
+
+### `Access-Control-Allow-Credentials`
+
+Tells the browser it may (a) send cookies and (b) expose the response when credentials were sent.
+
+```http
+Access-Control-Allow-Credentials: true
+```
+
+`true` is the only valid value. Omitting it is the same as false. It is needed on **both** the preflight response and the actual response.
+
+### `Access-Control-Max-Age`
+
+How long the browser may cache the preflight result, in seconds. Without it, you pay an extra round trip on nearly every request.
+
+```http
+Access-Control-Max-Age: 600
+```
+
+Browsers cap this. Chrome's ceiling is 7200 seconds (2 hours); Firefox's is 86400. Setting `86400` everywhere is harmless, it just gets clamped. The cache key includes the URL, method, and header set, so a new custom header means a new preflight.
+
+### `Access-Control-Expose-Headers`
+
+By default, JavaScript can read only these response headers: `Cache-Control`, `Content-Language`, `Content-Length`, `Content-Type`, `Expires`, `Last-Modified`, `Pragma`. Everything else is invisible even on a successful request.
+
+```http
+Access-Control-Expose-Headers: X-Total-Count, X-Request-Id, Location
+```
+
+If your pagination puts the total in `X-Total-Count` and the client reads `null`, this header is what is missing. `*` works, but not with credentials.
+
+### `Vary: Origin`
+
+Not a CORS header — a caching header — and skipping it causes the worst class of bug in this whole area.
+
+If you compute `Access-Control-Allow-Origin` per request and any cache (CDN, reverse proxy, browser cache) stores the response without `Vary: Origin`, then a response granted to `https://admin.example` gets served to `https://app.example`. The result looks random: CORS works, then fails, then works again depending on who hit the cache first.
+
+```http
+Access-Control-Allow-Origin: https://app.example
+Vary: Origin
+```
+
+Rule: any time the CORS headers depend on the request, send `Vary: Origin`. If you use a static `*`, you do not need it.
+
+## The wildcard plus credentials contradiction
+
+This combination is invalid and browsers reject it:
+
+```http
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Credentials: true
+```
+
+The reason is structural. `*` means "any origin may read this." Credentials mean "this response was computed using the user's session." Together they would let any website read any user's private data. The spec closes the door: when credentials are in play, `Access-Control-Allow-Origin` must name a single concrete origin.
+
+The same restriction applies to the other wildcards. With credentials, `Access-Control-Allow-Methods: *`, `Access-Control-Allow-Headers: *`, and `Access-Control-Expose-Headers: *` are all treated as the literal string `*` rather than as wildcards, which means they match nothing.
+
+The fix is always the same: echo a validated origin instead of `*`.
+
+```http
+Access-Control-Allow-Origin: https://app.example
+Access-Control-Allow-Credentials: true
+Vary: Origin
+```
+
+## Reading DevTools errors
+
+The console messages are precise once you know the vocabulary. Each maps to one fix.
+
+| Console message | Cause | Fix |
+| --- | --- | --- |
+| No `Access-Control-Allow-Origin` header is present on the requested resource | Server sent no grant, or errored before the CORS middleware ran | Add the header; make sure error responses and `404`s also carry it |
+| Response to preflight request doesn't pass access control check | The `OPTIONS` response was not `2xx`, or lacked the allow headers | Handle `OPTIONS` before auth; return `204` with the allow headers |
+| Method DELETE is not allowed by Access-Control-Allow-Methods | Method missing from the preflight response | Add it to `Access-Control-Allow-Methods` |
+| Request header field x-request-id is not allowed by Access-Control-Allow-Headers | Header missing from the preflight response | Add it to `Access-Control-Allow-Headers` |
+| The value of the `Access-Control-Allow-Origin` header must not be the wildcard `*` when the request's credentials mode is `include` | `*` plus `credentials: "include"` | Echo the exact origin |
+| Credentials flag is `true`, but the `Access-Control-Allow-Credentials` header is `''` | Client sends credentials, server did not opt in | Add `Access-Control-Allow-Credentials: true` to both preflight and actual response |
+| Redirect is not allowed for a preflight request | The `OPTIONS` hit a `301`/`302`, often a trailing-slash or HTTP-to-HTTPS rule | Call the final URL directly |
+| The request client is not a secure context | Private Network Access: a public page calling a local IP | Serve over HTTPS and send `Access-Control-Allow-Private-Network: true` |
+
+Two diagnostic habits save time. First, check the Network tab, not just the console: if there is an `OPTIONS` row, the preflight is the thing failing. Second, `TypeError: Failed to fetch` with a CORS message means the response was blocked, so `response.status` is unreadable — that is why your error handler cannot tell a `500` from a CORS block.
+
+## Cookies in detail
+
+### `Set-Cookie` attributes
+
+```http
+Set-Cookie: sid=abc123; Domain=example.com; Path=/; Max-Age=1209600; Secure; HttpOnly; SameSite=Lax
+```
+
+| Attribute | Meaning and the trap |
+| --- | --- |
+| `Domain` | Which hosts receive it. `Domain=example.com` sends to `example.com` and every subdomain. Omitting `Domain` is *narrower*: host-only, no subdomains. You cannot set a cookie for a domain you are not on. |
+| `Path` | URL prefix. `Path=/api` means the cookie is not sent to `/`. Path is not a security boundary — same-origin script can read any path's cookie. |
+| `Expires` | Absolute HTTP date. Depends on the client clock. |
+| `Max-Age` | Seconds from now. Wins over `Expires` when both are present. Omit both for a session cookie that dies with the browser. `Max-Age=0` deletes. |
+| `Secure` | HTTPS only. Required for `SameSite=None`. `localhost` is treated as secure, which is why dev works and production does not. |
+| `HttpOnly` | Hidden from `document.cookie`. Blocks the easy XSS exfiltration path. |
+| `SameSite` | Whether the cookie rides along on cross-site requests. Covered below. |
+
+### `__Host-` and `__Secure-` prefixes
+
+Prefixes are enforced by the browser: if the attributes do not match the prefix's rules, the cookie is rejected outright.
+
+```http
+Set-Cookie: __Secure-sid=abc; Secure; Path=/; SameSite=Lax
+Set-Cookie: __Host-sid=abc; Secure; Path=/
+```
+
+- `__Secure-` requires `Secure` and an HTTPS origin.
+- `__Host-` requires `Secure`, requires `Path=/`, and forbids `Domain`. The cookie is locked to exactly one host.
+
+`__Host-` is the strongest option for a session cookie, because it prevents a compromised sibling subdomain from overwriting it (cookie tossing). Use it whenever you do not need subdomain sharing.
+
+### First-party vs third-party cookies
+
+A cookie is third-party when it belongs to a site different from the one in the address bar. An analytics pixel on `vendor.example` embedded in `app.example` sets a third-party cookie.
+
+Modern browsers restrict these heavily. Safari's ITP blocks them outright, Firefox partitions them per top-level site, and Chrome has moved toward partitioned storage (CHIPS, via the `Partitioned` attribute) rather than shared third-party cookies. The practical rule for 2026: **do not build anything that depends on a third-party cookie surviving.** If a widget needs state, it needs a first-party token, the Storage Access API, or partitioned storage.
+
+This matters for CORS because a cross-*site* API called with `credentials: "include"` is sending a third-party cookie. Perfect CORS headers plus `SameSite=None; Secure` can still be blocked by tracking protection. Keeping your API same-site with your frontend avoids the entire category.
+
+### `SameSite` values
+
+| Value | Sent on same-site requests | Sent on cross-site top-level navigation (GET) | Sent on cross-site subresource / POST |
+| --- | --- | --- | --- |
+| `Strict` | Yes | No | No |
+| `Lax` | Yes | Yes | No |
+| `None` | Yes | Yes | Yes (requires `Secure`) |
+
+`Lax` is the browser default when you omit the attribute. That default broke real things when it shipped:
+
+- Cross-site POST flows. SAML and OIDC form-POST responses, payment gateway callbacks, and webhook-style redirects that POST back to your site arrived without the session cookie. Fixes were `SameSite=None; Secure` on the specific cookie, or switching the callback to a GET redirect.
+- Cross-site iframes. An embedded widget or an OAuth consent screen inside an iframe is a cross-site subresource, so `Lax` cookies are withheld.
+- Cross-site `fetch` with `credentials: "include"`. `Lax` is not enough. You need `None; Secure`, and now you also need to survive third-party cookie policies.
+
+`Strict` has a subtler cost: a user clicking a link to your site from an email or another domain arrives logged *out*, because the top-level GET carries no cookie. A reload fixes it, which makes for confused bug reports. Common pattern: `Strict` on a short-lived "recently authenticated" cookie, `Lax` on the main session.
+
+## Sending credentials from the client
+
+### `fetch` credentials modes
+
+```js
+// Default in modern browsers: cookies on same-origin only
+fetch("https://api.example/me", { credentials: "same-origin" });
+
+// Send cookies cross-origin. Requires the server to allow credentials.
+fetch("https://api.example/me", { credentials: "include" });
+
+// Never send cookies, even same-origin. Also ignores Set-Cookie.
+fetch("https://api.example/me", { credentials: "omit" });
+```
+
+Three things to internalize:
+
+1. `credentials` controls cookies, TLS client certificates, and HTTP auth — not `Authorization` headers you set yourself. Those are always sent because you put them there.
+2. `credentials: "include"` also governs whether the browser *stores* a `Set-Cookie` from a cross-origin response. Without it, the login response's cookie is silently dropped.
+3. `credentials: "include"` with `Access-Control-Allow-Origin: *` fails. There is no way around it.
+
+A login flow with cookies needs `include` on both the login call and every later call:
+
+```js
+async function login(email, password) {
+  const res = await fetch("https://api.example/login", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) throw new Error("login failed");
+}
+
+async function me() {
+  const res = await fetch("https://api.example/me", { credentials: "include" });
+  return res.json();
+}
+```
+
+### `XMLHttpRequest.withCredentials`
+
+The older equivalent, still relevant because axios and many SDKs sit on it.
+
+```js
+const xhr = new XMLHttpRequest();
+xhr.open("GET", "https://api.example/me");
+xhr.withCredentials = true; // same as credentials: "include"
+xhr.send();
+```
+
+```js
+// axios
+axios.get("https://api.example/me", { withCredentials: true });
+```
+
+Related: `EventSource` takes `{ withCredentials: true }`, and `<img crossorigin="use-credentials">` or `<script crossorigin="use-credentials">` do the same for subresources. Service worker `fetch` follows the same rules — see [Service Workers](/blog/service-worker).
+
+## Cookies vs bearer tokens vs localStorage
+
+| Concern | `HttpOnly` cookie | `Authorization: Bearer` in memory | Token in `localStorage` |
+| --- | --- | --- | --- |
+| Readable by XSS | No | Only while the page lives; script can still call the API as the user | Yes, directly exfiltratable |
+| Vulnerable to CSRF | Yes, unless `SameSite` or tokens | No, attacker cannot set the header cross-origin | No |
+| Sent automatically | Yes | No, you attach it | No, you attach it |
+| Survives page reload | Yes | No, needs a refresh flow | Yes |
+| Works across subdomains | Yes, via `Domain` | Yes, if you pass it | Same-origin storage only |
+| Triggers CORS preflight | No (safelisted) | Yes (`Authorization` is not safelisted) | Yes |
+| Multi-tab sync | Automatic | Needs coordination | Needs `storage` events |
+| Native/mobile clients | Awkward | Natural | N/A |
+
+The tradeoff is a genuine fork, not a ranking: **cookies trade CSRF exposure for XSS resistance; tokens trade XSS exposure for CSRF immunity.** Note that XSS defeats both — with script running on your origin, an attacker can just call your API with the cookie attached. `HttpOnly` prevents *exporting* the credential, not *using* it.
+
+The pragmatic default for a browser SPA is `HttpOnly; Secure; SameSite=Lax` cookies plus CSRF defenses, with bearer tokens reserved for mobile clients and service-to-service calls. Avoid `localStorage` for anything that grants access.
+
+## CSRF
+
+### Why cookies are vulnerable
+
+The browser attaches cookies based on the *destination*, not on who initiated the request. A form on `evil.example` posting to `https://api.example/transfer` sends your session cookie. The attacker cannot read the response — SOP blocks that — but the transfer already happened. Read-blocking does not undo a write.
+
+```html
+<!-- on evil.example -->
+<form action="https://api.example/transfer" method="POST">
+  <input type="hidden" name="to" value="attacker" />
+  <input type="hidden" name="amount" value="500" />
+</form>
+<script>document.forms[0].submit();</script>
+```
+
+Note there is no CORS error here. A form POST is not a `fetch`; no one is trying to read the response, so nothing gets blocked.
+
+### Defenses
+
+**`SameSite=Lax` or `Strict`.** This kills the classic form-POST attack outright, since cross-site POSTs carry no cookie. It is the highest-value single change. It is not complete: it does not help cookies that must be `None`, and same-site-but-different-origin attacks (a compromised sibling subdomain) still pass.
+
+**Synchronizer CSRF token.** Server generates a random value, stores it in the session, embeds it in the form or hands it to the SPA, and compares on every mutating request.
+
+```js
+app.post("/transfer", (req, res) => {
+  if (req.get("X-CSRF-Token") !== req.session.csrf) {
+    return res.status(403).json({ error: "bad csrf token" });
+  }
+  // ...
+});
+```
+
+**Double-submit cookie.** No server-side session storage: send the token as both a readable cookie and a header, then require them to match. Cheaper, and weaker — a subdomain that can write cookies for your domain can force a match, so pair it with `__Host-` prefixes and a signed token.
+
+```js
+const token = document.cookie.match(/(?:^|; )csrf=([^;]+)/)?.[1];
+fetch("https://api.example/transfer", {
+  method: "POST",
+  credentials: "include",
+  headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+  body: JSON.stringify({ to: "bob", amount: 10 }),
+});
+```
+
+**Check `Origin` (or `Sec-Fetch-Site`).** The browser sets these and script cannot forge them. Reject mutating requests whose `Origin` is not in your allowlist.
+
+```js
+const ALLOWED = new Set(["https://app.example"]);
+
+app.use((req, res, next) => {
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
+    const origin = req.get("Origin");
+    if (origin && !ALLOWED.has(origin)) return res.status(403).end();
+  }
+  next();
+});
+```
+
+Be careful: `Origin` is absent on some same-origin requests and on old clients, so treat missing differently from mismatched.
+
+**Require a custom header.** Any request with `X-Requested-With` is preflighted, and your preflight allowlist controls who passes. A form POST cannot set headers at all, so this blocks the classic vehicle for free. It is a side effect of CORS, so do not lean on it alone.
+
+## Practical setups
+
+### SPA plus a separate API domain
+
+`https://app.example` calling `https://api.example` is cross-origin and cross-site. This is the hardest configuration and the one people pick by accident.
+
+You need, together:
+
+```http
+Access-Control-Allow-Origin: https://app.example
+Access-Control-Allow-Credentials: true
+Vary: Origin
+Set-Cookie: sid=...; Secure; HttpOnly; SameSite=None; Path=/
+```
+
+`SameSite=None` is mandatory here, and that means you are relying on a third-party cookie, which browsers are actively restricting. If you can change the topology, do.
+
+### Same-site subdomains
+
+`https://app.example` calling `https://api.app.example`, or both under `example.com`. Still cross-origin, so you still need CORS headers — but now the cookie is first-party.
+
+```http
+Access-Control-Allow-Origin: https://app.example
+Access-Control-Allow-Credentials: true
+Vary: Origin
+Set-Cookie: sid=...; Domain=example.com; Secure; HttpOnly; SameSite=Lax; Path=/
+```
+
+`SameSite=Lax` is enough and no third-party cookie policy applies. The cost is that `Domain=example.com` shares the cookie with every subdomain, so a compromised marketing site can read it. Weigh that against the alternative.
+
+### Same origin via a path prefix
+
+Serve the API under `https://app.example/api` through a reverse proxy. No CORS at all, no preflights, `SameSite=Strict` is viable, and `__Host-` cookies work. When you control the edge, this is the configuration to aim for.
+
+### Proxying in dev
+
+Vite's dev server can forward API calls so the browser only ever sees one origin:
+
+```js
+// vite.config.ts
+export default {
+  server: {
+    proxy: {
+      "/api": {
+        target: "http://localhost:3000",
+        changeOrigin: true,
+      },
+    },
+  },
+};
+```
+
+Now `fetch("/api/me")` is same-origin. The catch: **this hides real production CORS**. In dev there is no `Origin` header the API disagrees with, no preflight, no `SameSite=None` requirement, and `localhost` counts as a secure context so `Secure` cookies work over HTTP. Then you deploy to a split-domain setup and everything breaks at once.
+
+Two mitigations. Either mirror production topology in dev (point the client at the real API origin and configure CORS for `http://localhost:5173`), or keep the proxy and also run the API in staging with the production topology before you ship. Background on the dev server in [Vite vs Webpack](/blog/vite).
+
+## Server configuration
+
+### Node and Express
+
+```js
+import express from "express";
+import cors from "cors";
+
+const app = express();
+const ALLOWED = ["https://app.example", "http://localhost:5173"];
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      // no Origin: curl, same-origin, server-to-server
+      if (!origin) return callback(null, true);
+      callback(null, ALLOWED.includes(origin));
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
+    exposedHeaders: ["X-Total-Count"],
+    maxAge: 600,
+  }),
+);
+```
+
+The `cors` middleware handles `OPTIONS` and sets `Vary: Origin` for you when `origin` is a function. Register it **before** authentication so preflights are not rejected with `401`.
+
+Without the library:
+
+```js
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && ALLOWED.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Vary", "Origin");
+  }
+  if (req.method === "OPTIONS") {
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization,X-CSRF-Token");
+    res.setHeader("Access-Control-Max-Age", "600");
+    return res.status(204).end();
+  }
+  next();
+});
+```
+
+### FastAPI
+
+```python
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://app.example", "http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Content-Type", "Authorization", "X-CSRF-Token"],
+    expose_headers=["X-Total-Count"],
+    max_age=600,
+)
+```
+
+Starlette's middleware refuses to combine `allow_origins=["*"]` with `allow_credentials=True` — it silently drops the credentials grant rather than sending an invalid pair. Use `allow_origin_regex` for dynamic subdomains, and anchor the pattern:
+
+```python
+allow_origin_regex=r"^https://[a-z0-9-]+\.example\.com$"
+```
+
+An unanchored regex like `https://.*\.example\.com` matches `https://evil.com/?x=.example.com`. More FastAPI patterns in [FastAPI](/blog/fastapi).
+
+## Common gotchas
+
+**Redirects lose CORS.** A cross-origin request that redirects requires CORS headers on *every* hop. And a preflight may not be redirected at all. If `/api/items` redirects to `/api/items/` because of a trailing-slash rule, the preflight dies. Call the final URL.
+
+**Caching without `Vary: Origin`.** Covered above, and worth repeating because it produces bugs that only appear for some users. Any dynamic `Access-Control-Allow-Origin` needs `Vary: Origin`.
+
+**Wildcard subdomains.** There is no wildcard syntax for `Access-Control-Allow-Origin`. Matching subdomains means a server-side regex, and a sloppy regex is an open API. Always anchor with `^` and `$`, always escape dots, and never match with `endsWith`: the string `https://evil-example.com` ends with `example.com`.
+
+**`null` origin.** Sandboxed iframes without `allow-same-origin`, `file://` pages, some redirect chains, and certain `data:` URLs send `Origin: null` — the literal four-character string. Never add `"null"` to your allowlist. It is not a specific site; it is anything that has been stripped of an origin, which includes an attacker's sandboxed iframe.
+
+**Missing headers on error responses.** If your CORS middleware runs after the router, a `404` or a `500` from an exception handler goes out without CORS headers. The browser reports a CORS error and you chase the wrong problem. Put CORS first in the chain and make sure your error handler preserves the headers.
+
+**Opaque `no-cors` responses.** `mode: "no-cors"` never throws, but gives you `type: "opaque"` with `status: 0` and no readable body. It is only useful for fire-and-forget or for caching in a service worker.
+
+**Cookies not set after login.** Check three things in order: is `credentials: "include"` on the login call, does the response carry `Access-Control-Allow-Credentials: true`, and does the `Set-Cookie` have the right `SameSite` and `Secure` for the topology. DevTools' Network tab shows rejected cookies with a reason on the Cookies sub-tab.
+
+**HTTP-to-HTTPS mixed context.** `Secure` cookies are not sent over `http://` — except on `localhost`. This is why cookie auth works locally and fails on a plain-HTTP staging box.
+
+## Interview questions
+
+<details>
+<summary>What is an origin, and is `api.example.com` the same origin as `example.com`?</summary>
+
+Scheme + host + port. No — different host means different origin, and subdomains get no special treatment for SOP. They are, however, the <em>same site</em>, which is what cookies care about.
+
+</details>
+
+<details>
+<summary>Does CORS protect my API?</summary>
+
+No. It protects users' browsers from having their credentials used by other sites. curl, Postman, and any server ignore CORS. Authentication and authorization on the server are still mandatory.
+
+</details>
+
+<details>
+<summary>Which requests trigger a preflight?</summary>
+
+Anything outside the simple-request rules: a method other than `GET`, `HEAD`, or `POST`; any non-safelisted header (including `Authorization` and custom headers); or a `Content-Type` that is not `application/x-www-form-urlencoded`, `multipart/form-data`, or `text/plain`. In practice a JSON POST is always preflighted.
+
+</details>
+
+<details>
+<summary>My server never sees the POST but the console says CORS. Why?</summary>
+
+The preflight failed, so the browser never sent the real request. Look for the `OPTIONS` row in the Network tab. Usually the preflight got a `401` from auth middleware, a redirect, or a response missing the allow headers.
+
+</details>
+
+<details>
+<summary>Why can I not use `Access-Control-Allow-Origin: *` with cookies?</summary>
+
+`*` means any origin may read the response, while credentials mean the response contains the user's private data. Together, any site could read any user's data. The spec requires a single concrete origin when the credentials mode is `include`.
+
+</details>
+
+<details>
+<summary>What does `Vary: Origin` fix?</summary>
+
+Cache poisoning across origins. If a cache stores a response whose `Access-Control-Allow-Origin` was computed for one origin and serves it to another, CORS fails intermittently. `Vary: Origin` makes the origin part of the cache key.
+
+</details>
+
+<details>
+<summary>Difference between `SameSite=Lax` and `Strict`?</summary>
+
+`Lax` sends the cookie on cross-site top-level GET navigations, so following a link from an email keeps you logged in. `Strict` withholds it even then, so the user appears logged out until they navigate again. Neither sends the cookie on cross-site POSTs or subresource requests.
+
+</details>
+
+<details>
+<summary>When do you need `SameSite=None`?</summary>
+
+When the cookie must travel on cross-site requests: a cross-site API called with `credentials: "include"`, or an embedded iframe. It requires `Secure`, and it makes the cookie third-party, so browser tracking protections may block it anyway.
+
+</details>
+
+<details>
+<summary>Cookies or bearer tokens for a browser SPA?</summary>
+
+`HttpOnly` cookies plus CSRF defenses for browser clients: the credential cannot be read by injected script. Bearer tokens for mobile and service-to-service, where CSRF does not apply and cookie handling is awkward. Avoid `localStorage` for credentials — any XSS reads it directly.
+
+</details>
+
+<details>
+<summary>Why does `HttpOnly` not stop XSS from being account takeover?</summary>
+
+`HttpOnly` prevents exporting the cookie, not using it. Script on your origin can call your API with `credentials: "include"` and the browser attaches the cookie. XSS is still full compromise.
+
+</details>
+
+<details>
+<summary>What is a `null` origin and should you allow it?</summary>
+
+The literal string `null`, sent by sandboxed iframes without `allow-same-origin`, `file://` documents, and some redirect chains. Never allowlist it — it identifies no one, and an attacker can produce it deliberately.
+
+</details>
+
+<details>
+<summary>Why does the dev proxy hide CORS problems?</summary>
+
+The dev server makes the API same-origin, so the browser sends no `Origin`, runs no preflight, and never needs `SameSite=None`. `localhost` also counts as a secure context, so `Secure` cookies work over HTTP. None of that holds in production with split domains.
+
+</details>
+
+## Related reading
+
+- [Web security](/blog/web-security) — XSS, CSRF, clickjacking, CSP, and the headers that matter
+- [Service Workers](/blog/service-worker) — intercepting requests, and how CORS applies to cached cross-origin responses
+- [FastAPI](/blog/fastapi) — configuring `CORSMiddleware` alongside auth and dependencies
+- [Vite vs Webpack](/blog/vite) — the dev server and `server.proxy`

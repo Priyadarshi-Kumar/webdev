@@ -1,0 +1,547 @@
+---
+title: The JavaScript event loop — tasks, microtasks, and rendering
+description: One call stack, two queues, and a render step. How tasks, microtasks, await, rAF, and Node's phases actually order your code, and how to stop blocking paint.
+slug: event-loop
+date: 2026-09-01
+subject: javascript
+tags:
+  - javascript
+  - browser
+  - interview
+---
+
+Every ordering surprise in JavaScript — why `setTimeout(fn, 0)` runs after a promise, why your spinner never appears, why React state looks stale on the next line — comes from the same machine. One call stack, a task queue, a microtask queue, and a render step wedged between them.
+
+Learn the machine once and you stop guessing.
+
+## Why the event loop exists
+
+JavaScript gives you **one** call stack per thread. Two functions never run at the same instant in one page. That is a deliberate simplification: no locks, no data races on your objects, no half-mutated DOM.
+
+The cost is obvious. If one stack is all you get, anything slow — a network request, a disk read, a 200ms JSON parse — would freeze everything while it ran.
+
+So the language never blocks on I/O. Instead:
+
+1. You call a host API (`fetch`, `setTimeout`, `addEventListener`) and it returns **immediately**.
+2. The host does the slow thing somewhere else — another thread, another process, the kernel.
+3. When it finishes, the host **queues** your callback.
+4. The event loop picks it up when the stack is empty.
+
+That "picks it up when the stack is empty" is the whole event loop. Your code never gets interrupted mid-function. It runs to completion, returns, and only then does the next queued thing get a turn. This is called **run-to-completion**, and it is the single most useful invariant in the model.
+
+```js
+const el = document.querySelector("#status");
+
+el.textContent = "loading";
+const res = await fetch("/api/report"); // returns to the loop here
+el.textContent = "done";
+```
+
+Between those two assignments the thread was free. It painted, handled clicks, ran timers. You did not manage a thread to get that.
+
+For how the engine and the host divide this work at the C++ level, see [How JavaScript actually runs](/blog/how-javascript-works).
+
+## The pieces: stack, heap, host
+
+### Call stack
+
+A stack of frames. Calling a function pushes a frame, returning pops it. When the stack is empty, the loop is free to do something else.
+
+```js
+const a = () => b();
+const b = () => c();
+const c = () => {
+  throw new Error("boom");
+};
+a();
+// Error: boom
+//   at c
+//   at b
+//   at a
+```
+
+The stack trace is literally the stack. Note what it does **not** show: whatever queued `a` in the first place. Once you cross an async boundary, the frames below are gone, which is why async stack traces need explicit engine support.
+
+### Heap
+
+Objects, closures, arrays, and functions live on the heap. The stack holds frames and references. The garbage collector reclaims heap objects nothing can reach — and GC also runs on your thread, which is one more reason allocation-heavy loops cause jank.
+
+### The host environment
+
+The event loop is **not in the ECMAScript spec**. ECMAScript only defines "jobs" and a job queue for promises. The actual loop — tasks, rendering, timers — is defined by the HTML spec in browsers, and by libuv in Node.
+
+| Concept | Browser | Node |
+| --- | --- | --- |
+| Engine | V8 / JSC / SpiderMonkey | V8 |
+| Loop owner | HTML event loop | libuv |
+| Task sources | timers, UI events, network, postMessage | timers, I/O completions, `setImmediate` |
+| Rendering step | yes, tied to display refresh | none |
+| Extra queue | — | `process.nextTick` |
+
+Same language, different loop. Most "Node behaves differently" bugs are this table.
+
+## Tasks and microtasks
+
+There are two queues, and they are not peers.
+
+A **task** (the spec word; everyone says "macrotask") is one unit of work the loop picks up. A **microtask** is a job that runs at the end of the current task, before the loop takes another task.
+
+### What is a task
+
+- `setTimeout` and `setInterval` callbacks
+- `MessageChannel` / `postMessage` delivery
+- UI events: click, keydown, scroll
+- Network events and `XMLHttpRequest` callbacks
+- Parsing chunks of HTML during load
+
+### What is a microtask
+
+- `.then` / `.catch` / `.finally` callbacks
+- code after `await`
+- `queueMicrotask(fn)`
+- `MutationObserver` callbacks
+- `IntersectionObserver` callbacks (queued as microtasks, delivered per frame)
+
+The distinction that matters: **one task per loop turn, but the microtask queue is drained completely** — including microtasks queued by other microtasks.
+
+```js
+setTimeout(() => console.log("task 1"), 0);
+setTimeout(() => console.log("task 2"), 0);
+
+queueMicrotask(() => {
+  console.log("micro 1");
+  queueMicrotask(() => console.log("micro 2"));
+});
+
+// micro 1
+// micro 2
+// task 1
+// task 2
+```
+
+`micro 2` was queued *during* microtask draining and still ran before `task 1`. Two microtasks in one turn, one task per turn.
+
+### The loop, precisely
+
+```txt
+loop forever:
+  1. pick the oldest runnable task from a task queue
+  2. run it to completion (call stack empties)
+  3. drain the ENTIRE microtask queue
+       - each microtask may queue more microtasks
+       - keep going until the queue is empty
+  4. if it is time to render:
+       a. run requestAnimationFrame callbacks
+       b. recalculate style
+       c. layout
+       d. paint / composite
+  5. if there is idle time left, run requestIdleCallback callbacks
+```
+
+Two consequences fall straight out of that:
+
+- **Microtasks cannot yield to paint.** Step 3 finishes before step 4 starts. A chain of promises, however long, blocks rendering exactly like a `while` loop.
+- **Rendering is not per task.** Step 4 happens at most once per display refresh (roughly every 16.7ms at 60Hz). Ten timers firing in one frame produce one paint, not ten.
+
+### Where rAF and rIC sit
+
+`requestAnimationFrame` is not a task and not a microtask. Its callbacks are step 4a — after microtasks, immediately before style and layout. That is exactly where you want DOM writes for animation: you are the last code to run before the browser measures.
+
+```js
+function frame(now) {
+  box.style.transform = `translateX(${(now / 10) % 400}px)`;
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+```
+
+If the tab is hidden, rAF stops firing. Timers keep firing (throttled). That is why rAF-driven animation does not build up a backlog in a background tab and `setInterval` animation does.
+
+`requestIdleCallback` runs in leftover time after the frame is committed, and gives you a deadline object:
+
+```js
+function drainWhenIdle(deadline) {
+  while (deadline.timeRemaining() > 0 && queue.length) {
+    process(queue.pop());
+  }
+  if (queue.length) requestIdleCallback(drainWhenIdle, { timeout: 2000 });
+}
+requestIdleCallback(drainWhenIdle, { timeout: 2000 });
+```
+
+Use rIC for genuinely optional work: prefetching, analytics flushes, cache warming. Never for anything the user is waiting on — with a busy main thread, idle time may not come at all until the `timeout` forces it.
+
+## Reading the classic puzzles
+
+### The four-line version
+
+```js
+console.log("1");
+setTimeout(() => console.log("2"), 0);
+Promise.resolve().then(() => console.log("3"));
+console.log("4");
+```
+
+Output: `1`, `4`, `3`, `2`.
+
+Line by line:
+
+- `1` — synchronous, runs now.
+- `setTimeout` registers a **task**. The callback is not run; the call returns immediately.
+- `Promise.resolve().then(...)` registers a **microtask** on an already-resolved promise.
+- `4` — synchronous, still the same task.
+- The script task ends. The stack is empty. Drain microtasks: `3`.
+- The loop takes the next task: `2`.
+
+The script itself is a task. Everything you consider "top-level synchronous code" is the body of one task.
+
+### Adding await
+
+```js
+async function outer() {
+  console.log("outer start");
+  await inner();
+  console.log("after await");
+}
+
+async function inner() {
+  console.log("inner");
+}
+
+console.log("script start");
+outer();
+Promise.resolve().then(() => console.log("promise"));
+console.log("script end");
+```
+
+Output:
+
+```txt
+script start
+outer start
+inner
+script end
+after await
+promise
+```
+
+Why: `outer()` runs synchronously until the `await`. `inner()` is a normal call, so `inner` logs immediately. At `await`, `outer` **suspends** and returns a pending promise to the caller. Control goes back to the script, which logs `script end`. Then microtasks drain in queue order: the `await` continuation was queued first, so `after await` beats `promise`.
+
+### Loops and timers
+
+```js
+for (let i = 0; i < 3; i++) {
+  setTimeout(() => console.log("t", i), 0);
+  Promise.resolve().then(() => console.log("p", i));
+}
+console.log("sync");
+```
+
+Output: `sync`, `p 0`, `p 1`, `p 2`, `t 0`, `t 1`, `t 2`.
+
+All six callbacks are queued during one task. Microtasks drain first, in order; then the three timer tasks. Note `let` gives each iteration its own binding — with `var` every callback would print `3`. That is the same capture problem behind [stale closures](/blog/stale-closure).
+
+### Microtasks between timers
+
+```js
+setTimeout(() => {
+  console.log("t1");
+  Promise.resolve().then(() => console.log("m1"));
+}, 0);
+
+setTimeout(() => {
+  console.log("t2");
+  Promise.resolve().then(() => console.log("m2"));
+}, 0);
+```
+
+Output: `t1`, `m1`, `t2`, `m2`.
+
+This is the checkpoint people miss. Microtasks drain after **each** task, not once per batch of tasks. `t1` is a complete task; its microtasks run before the loop touches `t2`.
+
+## await is .then with better syntax
+
+`await` is not magic scheduling. It desugars to a promise reaction.
+
+```js
+// what you write
+async function load() {
+  const res = await fetch("/api/user");
+  const user = await res.json();
+  return user.name;
+}
+
+// roughly what runs
+function load() {
+  return fetch("/api/user").then((res) => {
+    return res.json().then((user) => {
+      return user.name;
+    });
+  });
+}
+```
+
+Everything after an `await` is a `.then` callback, so it is a **microtask**. Two rules follow:
+
+**Awaiting a non-promise still yields.** `await 1` does not run the next line synchronously; it queues a microtask.
+
+```js
+async function f() {
+  console.log("a");
+  await null;
+  console.log("c"); // microtask
+}
+f();
+console.log("b");
+// a, b, c
+```
+
+**Awaiting in a loop serializes.** Each iteration waits a full round trip.
+
+```js
+// serial: n round trips
+for (const id of ids) {
+  results.push(await fetchUser(id));
+}
+
+// parallel: one round trip's latency
+const results = await Promise.all(ids.map(fetchUser));
+```
+
+The `Promise.all` version starts every request in the same task and awaits once. For the promise semantics underneath, see [Promises in JavaScript](/blog/javascript-promises).
+
+## Starving the loop
+
+### Infinite microtask chains
+
+```js
+function spin() {
+  Promise.resolve().then(spin);
+}
+spin(); // page is dead
+```
+
+Step 3 never completes, so the browser never reaches step 4. No paint, no input, no timers. Unlike a `while (true)` loop the stack stays shallow, so you get no stack overflow to save you — just a permanently frozen tab.
+
+The same shape shows up accidentally: a `.then` that re-subscribes, a recursive `queueMicrotask` retry, an observer whose callback triggers the mutation it observes.
+
+### Long tasks block everything
+
+A task over 50ms is a **long task** by the web-vitals definition. During it, nothing else happens — no paint, no click handling, no scroll response.
+
+```js
+// blocks for ~1s: no spinner will ever appear
+function render() {
+  showSpinner();
+  const rows = parseAndSort(hugeArray); // 1000ms
+  paint(rows);
+}
+```
+
+`showSpinner()` mutated the DOM, but the paint is step 4, which cannot run until this task ends. By then you also removed the spinner. Users see one frozen second.
+
+### Timer clamping
+
+`setTimeout(fn, 0)` does not mean "now". The HTML spec clamps nested timers: once you are five levels deep in nested `setTimeout` calls, the minimum becomes **4ms**.
+
+```js
+let n = 0;
+const start = performance.now();
+function tick() {
+  if (++n === 20) {
+    console.log(performance.now() - start); // ~65ms, not ~0
+    return;
+  }
+  setTimeout(tick, 0);
+}
+setTimeout(tick, 0);
+```
+
+Twenty nested zero-timeouts take roughly 65ms, not zero. Background tabs clamp much harder — often 1000ms. If you are using timers to chunk work, this 4ms tax dominates. `MessageChannel` has no clamp, which is why schedulers use it.
+
+## Node.js: the same idea, different phases
+
+libuv runs the loop in ordered phases. Each pass:
+
+| Phase | Runs |
+| --- | --- |
+| timers | `setTimeout` / `setInterval` callbacks whose time has come |
+| pending callbacks | deferred system callbacks, e.g. some TCP errors |
+| poll | retrieve new I/O events, run I/O callbacks, possibly block here |
+| check | `setImmediate` callbacks |
+| close callbacks | `socket.on("close")` and friends |
+
+Between **every** callback, Node drains `process.nextTick` and then the promise microtask queue.
+
+### nextTick beats promises
+
+Node has two microtask-ish queues, and `nextTick` has higher priority:
+
+```js
+Promise.resolve().then(() => console.log("promise"));
+process.nextTick(() => console.log("nextTick"));
+setImmediate(() => console.log("immediate"));
+setTimeout(() => console.log("timeout"), 0);
+
+// nextTick
+// promise
+// timeout   (usually)
+// immediate
+```
+
+`process.nextTick` is not part of the loop at all — it is a queue drained after the current operation, before promises. Recursive `nextTick` starves the loop exactly like a recursive microtask starves the browser.
+
+### setImmediate vs setTimeout 0
+
+At the top level the order between `setTimeout(fn, 0)` and `setImmediate(fn)` is **nondeterministic**: it depends on how long process startup took relative to the 1ms timer floor. Inside an I/O callback it is deterministic — `setImmediate` always wins, because you are already past the timers phase and the check phase comes next.
+
+```js
+import { readFile } from "node:fs";
+
+readFile(import.meta.filename, () => {
+  setTimeout(() => console.log("timeout"), 0);
+  setImmediate(() => console.log("immediate"));
+});
+// immediate, then timeout — every time
+```
+
+Use `setImmediate` when you mean "after this I/O callback, before more I/O." Use `setTimeout` when you mean a delay.
+
+## Keeping the main thread responsive
+
+### Chunk and yield
+
+Break the work up and hand control back so the browser can reach step 4.
+
+```js
+async function processAll(items) {
+  let start = performance.now();
+  for (const item of items) {
+    process(item);
+    if (performance.now() - start > 5) {
+      await yieldToBrowser();
+      start = performance.now();
+    }
+  }
+}
+```
+
+A time budget beats a fixed chunk count when per-item cost varies. Five milliseconds leaves room in a 16.7ms frame for style, layout, and paint.
+
+Your options for `yieldToBrowser`, best first:
+
+```js
+function yieldToBrowser() {
+  // Chrome 129+: yields, and keeps your continuation ahead of
+  // lower-priority work instead of going to the back of the queue
+  if (globalThis.scheduler?.yield) return scheduler.yield();
+
+  // no 4ms clamp, unlike setTimeout
+  return new Promise((resolve) => {
+    const { port1, port2 } = new MessageChannel();
+    port1.onmessage = () => resolve();
+    port2.postMessage(null);
+  });
+}
+```
+
+`await new Promise(r => setTimeout(r, 0))` also works and is the most portable, but pays the clamp on nested calls. Whichever you pick, smaller slices mean smoother frames and more scheduling overhead — measure rather than guess.
+
+### Move it off the thread
+
+Chunking still competes with rendering for the same core. For genuinely heavy CPU work — parsing, compression, image processing, crypto — use a [Web Worker](/blog/web-worker). A worker is a separate thread with its own stack, heap, and event loop. The main thread stays free for input and paint, and you pay only the structured-clone cost at the boundary (avoidable entirely with transferable objects like `ArrayBuffer`).
+
+Rule of thumb: yield for work that touches the DOM, offload work that does not.
+
+## What this means in React
+
+React sits on top of this machine, and several of its behaviors are direct consequences.
+
+### Batching
+
+`setState` does not re-render synchronously. It marks the fiber dirty and schedules work. Multiple updates inside one task collapse into one render pass:
+
+```tsx
+function handleClick() {
+  setCount((c) => c + 1);
+  setName("ada");
+  setOpen(true);
+  // one render, not three
+}
+```
+
+Since React 18, batching applies everywhere — timeouts, promises, native handlers — not just React event handlers. The render happens in a later microtask or task, before paint.
+
+### Why the value looks stale
+
+```tsx
+const [count, setCount] = useState(0);
+
+function onClick() {
+  setCount(count + 1);
+  console.log(count); // still 0
+}
+```
+
+`count` is a `const` captured by this render's closure. The new value only exists in the next render. Nothing about the event loop can change a binding that was already captured — see [stale closures](/blog/stale-closure) for the general case.
+
+### Concurrent rendering is cooperative yielding
+
+React's concurrent renderer does exactly what the chunking section describes: it renders a slice of the tree, checks whether it has exceeded its budget, and yields to the browser so paint and input can happen. That is what makes `startTransition` and `useDeferredValue` work. Details in [concurrent rendering](/blog/concurrent-rendering) and [when React re-renders](/blog/react-rerender-internals).
+
+The practical consequence: React can only yield between components. One component doing a 300ms synchronous computation blocks the frame no matter which scheduler is above it.
+
+## Debugging
+
+Open the Performance panel in Chrome DevTools and record an interaction.
+
+- **Main track.** Flame charts wider than 50ms get a red triangle — those are long tasks. Widen the task, look at the deepest frames, and you have your culprit.
+- **Frames track.** Green means a frame shipped. Long gaps or "dropped frame" markers mean a task overran the budget.
+- **Interactions track.** Shows the input delay behind INP. Large values mean an input event waited in the task queue behind something else.
+- **Purple layout blocks.** Style recalculation and layout. Big purple after a small script block usually means forced synchronous layout — you read `offsetHeight` after writing styles, forcing the browser to lay out mid-task.
+
+For continuous field monitoring rather than one-off profiling:
+
+```js
+new PerformanceObserver((list) => {
+  for (const entry of list.getEntries()) {
+    console.log("long task", entry.duration, entry.attribution);
+  }
+}).observe({ entryTypes: ["longtask"] });
+```
+
+Two more signals worth knowing: `performance.now()` gives sub-millisecond timing without clock skew, and `console.timeStamp()` drops a marker into the Performance timeline so you can correlate your code with the flame chart.
+
+## Interview questions
+
+**Why does `setTimeout(fn, 0)` not run immediately?**
+It registers a task. Tasks run only after the current task finishes and the microtask queue is fully drained. Plus timers get clamped to 4ms once nested five deep.
+
+**What is the difference between a task and a microtask?**
+The loop runs exactly one task per turn, then drains the entire microtask queue including microtasks queued during the drain. Rendering can happen between tasks but never in the middle of a microtask drain.
+
+**Can a promise chain block rendering?**
+Yes. Microtasks drain before the render step, so an unbounded chain freezes the page as effectively as a `while (true)` loop — with no stack overflow to stop it.
+
+**Why does code after `await` run later even when awaiting a plain value?**
+`await` always wraps its operand and queues a promise reaction. The continuation is a microtask regardless of what you awaited.
+
+**What runs first: `process.nextTick` or `Promise.resolve().then`?**
+`nextTick`. Node drains the nextTick queue completely before the promise microtask queue, after every operation.
+
+**Where does `requestAnimationFrame` sit relative to microtasks?**
+After the microtask drain, before style and layout, and only when the browser is about to render. Not a microtask and not a task.
+
+**How do you keep a 500ms computation from freezing the UI?**
+Move it to a Web Worker if it does not touch the DOM. Otherwise chunk it with a time budget of a few milliseconds per slice and yield with `scheduler.yield` or `MessageChannel` between slices.
+
+**Why does the spinner never appear before a heavy synchronous function?**
+The DOM mutation is applied, but paint is a later step of the same loop turn. The browser cannot reach it until your task returns.
+
+## Related reading
+
+- [How JavaScript actually runs](/blog/how-javascript-works)
+- [Promises in JavaScript](/blog/javascript-promises)
+- [Web Workers](/blog/web-worker)
+- [Concurrent rendering](/blog/concurrent-rendering)
+- [When React re-renders](/blog/react-rerender-internals)

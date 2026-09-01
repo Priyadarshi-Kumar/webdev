@@ -1,0 +1,937 @@
+---
+title: Web accessibility for React developers
+description: Semantics, the accessibility tree, keyboard and focus management, ARIA done right, forms, live regions, contrast, and how to test it — with React 19 examples.
+slug: accessibility
+date: 2026-09-01
+subject: browser
+tags:
+  - browser
+  - react
+  - html
+  - interview
+---
+
+Most accessibility bugs in React apps are not exotic. They are a `div` with an `onClick`, a modal that leaves focus behind it, an icon button with no name, and a route change that never tells the screen reader anything happened.
+
+This is the practical version: what the browser exposes to assistive technology, which HTML to reach for, when ARIA helps, and how to verify the result.
+
+## Why accessibility matters
+
+### Who it affects
+
+Accessibility is not a niche audience. It is a set of interaction modes your UI either supports or breaks.
+
+| Mode | What breaks it |
+| --- | --- |
+| Keyboard only | Click handlers on non-interactive elements, focus traps, invisible focus ring |
+| Screen reader | Missing names, wrong roles, silent async updates |
+| Low vision | Low contrast, layout that breaks at 400% zoom, tiny hit areas |
+| Motor impairment | Small targets, hover-only menus, short timeouts, drag-only interactions |
+| Cognitive load | Unlabelled controls, errors that only say "invalid" |
+
+Then there are temporary and situational limits: a broken arm, a dead trackpad, bright sunlight, a phone held one-handed on a train, muted autoplay that now needs captions. You have been in that group. Everyone rotates through it.
+
+Compliance is a floor, not the reason. A keyboard-navigable, correctly-labelled app is also easier to test and script, and usually a sign the markup is sane.
+
+### WCAG 2.2 and POUR
+
+WCAG organises its success criteria under four principles, **POUR**: **Perceivable** (text alternatives, contrast, captions), **Operable** (keyboard, enough time, no seizure triggers), **Understandable** (predictable navigation, useful errors), **Robust** (correct name, role, value).
+
+| Level | Meaning | Examples |
+| --- | --- | --- |
+| A | Minimum. Failing blocks users outright | Keyboard operable, images have alt text, no keyboard trap |
+| AA | The practical legal and contractual target | 4.5:1 text contrast, 3:1 for UI, visible focus, focus not obscured |
+| AAA | Stricter, rarely required wholesale | 7:1 contrast, sign language for video, no images of text |
+
+Target AA. WCAG 2.2 added criteria worth knowing: *Focus Not Obscured* (a sticky header must not cover the focused element), *Dragging Movements* (offer a non-drag alternative), *Target Size* (24 by 24 CSS pixels), and *Accessible Authentication* (no puzzles, no retyping codes from memory).
+
+## The accessibility tree
+
+### Role, name, state
+
+The browser builds a second tree next to the DOM. Each node carries what assistive technology needs: a **role** (`button`, `link`, `heading`, `textbox`), a **name** ("Save", "Close dialog"), and **state** (`expanded`, `checked`, `invalid`, `level`).
+
+A screen reader reads that tree, not your CSS. So this has no role, no name, and no keyboard behaviour:
+
+```tsx
+<div className="btn" onClick={save}>Save</div>
+```
+
+And this is a node with role `button`, name "Save", focusable, activated by Enter and Space:
+
+```tsx
+<button type="button" onClick={save}>Save</button>
+```
+
+Same pixels, completely different tree.
+
+### Inspecting it in Chrome DevTools
+
+Select a node in the Elements panel and read the **Accessibility** pane: computed role, computed name, and *which* mechanism produced the name. Toggle "Enable full-page accessibility tree" to see the whole tree as assistive tech sees it, including nodes your ARIA hid or flattened.
+
+Two habits catch most problems. Read the **computed name** instead of assuming your `aria-label` won — names have precedence rules. And look for nodes with role `generic` where you expected a control; that is the signature of a `div` that should have been a `button`.
+
+Firefox's Accessibility panel has an equivalent "Check for issues" dropdown that scans for contrast and missing labels.
+
+## Semantic HTML first
+
+### `button` vs `div`
+
+Native elements give you role, focusability, keyboard activation, form participation, and platform behaviour for free. Each one is something you would otherwise write and maintain.
+
+Bad — not focusable, no role, no name:
+
+```tsx
+<div className="icon-btn" onClick={onDelete}>
+  <TrashIcon />
+</div>
+```
+
+Good:
+
+```tsx
+<button type="button" className="icon-btn" onClick={onDelete}>
+  <TrashIcon aria-hidden="true" />
+  <span className="sr-only">Delete invoice</span>
+</button>
+```
+
+If you genuinely must use a `div`, you owe it `role="button"`, `tabIndex={0}`, a name, and a key handler for Enter and Space. That is four things to get wrong. Also always set `type` on a `button` inside a form — the default is `submit`, which is how "Show password" ends up posting the form.
+
+### `a` vs `button`
+
+The rule is about what happens, not how it looks.
+
+| Element | Use when | Keyboard | Announced |
+| --- | --- | --- | --- |
+| `a` with `href` | Navigation to a URL or in-page target | Enter | "link" |
+| `button` | An action in place: submit, toggle, open, delete | Enter and Space | "button" |
+
+Bad:
+
+```tsx
+<a href="#" onClick={openDialog}>Settings</a>
+```
+
+Good:
+
+```tsx
+<button type="button" onClick={openDialog}>Settings</button>
+```
+
+An `a` with no `href` is not focusable and has no `link` role at all. If a user can meaningfully open it in a new tab, it is a link. Otherwise it is a button.
+
+### Headings and landmarks
+
+Headings are the primary navigation tool for screen reader users — most jump by heading before reading anything. One `h1` per page, never skip a level going down, and pick the level for structure rather than font size.
+
+```html
+<h1>Web accessibility</h1>
+  <h2>Semantic HTML</h2>
+    <h3>Buttons</h3>
+  <h2>Keyboard</h2>
+```
+
+Landmarks let users jump between regions. Use the elements, not `div` with a `role`:
+
+```html
+<header>
+  <nav aria-label="Main">...</nav>
+</header>
+<main id="main">
+  <article>...</article>
+  <aside aria-label="On this page">...</aside>
+</main>
+<footer>...</footer>
+```
+
+Exactly one `main` per page, not nested inside `article`. If you have several `nav` elements, label each one ("Main", "Breadcrumb", "Pagination"). A `section` only becomes a `region` landmark when it has an accessible name — otherwise it is a `div` in the tree.
+
+### Lists and labels
+
+A list of things should be a list. Screen readers announce "list, 5 items", which is real information.
+
+Every input needs a programmatic label. Placeholder text is not a label: it disappears on input and fails contrast in most designs.
+
+```tsx
+// Bad
+<input type="email" placeholder="Email" />
+
+// Good
+<label htmlFor="email">Email</label>
+<input id="email" type="email" autoComplete="email" />
+```
+
+## ARIA, used correctly
+
+### The rules that matter
+
+**The first rule of ARIA: do not use ARIA.** If a native element or attribute gives you the semantics you need, use it. ARIA changes only what is exposed to assistive technology — it adds no behaviour, no focus handling, no keyboard support.
+
+The rest, condensed: do not change native semantics unless you must; every interactive ARIA control must be keyboard operable; never put `aria-hidden="true"` on a focusable element; every interactive element needs a name.
+
+ARIA that lies is worse than no ARIA. A `role="button"` that ignores Space is a broken promise, and the user cannot see the code.
+
+### The attributes you will actually use
+
+| Attribute | Use | Watch out for |
+| --- | --- | --- |
+| `aria-label` | Name a control with no visible text | Overrides visible text; breaks voice control if they disagree |
+| `aria-labelledby` | Name from existing visible text, by id | Beats `aria-label`; accepts multiple ids |
+| `aria-describedby` | Extra detail: hint, error, format | Read after the name, often interruptible |
+| `aria-expanded` | Collapsed or expanded state | Goes on the trigger, not the panel |
+| `aria-controls` | Points a trigger at what it controls | Support is patchy; no substitute for structure |
+| `aria-current` | Current item in a set: `page`, `step` | Not the same as `aria-selected` |
+| `aria-live` | Announce a region that changes | Region must exist in the DOM before it updates |
+| `aria-hidden` | Remove decorative content from the tree | Never on focusable content |
+| `role` | Assign a role the element lacks | Removes the native role entirely |
+
+A disclosure trigger, done right:
+
+```tsx
+<button type="button" aria-expanded={open} aria-controls="details" onClick={toggle}>
+  Shipping details
+</button>
+<div id="details" hidden={!open}>...</div>
+```
+
+And a current page link:
+
+```tsx
+<a href="/blog" aria-current={isActive ? "page" : undefined}>Blog</a>
+```
+
+Pass `undefined`, not `false`, when you want the attribute gone. `aria-current="false"` is a valid value meaning "not current", so it renders and does nothing useful.
+
+## Accessible names
+
+### How a name is computed
+
+Name computation walks a precedence list. Simplified, first match wins: `aria-labelledby` (concatenating the referenced elements), then `aria-label`, then native labelling (`label` with `for`, `alt`, `legend`, `caption`), then the element's own text content, then `title` as a last resort. `aria-describedby` is separate — it names nothing, it appends detail.
+
+### Common name bugs
+
+**Icon-only button with no name.** The most common bug in any design system.
+
+```tsx
+// Bad — announced as "button"
+<button type="button" onClick={close}>
+  <XIcon />
+</button>
+
+// Good
+<button type="button" onClick={close} aria-label="Close dialog">
+  <XIcon aria-hidden="true" />
+</button>
+```
+
+Note the `aria-hidden` on the icon. Inline SVG can expose stray title or path text, so hide decorative icons explicitly.
+
+**`aria-hidden` on something focusable.** `<a href="/pricing" aria-hidden="true">` is reachable by Tab and invisible to the screen reader. If it should be gone, remove it from the DOM or use `hidden`, which removes it from both trees.
+
+**`aria-label` overriding visible text.** A button reading "Submit" but named "Send form" cannot be activated by a voice-control user saying "click Submit". Let visible text be the name, or reference it with `aria-labelledby`.
+
+**Redundant labels.** `<button aria-label="Save button">Save</button>` announces "Save button, button". Never put the role in the name. Same for `alt="Image of a chart"` — `alt="Quarterly revenue, up 12%"` is the useful version.
+
+**Names that only work in place.** Ten links named "Read more" are useless in a screen reader's link list:
+
+```tsx
+<a href={post.href}>
+  Read more<span className="sr-only"> about {post.title}</span>
+</a>
+```
+
+## Keyboard support
+
+### Tab order and `tabindex`
+
+DOM order is tab order. If CSS reorders things visually with flex `order` or grid placement, the keyboard still follows the DOM and the focus ring jumps around the screen. Fix the DOM order.
+
+| Value | Meaning | Use |
+| --- | --- | --- |
+| `tabIndex={0}` | Focusable, in natural DOM order | Custom widget roots, scrollable regions |
+| `tabIndex={-1}` | Programmatically focusable only | Dialog containers, route headings, roving tabindex |
+| `tabIndex={1}` and up | Jumps ahead of everything | Never |
+
+Positive values create a global ordering you must maintain forever across every component in the app.
+
+### Visible focus and skip links
+
+Never remove the focus indicator without replacing it. `:focus-visible` gives keyboard users a ring without the mouse-click ring designers object to.
+
+```css
+/* Bad */
+:focus { outline: none; }
+
+/* Good */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+```
+
+On a dark theme the ring needs 3:1 contrast against both the component and the background behind it. A dark blue ring on a dark surface fails. Check *Focus Not Obscured* too: scroll a focused element under a sticky header and confirm you can still see it — `scroll-margin-top` fixes most of it.
+
+Then give keyboard users a way past the header on every page:
+
+```tsx
+<a href="#main" className="skip-link">Skip to content</a>
+```
+
+```css
+.skip-link { position: absolute; left: -9999px; }
+.skip-link:focus { left: 1rem; top: 1rem; z-index: 100; }
+```
+
+The skip link must be the first focusable element in the DOM, and the target needs `id="main"` plus `tabIndex={-1}` so focus actually lands there.
+
+### Keyboard traps
+
+A trap is any state you can Tab into but not out of. Deliberate traps are fine inside a modal — as long as Escape closes it. Accidental traps come from third-party embeds and key handlers that call `preventDefault()` too broadly.
+
+```tsx
+// Bad — kills Tab for everyone inside this subtree
+function onKeyDown(e: React.KeyboardEvent) {
+  e.preventDefault();
+  if (e.key === "Enter") submit();
+}
+
+// Good — only intercept the keys you handle
+function onKeyDown(e: React.KeyboardEvent) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    submit();
+  }
+}
+```
+
+## Focus management in single-page apps
+
+### Focus on route change
+
+A full page load resets focus to the top of the document and announces the new page. Client-side routing does neither: the URL changes, the DOM swaps, and focus stays wherever it was — often on a link that no longer exists, which drops focus to `body` and loses the user's place.
+
+Move focus to the new page's heading:
+
+```tsx
+import { useEffect, useRef } from "react";
+
+export function PageHeading({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+
+  return (
+    <h1 ref={ref} tabIndex={-1}>
+      {children}
+    </h1>
+  );
+}
+```
+
+The component remounts per route, so the effect runs on each navigation. `tabIndex={-1}` makes the heading focusable without adding a tab stop. Skip this on the first server-rendered load — the browser already did the right thing. The effect runs after React attaches, not during SSR; see [What is hydration?](/blog/hydration).
+
+### Focus in and out of a dialog
+
+The contract for a modal: focus moves in on open, Tab is trapped inside, Escape closes it, focus returns to the trigger on close, and background content is unreachable by keyboard, pointer, and screen reader. Step four is the one that gets forgotten, and the most disorienting to lose.
+
+### `inert` and the native `dialog`
+
+`inert` removes a subtree from focus, pointer events, and the accessibility tree in one attribute. The native `dialog` with `showModal()` goes further: top layer, `::backdrop`, Escape handling, and implicit inertness on everything else.
+
+```tsx
+import { useEffect, useRef } from "react";
+
+type ConfirmProps = {
+  open: boolean;
+  title: string;
+  onClose: () => void;
+  onConfirm: () => void;
+};
+
+export function ConfirmDialog({ open, title, onClose, onConfirm }: ConfirmProps) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const opener = useRef<Element | null>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    if (open && !el.open) {
+      opener.current = document.activeElement;
+      el.showModal();
+    } else if (!open && el.open) {
+      el.close();
+    }
+  }, [open]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const handleClose = () => {
+      onClose();
+      (opener.current as HTMLElement | null)?.focus();
+    };
+
+    el.addEventListener("close", handleClose);
+    return () => el.removeEventListener("close", handleClose);
+  }, [onClose]);
+
+  return (
+    <dialog ref={ref} aria-labelledby="confirm-title">
+      <h2 id="confirm-title">{title}</h2>
+      <p>This cannot be undone.</p>
+      <button type="button" onClick={onClose}>Cancel</button>
+      <button type="button" onClick={onConfirm} autoFocus>Delete</button>
+    </dialog>
+  );
+}
+```
+
+The `close` event fires for Escape too, so focus restoration lives in one place. `aria-labelledby` names the dialog from its own heading, and `autoFocus` sets initial focus when `showModal()` runs.
+
+Hand-roll a `div` dialog instead and you are writing the top layer, focus trap, Escape handler, scroll lock, and inertness yourself. You will get one of them wrong.
+
+## Forms
+
+### Labels and grouping
+
+Every control gets a `label`. Related controls get a `fieldset` with a `legend` — the only reliable way to give a radio group a group-level name.
+
+```tsx
+<fieldset>
+  <legend>Delivery speed</legend>
+
+  <input id="std" type="radio" name="speed" value="standard" />
+  <label htmlFor="std">Standard, 3–5 days</label>
+
+  <input id="exp" type="radio" name="speed" value="express" />
+  <label htmlFor="exp">Express, next day</label>
+</fieldset>
+```
+
+### Errors, `aria-invalid`, `aria-describedby`
+
+An error that is only visually near the input does not exist for a screen reader user. Tie it to the field.
+
+Bad:
+
+```tsx
+<input type="email" className={error ? "input error" : "input"} />
+{error && <span className="error-text">{error}</span>}
+```
+
+Good:
+
+```tsx
+import { useId } from "react";
+
+type EmailFieldProps = {
+  value: string;
+  error?: string;
+  onChange: (value: string) => void;
+};
+
+export function EmailField({ value, error, onChange }: EmailFieldProps) {
+  const id = useId();
+  const errorId = `${id}-error`;
+  const hintId = `${id}-hint`;
+
+  return (
+    <div className="field">
+      <label htmlFor={id}>
+        Email <span aria-hidden="true">*</span>
+      </label>
+
+      <input
+        id={id}
+        type="email"
+        value={value}
+        required
+        autoComplete="email"
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${hintId} ${errorId}` : hintId}
+        onChange={(e) => onChange(e.target.value)}
+      />
+
+      <p id={hintId} className="hint">We use this for receipts only.</p>
+      {error ? <p id={errorId} className="error-text">{error}</p> : null}
+    </div>
+  );
+}
+```
+
+`aria-describedby` takes a space-separated list, so hint and error are both announced. `aria-invalid` appears only when there is an error, so the field is not permanently invalid. The asterisk is hidden because `required` already conveys it. For a submit-time summary, render a `role="alert"` container listing failures as links to the offending fields, and move focus to it.
+
+### Autocomplete tokens
+
+`autocomplete` is an accessibility feature, not just a convenience. WCAG *Identify Input Purpose* requires it, and it removes typing for users with motor or memory impairments.
+
+```html
+<input name="email" type="email" autocomplete="email" />
+<input name="street" autocomplete="street-address" />
+<input name="zip" autocomplete="postal-code" />
+<input name="otp" autocomplete="one-time-code" inputmode="numeric" />
+<input name="pw" type="password" autocomplete="current-password" />
+<input name="new" type="password" autocomplete="new-password" />
+```
+
+Use the spec tokens verbatim. `autocomplete="off"` on a login or address form is usually a bug, not a security measure.
+
+## Live regions and announcements
+
+### Polite vs assertive
+
+A live region announces content changes without moving focus. It must be in the DOM *before* the content changes — mounting an already-populated region often announces nothing.
+
+| Setup | Behaviour | Use for |
+| --- | --- | --- |
+| `aria-live="polite"` | Queued, waits for a pause | Result counts, saved indicators, filter updates |
+| `aria-live="assertive"` | Interrupts immediately | Errors that block the user, session expiry |
+| `role="status"` | Implicit polite plus atomic | Non-critical status text |
+| `role="alert"` | Implicit assertive plus atomic | Validation failure, request failed |
+
+Assertive interrupts mid-word. Use it rarely and never for anything cosmetic.
+
+### Toasts and async results
+
+Render the region once, empty, then write into it.
+
+```tsx
+type SaveState = "idle" | "saving" | "saved" | "error";
+
+const MESSAGES: Record<SaveState, string> = {
+  idle: "",
+  saving: "Saving",
+  saved: "Changes saved",
+  error: "Could not save. Try again.",
+};
+
+export function SaveStatus({ state }: { state: SaveState }) {
+  const isError = state === "error";
+
+  return (
+    <p role={isError ? "alert" : "status"} aria-live={isError ? "assertive" : "polite"}>
+      {MESSAGES[state]}
+    </p>
+  );
+}
+```
+
+For a toast system, keep one persistent `role="status"` region at the app root and push text into it, rather than mounting a new live region per toast. An auto-dismissing toast must not be the only place a critical message appears, and must not steal focus. Loading spinners deserve a name too: `<span role="status" aria-label="Loading results" />` beats a silent animated `div`.
+
+## Images and media
+
+### Alt text
+
+`alt` is required on every `img`. The value depends on the job the image is doing.
+
+| Case | Markup |
+| --- | --- |
+| Meaningful content | `alt="Bar chart: revenue up 12% in Q3"` |
+| Decorative | `alt=""` — empty, not missing |
+| Only content inside a link | `alt` describes the destination, not the picture |
+| Text in an image | `alt` contains that exact text |
+| Complex chart | Short `alt` plus a longer description or table nearby |
+
+Missing `alt` makes some screen readers read the file name. `alt=""` removes the image from the tree, which is what you want for decoration. An `img` used purely for layout is better as a CSS background.
+
+### Captions and transcripts
+
+Video needs synchronised captions from a `track` element, not text burned into the frames. Audio needs a transcript, and video benefits from one too — it is the only searchable version. Do not autoplay with sound; if you autoplay muted video, provide a pause control.
+
+```html
+<video controls>
+  <source src="/demo.mp4" type="video/mp4" />
+  <track kind="captions" src="/demo.en.vtt" srclang="en" label="English" default />
+</video>
+```
+
+### `prefers-reduced-motion`
+
+Parallax, spring physics, and long slide transitions cause nausea and dizziness for people with vestibular disorders. Respect the OS setting.
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+```
+
+Read it in JS when the animation is scripted rather than CSS-driven: `window.matchMedia("(prefers-reduced-motion: reduce)").matches`. Prefer opacity fades to movement as the fallback. Removing motion is fine; removing the feedback is not.
+
+## Color and contrast
+
+| Content | AA ratio |
+| --- | --- |
+| Body text | 4.5:1 |
+| Large text (18.66px bold, or 24px) | 3:1 |
+| UI boundaries, meaningful icons, focus rings, chart lines | 3:1 |
+| Disabled controls | Exempt, but users still need to read them |
+
+Two rules beyond the numbers. **Never use colour alone** — a red border on an invalid field is invisible to a colourblind user and in forced-colors mode, so add text, an icon, and `aria-invalid`. And **test both themes**: dark themes fail differently, since pure white on pure black causes halation, saturated blues and purples lose contrast against dark grey, and thin fonts read thinner. This site defaults to dark, so dark is the case to check first.
+
+Check with the DevTools colour picker, which shows the ratio inline and suggests a passing value. Then check Windows High Contrast mode: anything drawn with only `background-image` or `box-shadow` disappears there.
+
+## React specifics
+
+### Stable ids with `useId`
+
+Ids must match between server render and hydration or the label association breaks. `useId` exists for exactly this.
+
+```tsx
+// Bad — differs per render, and between server and client
+const id = `field-${Math.random()}`;
+
+// Good
+const id = useId();
+```
+
+Derive related ids from one call rather than calling `useId` per element. See [What is hydration?](/blog/hydration) for why generated values must be deterministic, and [React Hooks, by version](/blog/react-hooks) for when `useId` landed.
+
+### Refs and custom components
+
+Focus management needs a ref to a real DOM node. In React 19 `ref` is a normal prop on function components, so a design-system input forwards it without `forwardRef`:
+
+```tsx
+type InputProps = React.ComponentPropsWithRef<"input"> & { label: string };
+
+export function Input({ label, id, ref, ...rest }: InputProps) {
+  const generated = useId();
+  const inputId = id ?? generated;
+
+  return (
+    <>
+      <label htmlFor={inputId}>{label}</label>
+      <input id={inputId} ref={ref} {...rest} />
+    </>
+  );
+}
+```
+
+Spreading `...rest` last matters: callers can pass `aria-describedby`, `aria-invalid`, and `autoComplete` through without you enumerating attributes. A wrapper that silently drops unknown props kills accessibility from the outside.
+
+Use refs for focus, measurement, and scroll — not for writing markup. See [Why you should not use innerHTML from a React useRef](/blog/react-innerhtml-useref).
+
+### Conditional rendering and portals
+
+- **Conditionally rendered content is silent.** Mounting an error paragraph announces nothing. It needs a live region, or focus moved to it.
+- **Portals break DOM order, not associations.** A portalled dialog sits at the end of tab order, which is fine because you trap focus. `aria-describedby` still works across a portal, because the link is by id.
+- **Stable keys keep focus.** Index keys on a reorderable list move DOM identity, and focus goes to the wrong row.
+- **Do not render interactive content inside an `aria-hidden` container.** Use `inert` on background regions so focus is blocked too.
+
+### `eslint-plugin-jsx-a11y`
+
+Static rules catch the cheap mistakes before review.
+
+```bash
+pnpm add -D eslint-plugin-jsx-a11y
+```
+
+```js
+import jsxA11y from "eslint-plugin-jsx-a11y";
+
+export default [
+  {
+    files: ["**/*.tsx"],
+    plugins: { "jsx-a11y": jsxA11y },
+    rules: {
+      ...jsxA11y.configs.recommended.rules,
+      "jsx-a11y/no-static-element-interactions": "error",
+      "jsx-a11y/click-events-have-key-events": "error",
+      "jsx-a11y/anchor-is-valid": "error",
+      "jsx-a11y/label-has-associated-control": "error",
+    },
+  },
+];
+```
+
+It reads JSX only. It cannot know what your `Button` renders, and it cannot evaluate contrast or focus order. Treat it as spell-check, not proof. Typing helps too — see [TypeScript a JS / React dev actually needs](/blog/typescript) for how `ComponentPropsWithRef` keeps ARIA props checked.
+
+## Building common widgets
+
+### Disclosure and accordion
+
+The simplest widget, and a good template: state on the trigger, panel adjacent.
+
+```tsx
+import { useId, useState } from "react";
+
+export function Disclosure({ summary, children }: { summary: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+
+  return (
+    <div className="disclosure">
+      <h3>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {summary}
+        </button>
+      </h3>
+      <div id={panelId} role="region" aria-label={summary} hidden={!open}>
+        {children}
+      </div>
+    </div>
+  );
+}
+```
+
+The button lives *inside* the heading so heading navigation still works. An accordion is a stack of these at the same heading level. If you do not need animated panels, native `details` and `summary` already do all of this.
+
+### Tabs
+
+Tabs need a roving tabindex: one tab stop for the whole tablist, arrow keys to move between tabs.
+
+```tsx
+import { useId, useRef, useState } from "react";
+
+type Tab = { id: string; label: string; content: React.ReactNode };
+
+export function Tabs({ tabs }: { tabs: Tab[] }) {
+  const [active, setActive] = useState(0);
+  const base = useId();
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    const last = tabs.length - 1;
+    let next = active;
+
+    if (e.key === "ArrowRight") next = active === last ? 0 : active + 1;
+    else if (e.key === "ArrowLeft") next = active === 0 ? last : active - 1;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = last;
+    else return;
+
+    e.preventDefault();
+    setActive(next);
+    refs.current[next]?.focus();
+  }
+
+  return (
+    <>
+      <div role="tablist" aria-label="Settings" onKeyDown={onKeyDown}>
+        {tabs.map((tab, i) => (
+          <button
+            key={tab.id}
+            ref={(el) => {
+              refs.current[i] = el;
+            }}
+            type="button"
+            role="tab"
+            id={`${base}-tab-${tab.id}`}
+            aria-selected={i === active}
+            aria-controls={`${base}-panel-${tab.id}`}
+            tabIndex={i === active ? 0 : -1}
+            onClick={() => setActive(i)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {tabs.map((tab, i) => (
+        <div
+          key={tab.id}
+          role="tabpanel"
+          id={`${base}-panel-${tab.id}`}
+          aria-labelledby={`${base}-tab-${tab.id}`}
+          tabIndex={0}
+          hidden={i !== active}
+        >
+          {tab.content}
+        </div>
+      ))}
+    </>
+  );
+}
+```
+
+That is roughly the minimum, and it is already easy to break.
+
+### Combobox and menu — use a library
+
+An autocomplete combobox needs `role="combobox"`, `aria-expanded`, `aria-activedescendant` tracking the virtually-focused option, arrow and Escape and Enter and Home and End handling, typeahead, a live region for the result count, and workarounds for screen readers that disagree about the pattern. A menu button needs `role="menu"`, arrow navigation, typeahead, and focus return.
+
+| Option | What you get | Trade-off |
+| --- | --- | --- |
+| Radix UI Primitives | Unstyled, correct focus and ARIA, composable parts | Bundle per primitive, abstraction to learn |
+| React Aria Components | Tested behaviour hooks, strong i18n and touch support | Larger conceptual surface |
+| Headless UI | Small set, Tailwind-friendly | Fewer widgets covered |
+| Hand-rolled | Full control | You own every screen reader bug forever |
+
+Write your own disclosure, tablist, or `dialog`-based modal. Take a library for combobox, menu, listbox, date picker, and anything combining a floating layer with keyboard grid navigation.
+
+## Testing
+
+### Keyboard-only pass
+
+Put the mouse down and Tab through the page. Every interactive element should be reachable in an order matching the visual layout. The focus ring should always be visible, including under sticky headers. Enter and Space activate buttons, Enter follows links, Escape closes dialogs and menus with focus returning. Nothing hidden should be reachable — off-canvas menus and closed accordions are the usual offenders.
+
+This one pass finds more real bugs than any automated tool.
+
+### Screen readers
+
+You do not need to be a power user. Learn enough to check a name and a state.
+
+| Reader | Platform | Start | Basics |
+| --- | --- | --- | --- |
+| VoiceOver | macOS | Cmd + F5 | Ctrl + Option + arrows to move, Ctrl + Option + U for the rotor |
+| VoiceOver | iOS | Settings, Accessibility | Swipe right to move, double-tap to activate |
+| NVDA | Windows | Free download | H for headings, D for landmarks, F for form fields |
+| TalkBack | Android | Settings, Accessibility | Swipe navigation |
+
+Test VoiceOver with Safari and NVDA with Firefox or Chrome — reader and browser behave as a pair. Listen for whether each control announces a sensible name and role, and whether the state changes when you activate it.
+
+### axe, Lighthouse, and role queries
+
+**axe DevTools** is the highest-signal automated scan, with per-issue explanations and the offending node. **Lighthouse** runs a subset of the same rules; a score of 100 does not mean accessible. For CI, use `@axe-core/playwright` or the axe CLI against key routes.
+
+React Testing Library's role queries are an accessibility check in disguise. If you cannot find a control by role and name, a screen reader user cannot either.
+
+```tsx
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+
+test("dialog opens and returns focus", async () => {
+  const user = userEvent.setup();
+  render(<InvoiceRow />);
+
+  const trigger = screen.getByRole("button", { name: "Delete invoice" });
+  await user.click(trigger);
+
+  expect(screen.getByRole("dialog", { name: "Delete invoice?" })).toBeInTheDocument();
+
+  await user.keyboard("{Escape}");
+  expect(trigger).toHaveFocus();
+});
+```
+
+Prefer `getByRole`, `getByLabelText`, and `getByText` over `data-testid`. `userEvent` drives real key events, so it catches missing keyboard handlers that `fireEvent.click` would not. See [Jest](/blog/jest) for runner setup and mocking patterns.
+
+### The limits of automation
+
+Automated tools catch roughly **30 to 40%** of WCAG issues. They reliably find missing alt text and labels, invalid ARIA, duplicate ids, and contrast on solid backgrounds. They cannot judge whether `alt="chart"` describes the chart, whether tab order makes sense, whether focus lands somewhere useful after an action, whether an announcement is understandable and well timed, or whether an error tells the user how to fix the problem.
+
+The remaining majority needs a human with a keyboard and a screen reader. Budget for it.
+
+## PR checklist
+
+| Check | Pass condition |
+| --- | --- |
+| Semantics | Interactive elements are `button`, `a`, `input`, `select` — not `div` |
+| Names | Every control, icon button, and link has a clear accessible name |
+| Headings | One `h1`, no skipped levels |
+| Landmarks | One `main`, each `nav` labelled if there are several |
+| Keyboard | Full flow completable with Tab, Enter, Space, arrows, Escape |
+| Focus visible | Ring present and 3:1 contrast in both themes |
+| Focus moved | Route change, dialog open, dialog close all land focus deliberately |
+| Forms | `label` per field, errors via `aria-describedby` and `aria-invalid`, `autocomplete` set |
+| Live regions | Async results and toasts announce, region mounted up front |
+| Images | Meaningful `alt` or `alt=""`, decorative icons `aria-hidden` |
+| Contrast | 4.5:1 text, 3:1 UI, checked in dark theme |
+| Colour | Never the only signal for state |
+| Motion | Respects `prefers-reduced-motion` |
+| ARIA | Nothing a native element would have provided; nothing focusable is `aria-hidden` |
+| Zoom | Usable at 200% zoom and 320px width |
+| Tools | axe scan clean, lint clean, role queries pass |
+
+## Interview answers
+
+<details>
+<summary>What is the accessibility tree?</summary>
+
+A parallel tree the browser builds from the DOM, exposing each node's role, accessible name, description, and state to platform accessibility APIs. Screen readers read that tree, not your CSS. Inspect it in the Chrome DevTools Accessibility pane.
+
+</details>
+
+<details>
+<summary>What is the first rule of ARIA?</summary>
+
+Do not use ARIA if a native HTML element or attribute already provides the semantics and behaviour. ARIA only changes what is exposed to assistive technology — no keyboard handling, no focus management, no behaviour. Bad ARIA is worse than none, because it makes promises the code does not keep.
+
+</details>
+
+<details>
+<summary>When do you use <code>aria-label</code> versus <code>aria-labelledby</code>?</summary>
+
+`aria-labelledby` when the name already exists as visible text — reference it by id, and it can concatenate several ids. `aria-label` when there is no visible text, such as an icon-only button. `aria-labelledby` wins if both are present. Avoid `aria-label` on an element with visible text, since it overrides what voice-control users can say.
+
+</details>
+
+<details>
+<summary>Why is a positive <code>tabindex</code> a bad idea?</summary>
+
+It creates a document-wide priority order that runs before every natural tab stop, so one component with `tabindex="1"` reorders the whole page and the ordering must be maintained forever. Use `0` for focusable in DOM order and `-1` for programmatically focusable only.
+
+</details>
+
+<details>
+<summary>What should happen to focus on a client-side route change?</summary>
+
+Nothing happens by default, which is the bug: the URL and DOM change while focus stays put or falls to `body`. Move focus to the new page's `h1` with `tabIndex={-1}` so keyboard and screen reader users start at the top of the new content, optionally announcing the page title in a polite live region.
+
+</details>
+
+<details>
+<summary>What does an accessible modal require?</summary>
+
+Focus moves in on open, Tab is trapped inside, Escape closes it, focus returns to the trigger on close, and background content is unreachable by keyboard, pointer, and screen reader. The native `dialog` with `showModal()` provides the top layer, backdrop, Escape, and inertness; otherwise you need `inert` plus your own trap.
+
+</details>
+
+<details>
+<summary>Difference between <code>aria-live="polite"</code> and <code>assertive</code>?</summary>
+
+`polite` queues the announcement until the screen reader finishes speaking. `assertive` interrupts immediately. Use `polite` or `role="status"` for result counts and save confirmations, and reserve `assertive` or `role="alert"` for blocking errors. The region must be in the DOM before its content changes.
+
+</details>
+
+<details>
+<summary>How do you associate a validation error with an input?</summary>
+
+Render the error as text with an id, point the input at it with `aria-describedby`, and set `aria-invalid="true"` while the error is present. `aria-describedby` takes a space-separated list, so a hint and an error can both be announced. Colour and proximity are not enough.
+
+</details>
+
+<details>
+<summary>What contrast ratios does WCAG AA require?</summary>
+
+4.5:1 for body text, 3:1 for large text (18.66px bold or 24px and above), and 3:1 for UI component boundaries, meaningful icons, and focus indicators. AAA raises text to 7:1. Disabled controls are exempt but still need to be readable in practice.
+
+</details>
+
+<details>
+<summary>Why <code>useId</code> instead of a random id?</summary>
+
+`useId` produces the same value on the server and during hydration, so `htmlFor`, `aria-describedby`, and `aria-labelledby` associations survive. `Math.random()` or a module-level counter differs between server and client, producing a hydration mismatch and broken label associations.
+
+</details>
+
+<details>
+<summary>What fraction of accessibility issues can automated tools catch?</summary>
+
+Roughly 30 to 40% of WCAG failures. They find missing alt text and labels, invalid ARIA, duplicate ids, and contrast on solid backgrounds. They cannot assess whether alt text is meaningful, whether tab order makes sense, whether focus lands somewhere useful, or whether an announcement is understandable. Manual keyboard and screen reader passes cover the rest.
+
+</details>
+
+## Related reading
+
+- [What is hydration?](/blog/hydration) — why `useId` and server/client id stability matter
+- [React Hooks, by version](/blog/react-hooks) — `useId`, `useRef`, and what landed when
+- [Why you should not use innerHTML from a React useRef](/blog/react-innerhtml-useref) — refs for focus, not for markup
+- [Jest](/blog/jest) — test setup for role-based queries
+- [TypeScript a JS / React dev actually needs](/blog/typescript) — typing ARIA props on wrapper components
