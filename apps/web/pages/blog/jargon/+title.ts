@@ -1,3 +1,3 @@
 import { SITE } from "@webdev/widgets/config";
 
-export default `Jargon · Blog · ${SITE.name}`;
+export default `Jargon · Notes · ${SITE.name}`;
