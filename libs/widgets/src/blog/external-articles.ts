@@ -54,4 +54,22 @@ export const EXTERNAL_ARTICLES: ExternalArticle[] = [
     source: "CSS-Tricks",
     description: "Practical CSS, layout, and front-end notes — still one of the fastest ways to unstick a styling problem.",
   },
+  {
+    title: "TkDodo’s blog",
+    href: "https://tkdodo.eu/blog/",
+    source: "Dominik Dorfmeister",
+    description: "The TanStack Query maintainer on caching, query keys, and why server state is not client state.",
+  },
+  {
+    title: "ARIA Authoring Practices Guide",
+    href: "https://www.w3.org/WAI/ARIA/apg/",
+    source: "W3C WAI",
+    description: "The reference implementations for accessible widgets — keyboard behaviour and roles, pattern by pattern.",
+  },
+  {
+    title: "OWASP Cheat Sheet Series",
+    href: "https://cheatsheetseries.owasp.org/",
+    source: "OWASP",
+    description: "Short, opinionated security guidance — sessions, auth, XSS, and CSRF, written for people shipping code.",
+  },
 ];
