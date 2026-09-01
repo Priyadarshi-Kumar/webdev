@@ -373,3 +373,5 @@ No. If the app bundler compiles library TypeScript from source (`paths` / aliase
 Create `libs/foo` with `package.json` (name `@webdev/foo`), `project.json` (Nx `name`, targets, tags), and `src/index.ts`. Add it to `pnpm-workspace.yaml` if the glob does not already cover it (`libs/*` does). Add `workspace:*` on consumers, `paths` + Vite alias, and `implicitDependencies` on `web` (and any other app). Run `pnpm install`, then `pnpm nx graph` to confirm the edge. Do not publish to the registry first.
 
 </details>
+
+Related: [Docker for frontend developers](/blog/docker-for-frontend) (containerising a pnpm workspace), [CI](/blog/continuous-integration), [Nx affected](/blog/nx-affected).
