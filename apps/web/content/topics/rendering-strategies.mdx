@@ -1,0 +1,394 @@
+---
+title: CSR, SSR, and SSG — rendering strategies and how to deploy them
+description: Where and when your HTML gets built — client-side rendering, server-side rendering, static generation, ISR, streaming, and islands — plus the hosting, caching, and rollback story each one needs.
+slug: rendering-strategies
+date: 2026-09-01
+subject: react
+tags:
+  - react
+  - javascript
+  - browser
+  - tooling
+  - interview
+---
+
+"Should we use SSR?" is almost never the real question. The real question is **where the HTML for this route gets built, and when** — and the honest answer is usually different for your marketing page, your dashboard, and your blog.
+
+This note walks the strategies in order of how much work the browser has to do, shows what each one costs, and — the part most articles skip — what each one actually needs from your hosting.
+
+## The one question behind every strategy
+
+Every rendering strategy is two choices dressed up in an acronym.
+
+### Where the HTML is made
+
+- **In the browser** — the server sends a near-empty shell, JavaScript builds the DOM
+- **On a server** — a machine runs your components per request and returns HTML
+- **At build time** — HTML files are produced once, before any user shows up
+
+### When it is made
+
+- **Build time** — before the deploy, once per deploy
+- **Request time** — while the user waits
+- **Idle / on demand** — after a deploy, triggered by a timer or a webhook
+
+Pick a `where` and a `when` and you have named a strategy:
+
+| Where | When | Name |
+| --- | --- | --- |
+| Browser | Request | CSR |
+| Server | Request | SSR |
+| Build machine | Build | SSG |
+| Server | Build, then refresh | ISR |
+
+Everything else in this note — streaming, Server Components, islands — is a refinement of those four, not a fifth thing.
+
+## Client-side rendering (CSR)
+
+The server sends one HTML file that is essentially empty, plus a JavaScript bundle. React builds the entire page in the browser.
+
+```html
+<!-- what the server actually returns -->
+<div id="root"></div>
+<script type="module" src="/assets/index-a91f.js"></script>
+```
+
+### The request path
+
+1. Browser requests `/dashboard`, gets the shell
+2. Browser downloads and parses the JS bundle
+3. React mounts, discovers it needs data, fires `fetch`
+4. Spinner
+5. Data arrives, React renders the real UI
+
+Notice steps 2 and 3 are **serial**. The browser cannot know it needs `/api/user` until the bundle has run. That is the request waterfall, and it is the defining weakness of CSR.
+
+### What CSR is good at
+
+- Apps behind a login, where SEO is irrelevant
+- Highly interactive tools where the first paint matters less than the next 10 minutes
+- The simplest possible deployment — it is just files
+- No server runtime to patch, scale, or pay for
+
+### Where it hurts
+
+- **First load** is slowest: blank screen until JS parses and data returns
+- **SEO** is weak — crawlers may run JS, but you are betting on it
+- **Social previews** break: link unfurlers rarely execute JavaScript
+- A JS error or a blocked bundle means a **blank page**, not a degraded one
+
+### Deploying CSR
+
+Any static host works. The one thing you must configure is the **SPA fallback**: deep links like `/dashboard/settings` have no matching file on disk, so the host must return `index.html` with a `200` and let the client router take over.
+
+```toml
+# netlify.toml — serve index.html for unknown paths, but keep the 200
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+```
+
+A `301` or `404` here is the classic bug: the app works when you click, and breaks on refresh.
+
+## Server-side rendering (SSR)
+
+A server runs your components for each request and returns finished HTML. The browser paints real content immediately, then downloads JS to make it interactive.
+
+### The request path
+
+1. Browser requests `/product/42`
+2. Server fetches the product, renders React to an HTML string
+3. Browser paints **content** — meaningful pixels, no spinner
+4. JS bundle downloads
+5. React attaches handlers to that existing markup
+
+Step 5 is <Term id="hydration">hydration</Term>, and it is where SSR gets subtle: the first client render must produce the **same tree** the server sent. Render `new Date()` or read `window.innerWidth` during render and the two disagree — React warns, and may discard the server HTML you paid for. That family of bug is <Term id="react-tearing">tearing</Term>.
+
+### What SSR is good at
+
+- Content that must be indexed and unfurled correctly
+- Pages personalised per user or per request (currency, locale, A/B bucket)
+- Data that is too fresh to bake at build time
+- Fast **first contentful paint** on slow devices, because the phone is not doing the work
+
+### Where it hurts
+
+- **TTFB** now includes your data fetching — a slow database is a slow page
+- You own a **running server**: scaling, memory leaks, patching, uptime
+- Hydration is real CPU work on the client; SSR does not make a page interactive sooner by itself
+- Caching is harder because responses may be personalised
+
+### Deploying SSR
+
+You need a runtime, and you have three shapes to pick from.
+
+| Shape | Good | Bad |
+| --- | --- | --- |
+| **Long-lived Node server** (container, VM) | Warm, predictable, full Node API, easy to profile | You scale and patch it; idle cost |
+| **Serverless functions** | Scales to zero and to spikes | Cold starts; execution time limits |
+| **Edge runtime** | Runs near the user, very low latency | Restricted API surface, no raw TCP, small bundles |
+
+Container deploys are the most boring and most debuggable option — see [Docker for frontend developers](/blog/docker-for-frontend) for the multi-stage build.
+
+Whichever you choose, put a cache in front of it. Even five seconds of shared caching absorbs a traffic spike:
+
+```http
+Cache-Control: public, s-maxage=5, stale-while-revalidate=60
+```
+
+That header says: the CDN may serve this for 5 seconds, and for the next 60 it may serve a stale copy **while** it refreshes in the background. Users get an instant response; your origin gets one request instead of ten thousand.
+
+## Static site generation (SSG)
+
+The HTML is produced once, during the build, and shipped as plain files.
+
+```bash
+pnpm build
+# → dist/client/blog/hydration/index.html
+# → dist/client/blog/event-loop/index.html
+# → … one file per route
+```
+
+At request time there is no rendering at all — a CDN hands over a file.
+
+### What SSG is good at
+
+- **Speed**: nothing beats a file on a CDN edge node
+- **Cost**: no server, effectively free to host
+- **Reliability**: no runtime means no runtime errors, and no 3am pager
+- **Security**: no server-side attack surface for the page itself
+- Perfect SEO and social previews
+
+### Where it hurts
+
+- **Build time scales with page count** — 50,000 products is a slow deploy
+- Content changes require a **rebuild and redeploy**
+- Genuinely per-user content cannot be baked in
+
+That last point has an easy escape hatch, and it is the pattern most sites should reach for first: **static shell, dynamic islands of data**. Prerender the page, then fetch the user-specific bits in the browser. You get the CDN's first paint and still show live data — [TanStack Query](/blog/tanstack-query) is a comfortable fit for that fetch.
+
+### Deploying SSG
+
+Upload a folder. The two things worth getting right are caching and atomicity.
+
+Hashed assets never change contents, so cache them forever. HTML must **not** be cached hard, or users keep seeing the old page after a deploy:
+
+```toml
+# hashed filenames — safe to cache for a year
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# HTML — always revalidate
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+```
+
+Prefer a host that does **atomic** deploys, where the whole site flips at once. Otherwise a user can load new HTML that references a JS chunk which is not uploaded yet.
+
+## Incremental static regeneration (ISR)
+
+ISR is SSG that refreshes itself. Pages are static, but each has a shelf life.
+
+### Stale-while-revalidate, for pages
+
+Serve the cached page instantly. If it is older than the revalidation window, rebuild it **in the background** and serve the fresh copy to the next visitor. The user waiting never pays for the rebuild.
+
+### On-demand invalidation
+
+Better than a timer: let your CMS tell the site when something actually changed.
+
+```
+Editor publishes → CMS webhook → POST /api/revalidate?path=/blog/x → that page rebuilds
+```
+
+Now you have static performance with near-real-time content, and you rebuild one page instead of fifty thousand.
+
+### Deploying ISR
+
+This is the strategy with the least portability. ISR needs a platform that can write and invalidate cached pages — Next.js on Vercel, or equivalents on Netlify and Cloudflare. On a plain static host, ISR does not exist; the closest equivalent is a scheduled full rebuild.
+
+## Streaming SSR
+
+Classic SSR buffers: the server renders everything, then sends one response. One slow query holds the entire page hostage.
+
+Streaming sends HTML in chunks as it becomes ready. The shell arrives immediately; slower regions follow.
+
+```tsx
+<Layout>
+  <Header />                        {/* sent right away */}
+  <Suspense fallback={<Skeleton />}>
+    <Recommendations />             {/* streams in when its data resolves */}
+  </Suspense>
+</Layout>
+```
+
+<Term id="react-suspense">Suspense</Term> boundaries are the chunk boundaries — that is the whole mental model. React streams the fallback first, then pushes the real markup when the promise resolves.
+
+The catch: your host must support streaming responses. A platform that buffers function output into one payload silently converts your streaming app back into regular SSR.
+
+## React Server Components
+
+<Term id="server-components">Server Components</Term> are a different axis from CSR/SSR/SSG, which is why they confuse people. They are not about *when* HTML is produced — they are about **which components ship JavaScript to the browser at all**.
+
+A Server Component runs only on the server, can read a database directly, and sends its rendered output — not its code. A Client Component ships as JS and gets hydrated.
+
+```tsx
+// Server Component — zero bytes of this reach the browser
+async function ArticleList() {
+  const posts = await db.post.findMany();
+  return <ul>{posts.map((p) => <li key={p.id}>{p.title}</li>)}</ul>;
+}
+```
+
+The practical win is bundle size: a heavy markdown or date library used only for display never enters the client bundle. The practical cost is a sharper split in your codebase — no `useState` or `useEffect` in Server Components, and a serialization boundary between the two worlds.
+
+## Islands and partial hydration
+
+The islands model inverts the default. Instead of hydrating the whole page, the page is static HTML with small interactive regions that hydrate independently.
+
+A blog post becomes: static article text, plus one hydrated search box, plus one hydrated theme toggle. Everything else ships no JavaScript. Astro popularised this; the idea shows up wherever teams want "mostly content, a little interaction" without paying full hydration cost.
+
+## Side-by-side
+
+| | CSR | SSR | SSG | ISR |
+| --- | --- | --- | --- | --- |
+| HTML built | Browser | Server, per request | Build machine | Build, then refreshed |
+| TTFB | Fast (empty shell) | Slowest | Fastest | Fastest |
+| First paint | Slowest | Fast | Fastest | Fastest |
+| SEO | Weakest | Strong | Strong | Strong |
+| Personalisation | Easy | Easy | Hard | Hard |
+| Hosting | Static host | Runtime required | Static host | Platform support |
+| Scaling cost | Flat | Grows with traffic | Flat | Near flat |
+| Content freshness | Live | Live | Deploy-time | Configurable |
+
+## Choosing a strategy
+
+### A decision path
+
+1. **Is the page behind a login?** SEO does not matter. CSR is fine, and simplest.
+2. **Is the content the same for everyone?** SSG. Do not run a server to hand out identical bytes.
+3. **Same for everyone, but changes often?** ISR, or SSG plus a publish webhook.
+4. **Genuinely per-request** (user, geo, price, experiment)? SSR.
+5. **Mostly static with a slow section?** SSR with streaming, or static plus a client-side fetch.
+
+### Mix per route
+
+The strategies are per-route, not per-app. A healthy site usually looks like:
+
+- `/` and `/pricing` — SSG
+- `/blog/*` — SSG or ISR
+- `/product/:id` — ISR or SSR
+- `/app/*` — CSR behind auth
+
+Any modern framework lets you choose per route. Picking one strategy for an entire application is the actual mistake.
+
+## Deployment concerns that cut across all of them
+
+### Environment variables split in two
+
+This one causes real incidents. Build-time variables are **inlined into the bundle**:
+
+```ts
+const url = import.meta.env.VITE_API_URL; // becomes a literal string in the JS
+```
+
+Anything prefixed for client exposure is public the moment you deploy — it is sitting in a file anyone can read. Only an SSR or serverless runtime can read genuinely secret values, because that code never reaches the browser. Never put an API secret in a `VITE_`-prefixed variable.
+
+### Previews and rollbacks
+
+Deploy previews (one URL per pull request) are cheap for static output and more involved for SSR, where the preview needs its own runtime and usually its own database branch.
+
+Rollback is the sharpest difference. Static hosts keep every deploy, so rollback is repointing at the previous immutable snapshot — seconds, no rebuild. Rolling back an SSR app means redeploying an older image and hoping it still matches the current database schema.
+
+### Failure modes differ
+
+- **CSR** fails to a blank page — one bad bundle takes out everything
+- **SSG** barely fails at runtime; failures move to build time, where they are safe
+- **SSR** fails per request — a slow dependency degrades or 500s the page
+
+Push failure toward build time whenever you can. A broken build is an inconvenience; a broken production render is an outage.
+
+## How this site does it
+
+This site is SSG, and it is a fair illustration of the tradeoffs.
+
+[Vike](https://vike.dev/) prerenders every route at build time, and the output is published as a folder of files:
+
+```toml
+[build]
+  command = "pnpm nx build web"
+  publish = "apps/web/dist/client"
+```
+
+Every article in `content/topics/*.mdx` becomes a real HTML file, so a note loads as fast as the CDN can serve bytes, there is no server to run, and the whole site can be rolled back instantly. The cost is that publishing an article requires a rebuild — acceptable, because articles change far less often than they are read.
+
+The interactive parts — the practice editor, the JSON tools, the theme toggle — are ordinary client components hydrating on top of that static HTML. Static shell, interactive where it needs to be.
+
+## Common mistakes
+
+- **Using SSR for content that never changes.** You are paying a server bill to serve identical bytes. That is what a CDN is for.
+- **Assuming SSR is faster.** It improves first paint. It does not make the page interactive sooner — hydration still has to run.
+- **Caching HTML as aggressively as assets.** Hashed assets are immutable; HTML is not. Cache HTML hard and users keep seeing the previous deploy.
+- **Forgetting the SPA fallback.** The app works until someone refreshes on a deep link.
+- **Reading browser-only values during render.** `window`, `localStorage`, and `Date.now()` during render cause hydration mismatches. Read them in an effect.
+- **Treating the choice as global.** Pick per route.
+
+## Interview answers
+
+<details>
+<summary>What is the difference between SSR and SSG?</summary>
+
+Both produce HTML on a machine that is not the user's browser. **SSG** does it once at build time, so every visitor gets the same prebuilt file from a CDN. **SSR** does it per request, so the HTML can depend on who is asking. SSG is faster and cheaper; SSR is fresher and can be personalised.
+
+</details>
+
+<details>
+<summary>Does SSR make my app faster?</summary>
+
+It makes the **first contentful paint** faster, because the browser receives real markup instead of building it. It does not make the page **interactive** faster on its own — the JS bundle still has to download and hydrate. It can even make TTFB worse, since the server now does data fetching before it responds.
+
+</details>
+
+<details>
+<summary>What is hydration and why does it break?</summary>
+
+Hydration is React attaching to server-rendered HTML instead of recreating it. It breaks when the first client render does not match the server output — usually from reading `window`, `Date.now()`, or `localStorage` during render, or from generating random ids. Render a stable placeholder and update in an effect, and use `useId` for ids.
+
+</details>
+
+<details>
+<summary>When would you choose CSR?</summary>
+
+Behind authentication, where SEO and social previews are irrelevant and the user will stay for a while: dashboards, admin panels, editors. You get the simplest deployment — static files plus an SPA fallback — and no server runtime to operate.
+
+</details>
+
+<details>
+<summary>What is ISR and what does it need from the host?</summary>
+
+Incremental static regeneration serves a cached static page and rebuilds it in the background once it goes stale, either on a timer or via an on-demand webhook. It needs a platform that can regenerate and invalidate individual cached pages — it is not something a plain static file host can do.
+
+</details>
+
+<details>
+<summary>How do Server Components fit into CSR/SSR/SSG?</summary>
+
+They are a different axis. CSR, SSR, and SSG answer *when and where HTML is produced*. Server Components answer *which components ship JavaScript to the browser*. A Server Component runs on the server and sends its output rather than its code, which cuts bundle size; it can be combined with SSR or static generation.
+
+</details>
+
+<details>
+<summary>Where do environment secrets live in each strategy?</summary>
+
+Any variable exposed to the client build (a `VITE_` prefix, for example) is inlined into the JavaScript bundle and is therefore public. Only code that runs on a server — SSR handlers, serverless functions, or the build itself — can safely read secrets. A pure CSR or SSG app has nowhere to hide a secret at runtime, so it must call an API that holds it.
+
+</details>
+
+---
+
+Related: [What is hydration?](/blog/hydration), [React Server Components](/blog/server-components), [React Suspense](/blog/react-suspense), [Web performance](/blog/web-performance) (measuring what these choices buy), [Docker for frontend developers](/blog/docker-for-frontend) (running an SSR server), [Vite vs Webpack](/blog/vite).
