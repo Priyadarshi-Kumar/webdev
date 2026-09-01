@@ -871,7 +871,7 @@ Yes — any function that calls hooks and is named `useSomething`. Extract one w
 <details>
 <summary>Why do people still talk about useMemo if the React Compiler exists?</summary>
 
-The <Term id="react-compiler">compiler</Term> (stable around late 2025) auto-memoizes many components and values, so new code can skip manual `useMemo` / `useCallback`. Lots of production apps are not on it yet. Interviews still expect you to explain identity, dependency arrays, and when memoization is wasted work. Use the compiler where the build enables it; read existing hooks as if they were written by hand.
+The <Term id="react-compiler">compiler</Term> auto-memoizes many components and values, so new code can skip manual `useMemo` / `useCallback`. Plenty of production apps still do not have it switched on. Interviews still expect you to explain identity, dependency arrays, and when memoization is wasted work. Use the compiler where the build enables it; read existing hooks as if they were written by hand.
 
 </details>
 
