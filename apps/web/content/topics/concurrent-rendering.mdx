@@ -48,4 +48,4 @@ const list = useMemo(() => filter(items, deferredQuery), [items, deferredQuery])
 
 Because a render can pause, reading `Date.now()` or `window.innerWidth` during render can <Term id="react-tearing">tear</Term>. Subscribe with `useSyncExternalStore` instead. Do not store “the current time” in a module-level variable and read it in two components during one pass.
 
-Related: [tearing](/blog/react-tearing), [React Hooks by version](/blog/react-hooks), [the event loop](/blog/event-loop) (why yielding to the browser matters), [Web performance](/blog/web-performance) (INP).
+Related: [React concurrent rendering](/blog/react-concurrent-rendering) (lanes, time slicing, and the rules it imposes), [tearing](/blog/react-tearing), [React Hooks by version](/blog/react-hooks), [the event loop](/blog/event-loop) (why yielding to the browser matters), [Web performance](/blog/web-performance) (INP).
