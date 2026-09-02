@@ -54,5 +54,3 @@ export {
 } from "./blog-subjects";
 export { paginate, type Paginated } from "./paginate";
 export { deepEqual, formatValue } from "./practice-equal";
-export { runPracticeCode } from "./practice-run";
-export type { PracticeCheckResult, PracticeRunMode, PracticeRunResult } from "./practice-run";

@@ -10,11 +10,12 @@ export const practiceDifficulties: { id: PracticeDifficulty; label: string }[] =
 export const difficultyOrder: Record<PracticeDifficulty, number> = { easy: 0, medium: 1, hard: 2 };
 
 export const practiceGroups: { id: PracticeGroup; label: string; description: string }[] = [
-  { id: "basics", label: "Basics", description: "Return values, numbers, strings, and conditionals." },
-  { id: "arrays", label: "Arrays", description: "Map, unique, chunk, and flatten collections." },
-  { id: "objects", label: "Objects", description: "Pick keys and reshape plain objects." },
+  { id: "basics", label: "Basics", description: "Return values, numbers, and conditionals." },
+  { id: "strings", label: "Strings", description: "Slicing, casing, counting, and character work." },
+  { id: "arrays", label: "Arrays", description: "Map, filter, reduce, and reshape collections." },
+  { id: "objects", label: "Objects", description: "Pick, reshape, compare, and flatten plain objects." },
   { id: "functions", label: "Functions", description: "Closures, composition, and returned functions." },
-  { id: "async", label: "Async", description: "Promises and async results the grader can await." },
+  { id: "async", label: "Async", description: "Promises, sequencing, and concurrency control." },
 ];
 
 export const practiceQuestions: PracticeQuestion[] = [
@@ -31,6 +32,8 @@ export const practiceQuestions: PracticeQuestion[] = [
     examples: [
       { call: "sum(2, 3)", result: "5" },
       { call: "sum(-4, 1)", result: "-3" },
+      { call: "sum(0, 0)", result: "0" },
+      { call: "sum(1.5, 2.25)", result: "3.75" },
     ],
     notes: [
       "Use a function declaration or a const plus arrow function, as long as the name sum exists.",
@@ -38,16 +41,6 @@ export const practiceQuestions: PracticeQuestion[] = [
       "Return the number. Do not wrap it in a string.",
     ],
     hint: "return a + b;",
-    starter: `function sum(a, b) {
-  // return the sum
-}
-`,
-    tests: [
-      { label: "sum(2, 3) → 5", args: [2, 3], expected: 5 },
-      { label: "sum(-4, 1) → -3", args: [-4, 1], expected: -3 },
-      { label: "sum(0, 0) → 0", args: [0, 0], expected: 0 },
-      { label: "sum(1.5, 2.25) → 3.75", args: [1.5, 2.25], expected: 3.75 },
-    ],
   },
   {
     slug: "clamp",
@@ -63,53 +56,35 @@ export const practiceQuestions: PracticeQuestion[] = [
       { call: "clamp(15, 0, 10)", result: "10" },
       { call: "clamp(-2, 0, 10)", result: "0" },
       { call: "clamp(7, 0, 10)", result: "7" },
+      { call: "clamp(0, 0, 10)", result: "0" },
+      { call: "clamp(10, 0, 10)", result: "10" },
     ],
     notes: [
       "Inclusive bounds: clamp(0, 0, 10) is 0 and clamp(10, 0, 10) is 10.",
       "Math.min and Math.max can express this in one expression.",
     ],
     hint: "return Math.min(max, Math.max(min, value));",
-    starter: `function clamp(value, min, max) {
-  // keep value inside [min, max]
-}
-`,
-    tests: [
-      { label: "above max", args: [15, 0, 10], expected: 10 },
-      { label: "below min", args: [-2, 0, 10], expected: 0 },
-      { label: "inside range", args: [7, 0, 10], expected: 7 },
-      { label: "on the min", args: [0, 0, 10], expected: 0 },
-      { label: "on the max", args: [10, 0, 10], expected: 10 },
-    ],
   },
   {
     slug: "reverse-string",
     title: "Reverse a string",
     description: "Return a new string with the characters in reverse order.",
-    group: "basics",
+    group: "strings",
     difficulty: "easy",
     fnName: "reverseString",
     signature: "reverseString(text) → string",
     prompt:
       "Write reverseString(text) that returns a new string with the characters of text reversed. Do not mutate anything — strings are already immutable.",
     examples: [
-      { call: 'reverseString("ab")', result: '"ba"' },
-      { call: 'reverseString("")', result: '""' },
+      { call: "reverseString(\"ab\")", result: "\"ba\"" },
+      { call: "reverseString(\"\")", result: "\"\"" },
+      { call: "reverseString(\"code\")", result: "\"edoc\"" },
     ],
     notes: [
       "Unicode combining characters are out of scope; treat the string as a sequence of UTF-16 code units (the default for [...text] / split).",
       "Empty string should return empty string.",
     ],
-    hint: 'return [...text].reverse().join("");',
-    starter: `function reverseString(text) {
-  // return the reversed string
-}
-`,
-    tests: [
-      { label: "two letters", args: ["ab"], expected: "ba" },
-      { label: "empty", args: [""], expected: "" },
-      { label: "word", args: ["code"], expected: "edoc" },
-      { label: "spaces kept", args: ["a b"], expected: "b a" },
-    ],
+    hint: "return [...text].reverse().join(\"\");",
   },
   {
     slug: "fizzbuzz",
@@ -122,28 +97,17 @@ export const practiceQuestions: PracticeQuestion[] = [
     prompt:
       "Write fizzBuzz(n) for a single integer n. Return \"FizzBuzz\" if n is divisible by both 3 and 5, \"Fizz\" if only by 3, \"Buzz\" if only by 5, otherwise the decimal string of n (for example 1 → \"1\").",
     examples: [
-      { call: "fizzBuzz(3)", result: '"Fizz"' },
-      { call: "fizzBuzz(5)", result: '"Buzz"' },
-      { call: "fizzBuzz(15)", result: '"FizzBuzz"' },
-      { call: "fizzBuzz(2)", result: '"2"' },
+      { call: "fizzBuzz(3)", result: "\"Fizz\"" },
+      { call: "fizzBuzz(5)", result: "\"Buzz\"" },
+      { call: "fizzBuzz(15)", result: "\"FizzBuzz\"" },
+      { call: "fizzBuzz(2)", result: "\"2\"" },
+      { call: "fizzBuzz(30)", result: "\"FizzBuzz\"" },
     ],
     notes: [
       "Check 15 before 3 or 5, or use both conditions together.",
       "The return type is always a string — even when n is not Fizz or Buzz.",
     ],
-    hint: 'If n % 15 === 0 return "FizzBuzz". Else if n % 3 === 0 return "Fizz". Else if n % 5 === 0 return "Buzz". Else return String(n).',
-    starter: `function fizzBuzz(n) {
-  // return "Fizz", "Buzz", "FizzBuzz", or String(n)
-}
-`,
-    tests: [
-      { label: "divisible by 3", args: [3], expected: "Fizz" },
-      { label: "divisible by 5", args: [5], expected: "Buzz" },
-      { label: "divisible by 15", args: [15], expected: "FizzBuzz" },
-      { label: "neither", args: [2], expected: "2" },
-      { label: "30 is FizzBuzz", args: [30], expected: "FizzBuzz" },
-      { label: "7 as string", args: [7], expected: "7" },
-    ],
+    hint: "If n % 15 === 0 return \"FizzBuzz\". Else if n % 3 === 0 return \"Fizz\". Else if n % 5 === 0 return \"Buzz\". Else return String(n).",
   },
   {
     slug: "unique",
@@ -157,23 +121,15 @@ export const practiceQuestions: PracticeQuestion[] = [
       "Write unique(items) that returns a new array of the values in items with duplicates removed, keeping the first occurrence of each value. Use SameValueZero equality (what Set uses): NaN matches NaN, and 0 is distinct from \"0\".",
     examples: [
       { call: "unique([1, 1, 2, 1])", result: "[1, 2]" },
-      { call: 'unique(["a", "b", "a"])', result: '["a", "b"]' },
+      { call: "unique([\"a\", \"b\", \"a\"])", result: "[\"a\", \"b\"]" },
+      { call: "unique([])", result: "[]" },
+      { call: "unique([3,2,1])", result: "[3,2,1]" },
     ],
     notes: [
       "Do not sort. Order is first-seen.",
       "A Set walks insertion order — converting through Set is enough for primitives.",
     ],
     hint: "return [...new Set(items)];",
-    starter: `function unique(items) {
-  // return unique values, first-seen order
-}
-`,
-    tests: [
-      { label: "numbers", args: [[1, 1, 2, 1]], expected: [1, 2] },
-      { label: "strings", args: [["a", "b", "a"]], expected: ["a", "b"] },
-      { label: "empty", args: [[]], expected: [] },
-      { label: "already unique", args: [[3, 2, 1]], expected: [3, 2, 1] },
-    ],
   },
   {
     slug: "chunk",
@@ -188,6 +144,9 @@ export const practiceQuestions: PracticeQuestion[] = [
     examples: [
       { call: "chunk([1, 2, 3, 4, 5], 2)", result: "[[1, 2], [3, 4], [5]]" },
       { call: "chunk([1, 2, 3], 5)", result: "[[1, 2, 3]]" },
+      { call: "chunk([1,2,3,4], 2)", result: "[[1,2],[3,4]]" },
+      { call: "chunk([9,8], 1)", result: "[[9],[8]]" },
+      { call: "chunk([], 3)", result: "[]" },
     ],
     notes: [
       "Return a new array. Do not mutate items.",
@@ -195,17 +154,6 @@ export const practiceQuestions: PracticeQuestion[] = [
       "An empty input should return [].",
     ],
     hint: "Loop with i += size and push items.slice(i, i + size).",
-    starter: `function chunk(items, size) {
-  // return an array of chunks
-}
-`,
-    tests: [
-      { label: "leftover last chunk", args: [[1, 2, 3, 4, 5], 2], expected: [[1, 2], [3, 4], [5]] },
-      { label: "size larger than length", args: [[1, 2, 3], 5], expected: [[1, 2, 3]] },
-      { label: "exact fit", args: [[1, 2, 3, 4], 2], expected: [[1, 2], [3, 4]] },
-      { label: "size 1", args: [[9, 8], 1], expected: [[9], [8]] },
-      { label: "empty", args: [[], 3], expected: [] },
-    ],
   },
   {
     slug: "flatten",
@@ -220,22 +168,14 @@ export const practiceQuestions: PracticeQuestion[] = [
     examples: [
       { call: "flatten([1, [2, 3], 4])", result: "[1, 2, 3, 4]" },
       { call: "flatten([1, [2, [3]], 4])", result: "[1, 2, [3], 4]" },
+      { call: "flatten([1,2,3])", result: "[1,2,3]" },
+      { call: "flatten([1,[],2])", result: "[1,2]" },
     ],
     notes: [
       "Array.prototype.flat(1) is allowed.",
       "Empty nested arrays contribute nothing.",
     ],
     hint: "return items.flat(1);  — or concat in a loop.",
-    starter: `function flatten(items) {
-  // flatten exactly one level
-}
-`,
-    tests: [
-      { label: "one nested array", args: [[1, [2, 3], 4]], expected: [1, 2, 3, 4] },
-      { label: "leave deeper arrays", args: [[1, [2, [3]], 4]], expected: [1, 2, [3], 4] },
-      { label: "already flat", args: [[1, 2, 3]], expected: [1, 2, 3] },
-      { label: "empty nested", args: [[1, [], 2]], expected: [1, 2] },
-    ],
   },
   {
     slug: "pick",
@@ -248,24 +188,17 @@ export const practiceQuestions: PracticeQuestion[] = [
     prompt:
       "Write pick(source, keys) that returns a new object. For each string in keys, if source has an own property with that name, copy it. Skip missing keys. Do not mutate source.",
     examples: [
-      { call: 'pick({ a: 1, b: 2, c: 3 }, ["a", "c"])', result: "{ a: 1, c: 3 }" },
-      { call: 'pick({ a: 1 }, ["b"])', result: "{}" },
+      { call: "pick({ a: 1, b: 2, c: 3 }, [\"a\", \"c\"])", result: "{ a: 1, c: 3 }" },
+      { call: "pick({ a: 1 }, [\"b\"])", result: "{}" },
+      { call: "pick({\"a\":1,\"b\":2,\"c\":3}, [\"a\",\"c\"])", result: "{\"a\":1,\"c\":3}" },
+      { call: "pick({\"a\":1}, [\"b\"])", result: "{}" },
+      { call: "pick({\"a\":0,\"b\":2}, [\"a\"])", result: "{\"a\":0}" },
     ],
     notes: [
       "Use Object.hasOwn(source, key) or Object.prototype.hasOwnProperty.call so inherited keys are not copied.",
       "Values can be 0, false, or null — still copy them if the key exists.",
     ],
     hint: "Start with {}. For each key, if Object.hasOwn(source, key) then result[key] = source[key].",
-    starter: `function pick(source, keys) {
-  // return a new object with only those keys
-}
-`,
-    tests: [
-      { label: "two keys", args: [{ a: 1, b: 2, c: 3 }, ["a", "c"]], expected: { a: 1, c: 3 } },
-      { label: "missing key skipped", args: [{ a: 1 }, ["b"]], expected: {} },
-      { label: "falsy value kept", args: [{ a: 0, b: 2 }, ["a"]], expected: { a: 0 } },
-      { label: "empty keys", args: [{ a: 1 }, []], expected: {} },
-    ],
   },
   {
     slug: "invert",
@@ -278,24 +211,17 @@ export const practiceQuestions: PracticeQuestion[] = [
     prompt:
       "Write invert(source) that returns a new object. Each own enumerable key of source becomes a value, and each value becomes a key via String(value). If two values stringify the same, the later key wins.",
     examples: [
-      { call: "invert({ a: 1, b: 2 })", result: '{ "1": "a", "2": "b" }' },
-      { call: "invert({ a: 1, b: 1 })", result: '{ "1": "b" }' },
+      { call: "invert({ a: 1, b: 2 })", result: "{ \"1\": \"a\", \"2\": \"b\" }" },
+      { call: "invert({ a: 1, b: 1 })", result: "{ \"1\": \"b\" }" },
+      { call: "invert({\"a\":1,\"b\":2})", result: "{\"1\":\"a\",\"2\":\"b\"}" },
+      { call: "invert({\"a\":1,\"b\":1})", result: "{\"1\":\"b\"}" },
+      { call: "invert({})", result: "{}" },
     ],
     notes: [
       "Object keys are always strings (or symbols — ignore symbols here).",
       "Number values become \"1\", \"2\", and so on.",
     ],
     hint: "for (const [key, value] of Object.entries(source)) result[String(value)] = key;",
-    starter: `function invert(source) {
-  // keys become values, values become keys
-}
-`,
-    tests: [
-      { label: "numbers to string keys", args: [{ a: 1, b: 2 }], expected: { "1": "a", "2": "b" } },
-      { label: "later duplicate wins", args: [{ a: 1, b: 1 }], expected: { "1": "b" } },
-      { label: "empty", args: [{}], expected: {} },
-      { label: "string values", args: [{ x: "y" }], expected: { y: "x" } },
-    ],
   },
   {
     slug: "make-counter",
@@ -310,33 +236,13 @@ export const practiceQuestions: PracticeQuestion[] = [
     examples: [
       { call: "const c = makeCounter(0); c(); c();", result: "1 then 2" },
       { call: "makeCounter(10)()", result: "11" },
+      { call: "0", result: "1, 2, 3" },
     ],
     notes: [
       "The increment lives in the outer function’s scope (let n = start), not on a global.",
       "Each call to makeCounter allocates a new n.",
     ],
     hint: "let n = start; return function () { n += 1; return n; };",
-    starter: `function makeCounter(start) {
-  // return a function that increments and returns the next value
-}
-`,
-    tests: [
-      {
-        label: "0 → 1, 2, 3",
-        expected: [1, 2, 3],
-        run: "const c = fn(0); return [c(), c(), c()];",
-      },
-      {
-        label: "start at 10",
-        expected: [11, 12],
-        run: "const c = fn(10); return [c(), c()];",
-      },
-      {
-        label: "two counters are independent",
-        expected: [1, 1, 2],
-        run: "const a = fn(0); const b = fn(0); return [a(), b(), a()];",
-      },
-    ],
   },
   {
     slug: "compose",
@@ -351,33 +257,14 @@ export const practiceQuestions: PracticeQuestion[] = [
     examples: [
       { call: "compose(add1, double)(3)  // add1(double(3))", result: "7" },
       { call: "compose(double, add1)(3)", result: "8" },
+      { call: "add1(double(3))", result: "7" },
+      { call: "double(add1(3))", result: "8" },
     ],
     notes: [
       "Right-to-left is the usual math order: (f ∘ g)(x) = f(g(x)).",
       "Return a new function; do not invoke f(g(x)) inside compose itself.",
     ],
     hint: "return function (x) { return f(g(x)); };",
-    starter: `function compose(f, g) {
-  // return a function that runs g, then f
-}
-`,
-    tests: [
-      {
-        label: "add1(double(3)) → 7",
-        expected: 7,
-        run: "const add1 = (n) => n + 1; const double = (n) => n * 2; return fn(add1, double)(3);",
-      },
-      {
-        label: "double(add1(3)) → 8",
-        expected: 8,
-        run: "const add1 = (n) => n + 1; const double = (n) => n * 2; return fn(double, add1)(3);",
-      },
-      {
-        label: "does not call f until the inner function runs",
-        expected: 0,
-        run: "let calls = 0; const f = (n) => { calls += 1; return n; }; const g = (n) => n; fn(f, g); return calls;",
-      },
-    ],
   },
   {
     slug: "double-later",
@@ -392,50 +279,38 @@ export const practiceQuestions: PracticeQuestion[] = [
     examples: [
       { call: "await doubleLater(4)", result: "8" },
       { call: "await doubleLater(0)", result: "0" },
+      { call: "doubleLater(4)", result: "8" },
+      { call: "doubleLater(0)", result: "0" },
+      { call: "doubleLater(-3)", result: "-6" },
     ],
     notes: [
       "async function doubleLater(n) { return n * 2; } also works — async always returns a promise.",
       "Rejecting or throwing fails the test.",
     ],
     hint: "return Promise.resolve(n * 2);",
-    starter: `function doubleLater(n) {
-  // return a promise for n * 2
-}
-`,
-    tests: [
-      { label: "double 4", args: [4], expected: 8 },
-      { label: "double 0", args: [0], expected: 0 },
-      { label: "double -3", args: [-3], expected: -6 },
-    ],
   },
   {
     slug: "palindrome",
     title: "Palindrome",
     description: "Return whether a string reads the same forwards and backwards.",
-    group: "basics",
+    group: "strings",
     difficulty: "easy",
     fnName: "isPalindrome",
     signature: "isPalindrome(text) → boolean",
     prompt:
       "Write isPalindrome(text) that returns true when text is the same as its reverse. Compare characters as-is: case, spaces, and punctuation all count. Empty string is a palindrome.",
     examples: [
-      { call: 'isPalindrome("aba")', result: "true" },
-      { call: 'isPalindrome("ab")', result: "false" },
-      { call: 'isPalindrome("")', result: "true" },
+      { call: "isPalindrome(\"aba\")", result: "true" },
+      { call: "isPalindrome(\"ab\")", result: "false" },
+      { call: "isPalindrome(\"\")", result: "true" },
+      { call: "isPalindrome(\"Aa\")", result: "false" },
+      { call: "isPalindrome(\"z\")", result: "true" },
     ],
-    notes: ["Do not ignore case: \"Aa\" is not a palindrome.", "Single-character strings are palindromes."],
-    hint: 'return text === [...text].reverse().join("");',
-    starter: `function isPalindrome(text) {
-  // return true if text equals its reverse
-}
-`,
-    tests: [
-      { label: "odd length", args: ["aba"], expected: true },
-      { label: "not a palindrome", args: ["ab"], expected: false },
-      { label: "empty", args: [""], expected: true },
-      { label: "case sensitive", args: ["Aa"], expected: false },
-      { label: "one character", args: ["z"], expected: true },
+    notes: [
+      "Do not ignore case: \"Aa\" is not a palindrome.",
+      "Single-character strings are palindromes.",
     ],
+    hint: "return text === [...text].reverse().join(\"\");",
   },
   {
     slug: "factorial",
@@ -450,19 +325,14 @@ export const practiceQuestions: PracticeQuestion[] = [
     examples: [
       { call: "factorial(0)", result: "1" },
       { call: "factorial(5)", result: "120" },
+      { call: "factorial(1)", result: "1" },
+      { call: "factorial(6)", result: "720" },
     ],
-    notes: ["Do not recurse into negative n — it will not be passed.", "A loop or a recursive call both work."],
+    notes: [
+      "Do not recurse into negative n — it will not be passed.",
+      "A loop or a recursive call both work.",
+    ],
     hint: "Start at 1 and multiply from 2 through n.",
-    starter: `function factorial(n) {
-  // return n!
-}
-`,
-    tests: [
-      { label: "0! is 1", args: [0], expected: 1 },
-      { label: "1! is 1", args: [1], expected: 1 },
-      { label: "5! is 120", args: [5], expected: 120 },
-      { label: "6! is 720", args: [6], expected: 720 },
-    ],
   },
   {
     slug: "range",
@@ -478,78 +348,59 @@ export const practiceQuestions: PracticeQuestion[] = [
       { call: "range(1, 4)", result: "[1, 2, 3, 4]" },
       { call: "range(3, 3)", result: "[3]" },
       { call: "range(5, 2)", result: "[]" },
+      { call: "range(-2, 1)", result: "[-2,-1,0,1]" },
     ],
-    notes: ["Inclusive on both ends.", "Negative numbers are allowed."],
+    notes: [
+      "Inclusive on both ends.",
+      "Negative numbers are allowed.",
+    ],
     hint: "for (let i = start; i <= end; i++) push i.",
-    starter: `function range(start, end) {
-  // return [start, start+1, …, end]
-}
-`,
-    tests: [
-      { label: "1 through 4", args: [1, 4], expected: [1, 2, 3, 4] },
-      { label: "single value", args: [3, 3], expected: [3] },
-      { label: "start after end", args: [5, 2], expected: [] },
-      { label: "negatives", args: [-2, 1], expected: [-2, -1, 0, 1] },
-    ],
   },
   {
     slug: "anagram",
     title: "Anagram",
     description: "Decide if two strings use the same letters, ignoring case and spaces.",
-    group: "basics",
+    group: "strings",
     difficulty: "medium",
     fnName: "isAnagram",
     signature: "isAnagram(a, b) → boolean",
     prompt:
       "Write isAnagram(a, b) that returns true when a and b contain the same letters. Ignore case and spaces. Other punctuation will not appear. Empty strings are anagrams of each other.",
     examples: [
-      { call: 'isAnagram("listen", "silent")', result: "true" },
-      { call: 'isAnagram("Hello", "ole lh")', result: "true" },
-      { call: 'isAnagram("cat", "car")', result: "false" },
+      { call: "isAnagram(\"listen\", \"silent\")", result: "true" },
+      { call: "isAnagram(\"Hello\", \"ole lh\")", result: "true" },
+      { call: "isAnagram(\"cat\", \"car\")", result: "false" },
+      { call: "isAnagram(\"\", \"\")", result: "true" },
+      { call: "isAnagram(\"ab\", \"a\")", result: "false" },
     ],
-    notes: ["Sort the remaining letters after normalizing, or count frequencies.", "\"a a\" and \"aa\" are anagrams."],
-    hint: 'Normalize with toLowerCase and split/filter spaces, then sort and join.',
-    starter: `function isAnagram(a, b) {
-  // ignore case and spaces
-}
-`,
-    tests: [
-      { label: "listen / silent", args: ["listen", "silent"], expected: true },
-      { label: "spaces and case", args: ["Hello", "ole lh"], expected: true },
-      { label: "different letters", args: ["cat", "car"], expected: false },
-      { label: "empties", args: ["", ""], expected: true },
-      { label: "length mismatch after spaces", args: ["ab", "a"], expected: false },
+    notes: [
+      "Sort the remaining letters after normalizing, or count frequencies.",
+      "\"a a\" and \"aa\" are anagrams.",
     ],
+    hint: "Normalize with toLowerCase and split/filter spaces, then sort and join.",
   },
   {
     slug: "valid-parens",
     title: "Valid parentheses",
     description: "Check that (), [], and {} are balanced and correctly nested.",
-    group: "basics",
+    group: "strings",
     difficulty: "hard",
     fnName: "validParens",
     signature: "validParens(text) → boolean",
     prompt:
       "Write validParens(text) for a string made only of (), [], and {}. Return true when every opener has a matching closer of the same type, in the right order. Empty string is valid.",
     examples: [
-      { call: 'validParens("()[]{}")', result: "true" },
-      { call: 'validParens("([)]")', result: "false" },
-      { call: 'validParens("{[]}")', result: "true" },
+      { call: "validParens(\"()[]{}\")", result: "true" },
+      { call: "validParens(\"([)]\")", result: "false" },
+      { call: "validParens(\"{[]}\")", result: "true" },
+      { call: "validParens(\"\")", result: "true" },
+      { call: "validParens(\")\")", result: "false" },
     ],
-    notes: ["A stack of openers is the usual approach.", "A closer with an empty stack is invalid."],
+    notes: [
+      "A stack of openers is the usual approach.",
+      "A closer with an empty stack is invalid.",
+    ],
     hint: "Push openers. On a closer, pop and check it matches.",
-    starter: `function validParens(text) {
-  // return whether brackets are balanced
-}
-`,
-    tests: [
-      { label: "simple pairs", args: ["()[]{}"], expected: true },
-      { label: "nested", args: ["{[]}"], expected: true },
-      { label: "crossed", args: ["([)]"], expected: false },
-      { label: "empty", args: [""], expected: true },
-      { label: "only closer", args: [")"], expected: false },
-      { label: "unclosed", args: ["(()"], expected: false },
-    ],
   },
   {
     slug: "intersection",
@@ -564,19 +415,14 @@ export const practiceQuestions: PracticeQuestion[] = [
     examples: [
       { call: "intersection([1, 2, 2, 3], [2, 4])", result: "[2]" },
       { call: "intersection([1, 2], [3])", result: "[]" },
+      { call: "intersection([3,1,2], [1,2,3])", result: "[3,1,2]" },
+      { call: "intersection([], [1])", result: "[]" },
     ],
-    notes: ["Do not mutate the inputs.", "If a has 2 twice and b has 2, the result still has 2 once."],
+    notes: [
+      "Do not mutate the inputs.",
+      "If a has 2 twice and b has 2, the result still has 2 once.",
+    ],
     hint: "const set = new Set(b); then filter unique values from a that set.has.",
-    starter: `function intersection(a, b) {
-  // values in both, order from a
-}
-`,
-    tests: [
-      { label: "shared 2", args: [[1, 2, 2, 3], [2, 4]], expected: [2] },
-      { label: "none", args: [[1, 2], [3]], expected: [] },
-      { label: "preserves a order", args: [[3, 1, 2], [1, 2, 3]], expected: [3, 1, 2] },
-      { label: "empty a", args: [[], [1]], expected: [] },
-    ],
   },
   {
     slug: "zip",
@@ -589,21 +435,16 @@ export const practiceQuestions: PracticeQuestion[] = [
     prompt:
       "Write zip(a, b) that returns an array of [a[i], b[i]] pairs. Length is the minimum of a.length and b.length.",
     examples: [
-      { call: 'zip([1, 2, 3], ["a", "b"])', result: '[[1, "a"], [2, "b"]]' },
+      { call: "zip([1, 2, 3], [\"a\", \"b\"])", result: "[[1, \"a\"], [2, \"b\"]]" },
       { call: "zip([], [1])", result: "[]" },
+      { call: "zip([1], [9,8,7])", result: "[[1,9]]" },
+      { call: "zip([1,2], [3,4])", result: "[[1,3],[2,4]]" },
     ],
-    notes: ["Do not pad the shorter side.", "Pairs are two-element arrays."],
+    notes: [
+      "Do not pad the shorter side.",
+      "Pairs are two-element arrays.",
+    ],
     hint: "Loop to Math.min(a.length, b.length) and push [a[i], b[i]].",
-    starter: `function zip(a, b) {
-  // pair by index, stop at the shorter
-}
-`,
-    tests: [
-      { label: "b shorter", args: [[1, 2, 3], ["a", "b"]], expected: [[1, "a"], [2, "b"]] },
-      { label: "a shorter", args: [[1], [9, 8, 7]], expected: [[1, 9]] },
-      { label: "empty", args: [[], [1]], expected: [] },
-      { label: "same length", args: [[1, 2], [3, 4]], expected: [[1, 3], [2, 4]] },
-    ],
   },
   {
     slug: "group-by",
@@ -616,31 +457,16 @@ export const practiceQuestions: PracticeQuestion[] = [
     prompt:
       "Write groupBy(items, keyFn) that returns an object. For each item, call keyFn(item) to get a string (or number) key and push the item onto that key’s array, preserving order. Do not mutate items.",
     examples: [
-      { call: "groupBy([{t:\"a\"},{t:\"b\"},{t:\"a\"}], x => x.t)", result: '{ a: [{t:"a"},{t:"a"}], b: [{t:"b"}] }' },
+      { call: "groupBy([{t:\"a\"},{t:\"b\"},{t:\"a\"}], x => x.t)", result: "{ a: [{t:\"a\"},{t:\"a\"}], b: [{t:\"b\"}] }" },
+      { call: "groupBy([1, 2, 3], (n) => (n % 2 ? \"odd\" : \"even\"))", result: "{ odd: [1, 3], even: [2] }" },
+      { call: "groupBy([], (x) => x)", result: "{}" },
+      { call: "groupBy([\"aa\", \"b\"], (s) => s.length)", result: "{ 2: [\"aa\"], 1: [\"b\"] }" },
     ],
-    notes: ["Create arrays as keys appear.", "Number keys become string keys on the object."],
+    notes: [
+      "Create arrays as keys appear.",
+      "Number keys become string keys on the object.",
+    ],
     hint: "result[key] ??= []; result[key].push(item);",
-    starter: `function groupBy(items, keyFn) {
-  // bucket items by keyFn(item)
-}
-`,
-    tests: [
-      {
-        label: "two groups",
-        expected: { a: [{ t: "a", n: 1 }, { t: "a", n: 2 }], b: [{ t: "b", n: 3 }] },
-        run: "return fn([{ t: 'a', n: 1 }, { t: 'b', n: 3 }, { t: 'a', n: 2 }], (x) => x.t);",
-      },
-      {
-        label: "empty",
-        expected: {},
-        run: "return fn([], (x) => x);",
-      },
-      {
-        label: "numeric keys stringify",
-        expected: { "1": [1, 11], "2": [2] },
-        run: "return fn([1, 2, 11], (n) => n % 10);",
-      },
-    ],
   },
   {
     slug: "two-sum",
@@ -655,19 +481,14 @@ export const practiceQuestions: PracticeQuestion[] = [
     examples: [
       { call: "twoSum([2, 7, 11, 15], 9)", result: "[0, 1]" },
       { call: "twoSum([1, 2, 3], 7)", result: "null" },
+      { call: "twoSum([3,2,4], 6)", result: "[1,2]" },
+      { call: "twoSum([3,3], 6)", result: "[0,1]" },
     ],
-    notes: ["Prefer a nested loop or a Map of value → index.", "Return null, not undefined, when there is no pair."],
+    notes: [
+      "Prefer a nested loop or a Map of value → index.",
+      "Return null, not undefined, when there is no pair.",
+    ],
     hint: "For each i, look for target - nums[i] at a later index.",
-    starter: `function twoSum(nums, target) {
-  // return [i, j] or null
-}
-`,
-    tests: [
-      { label: "classic pair", args: [[2, 7, 11, 15], 9], expected: [0, 1] },
-      { label: "later pair", args: [[3, 2, 4], 6], expected: [1, 2] },
-      { label: "no pair", args: [[1, 2, 3], 7], expected: null },
-      { label: "duplicates", args: [[3, 3], 6], expected: [0, 1] },
-    ],
   },
   {
     slug: "flatten-deep",
@@ -682,19 +503,15 @@ export const practiceQuestions: PracticeQuestion[] = [
     examples: [
       { call: "flattenDeep([1, [2, [3, 4]], 5])", result: "[1, 2, 3, 4, 5]" },
       { call: "flattenDeep([[], 1])", result: "[1]" },
+      { call: "flattenDeep([1,2])", result: "[1,2]" },
+      { call: "flattenDeep([[],1,[[]]])", result: "[1]" },
+      { call: "flattenDeep([\"a\",[\"b\",[1]]])", result: "[\"a\",\"b\",1]" },
     ],
-    notes: ["Use Array.isArray, not typeof.", "flat(Infinity) is allowed."],
+    notes: [
+      "Use Array.isArray, not typeof.",
+      "flat(Infinity) is allowed.",
+    ],
     hint: "return items.flat(Infinity); or recurse when Array.isArray(item).",
-    starter: `function flattenDeep(items) {
-  // flatten nested arrays fully
-}
-`,
-    tests: [
-      { label: "nested three levels", args: [[1, [2, [3, 4]], 5]], expected: [1, 2, 3, 4, 5] },
-      { label: "already flat", args: [[1, 2]], expected: [1, 2] },
-      { label: "empty nested", args: [[[], 1, [[]]]], expected: [1] },
-      { label: "mixed types", args: [["a", ["b", [1]]]], expected: ["a", "b", 1] },
-    ],
   },
   {
     slug: "omit",
@@ -707,21 +524,17 @@ export const practiceQuestions: PracticeQuestion[] = [
     prompt:
       "Write omit(source, keys) that returns a new object with every own enumerable key of source except those named in keys. Do not mutate source.",
     examples: [
-      { call: 'omit({ a: 1, b: 2, c: 3 }, ["b"])', result: "{ a: 1, c: 3 }" },
-      { call: 'omit({ a: 1 }, ["z"])', result: "{ a: 1 }" },
+      { call: "omit({ a: 1, b: 2, c: 3 }, [\"b\"])", result: "{ a: 1, c: 3 }" },
+      { call: "omit({ a: 1 }, [\"z\"])", result: "{ a: 1 }" },
+      { call: "omit({\"a\":1,\"b\":2,\"c\":3}, [\"b\"])", result: "{\"a\":1,\"c\":3}" },
+      { call: "omit({\"a\":1}, [\"z\"])", result: "{\"a\":1}" },
+      { call: "omit({\"a\":1}, [\"a\"])", result: "{}" },
     ],
-    notes: ["Unknown keys in the list are ignored.", "Keep falsy values that you do not omit."],
+    notes: [
+      "Unknown keys in the list are ignored.",
+      "Keep falsy values that you do not omit.",
+    ],
     hint: "Filter Object.entries where !keys.includes(key), then Object.fromEntries.",
-    starter: `function omit(source, keys) {
-  // copy source without those keys
-}
-`,
-    tests: [
-      { label: "drop b", args: [{ a: 1, b: 2, c: 3 }, ["b"]], expected: { a: 1, c: 3 } },
-      { label: "unknown key", args: [{ a: 1 }, ["z"]], expected: { a: 1 } },
-      { label: "drop all", args: [{ a: 1 }, ["a"]], expected: {} },
-      { label: "keep zero", args: [{ a: 0, b: 1 }, ["b"]], expected: { a: 0 } },
-    ],
   },
   {
     slug: "map-values",
@@ -735,30 +548,15 @@ export const practiceQuestions: PracticeQuestion[] = [
       "Write mapValues(source, mapper) that returns a new object with the same own keys. Each value is mapper(value, key). Do not mutate source.",
     examples: [
       { call: "mapValues({ a: 1, b: 2 }, (n) => n * 2)", result: "{ a: 2, b: 4 }" },
+      { call: "mapValues({}, (n) => n)", result: "{}" },
+      { call: "mapValues({ a: \"x\" }, (s) => s.toUpperCase())", result: "{ a: \"X\" }" },
+      { call: "mapValues({ a: 1 }, (n, key) => key)", result: "{ a: \"a\" }" },
     ],
-    notes: ["Pass the key as the second argument so callers can use it.", "Empty object stays empty."],
+    notes: [
+      "Pass the key as the second argument so callers can use it.",
+      "Empty object stays empty.",
+    ],
     hint: "for (const [key, value] of Object.entries(source)) result[key] = mapper(value, key);",
-    starter: `function mapValues(source, mapper) {
-  // map each value, keep keys
-}
-`,
-    tests: [
-      {
-        label: "double numbers",
-        expected: { a: 2, b: 4 },
-        run: "return fn({ a: 1, b: 2 }, (n) => n * 2);",
-      },
-      {
-        label: "uses key",
-        expected: { a: "a:1", b: "b:2" },
-        run: "return fn({ a: 1, b: 2 }, (n, key) => key + ':' + n);",
-      },
-      {
-        label: "empty",
-        expected: {},
-        run: "return fn({}, (n) => n);",
-      },
-    ],
   },
   {
     slug: "get-path",
@@ -771,22 +569,17 @@ export const practiceQuestions: PracticeQuestion[] = [
     prompt:
       "Write getPath(source, path) where path is a dotted string such as \"a.b.c\". Walk those keys. If any step is null, undefined, or not an object that has the next key, return null. A path that lands on 0 or false should still return that value.",
     examples: [
-      { call: 'getPath({ a: { b: 2 } }, "a.b")', result: "2" },
-      { call: 'getPath({ a: 1 }, "a.b")', result: "null" },
+      { call: "getPath({ a: { b: 2 } }, \"a.b\")", result: "2" },
+      { call: "getPath({ a: 1 }, \"a.b\")", result: "null" },
+      { call: "getPath({\"a\":{\"b\":2}}, \"a.b\")", result: "2" },
+      { call: "getPath({\"a\":1}, \"a.b\")", result: "null" },
+      { call: "getPath({\"x\":0}, \"x\")", result: "0" },
     ],
-    notes: ["Split on \".\" only — no bracket syntax.", "Return null for a missing path, not undefined."],
+    notes: [
+      "Split on \".\" only — no bracket syntax.",
+      "Return null for a missing path, not undefined.",
+    ],
     hint: "Reduce over path.split('.'). If acc == null or the key is missing, return null.",
-    starter: `function getPath(source, path) {
-  // walk dotted keys; missing → null
-}
-`,
-    tests: [
-      { label: "nested hit", args: [{ a: { b: 2 } }, "a.b"], expected: 2 },
-      { label: "missing mid", args: [{ a: 1 }, "a.b"], expected: null },
-      { label: "top level", args: [{ x: 0 }, "x"], expected: 0 },
-      { label: "false is a value", args: [{ ok: false }, "ok"], expected: false },
-      { label: "empty object", args: [{}, "a"], expected: null },
-    ],
   },
   {
     slug: "once",
@@ -800,30 +593,15 @@ export const practiceQuestions: PracticeQuestion[] = [
       "Write once(fn) that returns a new function. The first time it is called, invoke fn with the same arguments and remember the return value. Later calls ignore new arguments and return that same value. fn must not run again.",
     examples: [
       { call: "const f = once((n) => n + 1); f(1); f(99);", result: "2 then 2" },
+      { call: "const f = once(() => Math.random()); f() === f()", result: "true" },
+      { call: "const f = once((a, b) => a + b); f(1, 2); f(9, 9);", result: "3 then 3" },
+      { call: "const f = once(() => 7); f();", result: "7" },
     ],
-    notes: ["Close over a called flag and a saved result.", "The wrapper should accept any number of arguments on the first call."],
+    notes: [
+      "Close over a called flag and a saved result.",
+      "The wrapper should accept any number of arguments on the first call.",
+    ],
     hint: "let called = false, result; return function (...args) { if (!called) { called = true; result = fn(...args); } return result; }",
-    starter: `function once(fn) {
-  // return a function that runs fn only once
-}
-`,
-    tests: [
-      {
-        label: "same result after first",
-        expected: [2, 2, 2],
-        run: "const f = fn((n) => n + 1); return [f(1), f(99), f(0)];",
-      },
-      {
-        label: "fn runs once",
-        expected: 1,
-        run: "let n = 0; const f = fn(() => { n += 1; return n; }); f(); f(); f(); return n;",
-      },
-      {
-        label: "forwards first args",
-        expected: 5,
-        run: "return fn((a, b) => a + b)(2, 3);",
-      },
-    ],
   },
   {
     slug: "pipe",
@@ -839,34 +617,11 @@ export const practiceQuestions: PracticeQuestion[] = [
       { call: "pipe(double, add1)(3)  // add1(double(3))", result: "7" },
       { call: "pipe()(4)", result: "4" },
     ],
-    notes: ["Opposite order from compose(f, g) which is f(g(x)).", "Support more than two functions."],
-    hint: "return (x) => fns.reduce((value, f) => f(value), x);",
-    starter: `function pipe(...fns) {
-  // left-to-right pipeline
-}
-`,
-    tests: [
-      {
-        label: "double then add1",
-        expected: 7,
-        run: "const add1 = (n) => n + 1; const double = (n) => n * 2; return fn(double, add1)(3);",
-      },
-      {
-        label: "three steps",
-        expected: 9,
-        run: "return fn((n) => n + 1, (n) => n * 2, (n) => n + 1)(3);",
-      },
-      {
-        label: "identity when empty",
-        expected: 4,
-        run: "return fn()(4);",
-      },
-      {
-        label: "lazy",
-        expected: 0,
-        run: "let calls = 0; const f = (n) => { calls += 1; return n; }; fn(f, f); return calls;",
-      },
+    notes: [
+      "Opposite order from compose(f, g) which is f(g(x)).",
+      "Support more than two functions.",
     ],
+    hint: "return (x) => fns.reduce((value, f) => f(value), x);",
   },
   {
     slug: "memoize",
@@ -880,30 +635,15 @@ export const practiceQuestions: PracticeQuestion[] = [
       "Write memoize(fn) that returns a wrapped function of one argument. The first time you see a given argument (SameValueZero, a Map is fine), call fn and store the result. Later calls with that same argument return the cached value without calling fn again. Different arguments each call fn once.",
     examples: [
       { call: "const f = memoize((n) => n * 2); f(2); f(2);", result: "4, fn ran once" },
+      { call: "const f = memoize(slowSquare); f(4); f(4);", result: "16 both times, one call" },
+      { call: "const f = memoize((n) => n + 1); f(1); f(2);", result: "2 then 3" },
+      { call: "const f = memoize((n) => n); f(0); f(0);", result: "0, cached" },
     ],
-    notes: ["A Map from argument to result is enough for primitives.", "Do not cache across different wrappers — each memoize(fn) has its own Map."],
+    notes: [
+      "A Map from argument to result is enough for primitives.",
+      "Do not cache across different wrappers — each memoize(fn) has its own Map.",
+    ],
     hint: "const cache = new Map(); return (arg) => { if (cache.has(arg)) return cache.get(arg); const value = fn(arg); cache.set(arg, value); return value; }",
-    starter: `function memoize(fn) {
-  // cache fn(arg) by arg
-}
-`,
-    tests: [
-      {
-        label: "caches repeat",
-        expected: [4, 1],
-        run: "let calls = 0; const f = fn((n) => { calls += 1; return n * 2; }); f(2); f(2); return [f(2), calls];",
-      },
-      {
-        label: "separate keys",
-        expected: [2, 2],
-        run: "let calls = 0; const f = fn((n) => { calls += 1; return n; }); f(1); f(2); return [calls, f(1)];",
-      },
-      {
-        label: "zero is a key",
-        expected: [0, 1],
-        run: "let calls = 0; const f = fn((n) => { calls += 1; return n; }); f(0); f(0); return [f(0), calls];",
-      },
-    ],
   },
   {
     slug: "delay",
@@ -916,23 +656,15 @@ export const practiceQuestions: PracticeQuestion[] = [
     prompt:
       "Write delay(ms, value) that returns a Promise which resolves to value after ms milliseconds. Use setTimeout. Check awaits the promise, so keep ms small in your own experiments.",
     examples: [
-      { call: "await delay(0, \"ok\")", result: '"ok"' },
+      { call: "await delay(0, \"ok\")", result: "\"ok\"" },
+      { call: "delay(0, \"ok\")", result: "\"ok\"" },
+      { call: "delay(0, 7)", result: "7" },
     ],
-    notes: ["new Promise((resolve) => setTimeout(() => resolve(value), ms))", "ms of 0 is still asynchronous — return a promise, not value itself."],
+    notes: [
+      "new Promise((resolve) => setTimeout(() => resolve(value), ms))",
+      "ms of 0 is still asynchronous — return a promise, not value itself.",
+    ],
     hint: "return new Promise((resolve) => { setTimeout(() => resolve(value), ms); });",
-    starter: `function delay(ms, value) {
-  // resolve value after ms
-}
-`,
-    tests: [
-      { label: "zero delay string", args: [0, "ok"], expected: "ok" },
-      { label: "zero delay number", args: [0, 7], expected: 7 },
-      {
-        label: "is a thenable",
-        expected: true,
-        run: "const p = fn(0, 1); return p != null && typeof p.then === 'function';",
-      },
-    ],
   },
   {
     slug: "retry",
@@ -948,29 +680,854 @@ export const practiceQuestions: PracticeQuestion[] = [
       { call: "await retry(() => 1, 3)", result: "1" },
       { call: "task fails twice then succeeds", result: "third return value" },
     ],
-    notes: ["attempts is a positive integer.", "Do not call task extra times after success."],
-    hint: "Loop attempts times, try/catch await task(), return on success, throw the last error after the loop.",
-    starter: `async function retry(task, attempts) {
-  // try task() up to attempts times
-}
-`,
-    tests: [
-      {
-        label: "succeeds first try",
-        expected: 1,
-        run: "return fn(() => 1, 3);",
-      },
-      {
-        label: "fails twice then works",
-        expected: 3,
-        run: "let n = 0; const task = () => { n += 1; if (n < 3) throw new Error('fail'); return n; }; return fn(task, 5);",
-      },
-      {
-        label: "counts failures",
-        expected: 2,
-        run: "let n = 0; const task = () => { n += 1; throw new Error('x'); }; try { await fn(task, 2); return 'nope'; } catch (err) { return n; }",
-      },
+    notes: [
+      "attempts is a positive integer.",
+      "Do not call task extra times after success.",
     ],
+    hint: "Loop attempts times, try/catch await task(), return on success, throw the last error after the loop.",
+  },
+  {
+    slug: "is-even",
+    title: "Even or odd",
+    description: "Report whether an integer is even.",
+    group: "basics",
+    difficulty: "easy",
+    fnName: "isEven",
+    signature: "isEven(n) → boolean",
+    prompt:
+      "Write isEven(n) that returns true when the integer n divides evenly by 2, and false otherwise. Negative numbers follow the same rule, and zero is even.",
+    examples: [
+      { call: "isEven(4)", result: "true" },
+      { call: "isEven(7)", result: "false" },
+      { call: "isEven(0)", result: "true" },
+      { call: "isEven(-3)", result: "false" },
+    ],
+    notes: [
+      "The remainder operator % gives the leftover after division.",
+      "Return a real boolean, not the string \"true\".",
+      "-3 % 2 is -1 in JavaScript, so compare against 0 rather than checking for 1.",
+    ],
+    hint: "return n % 2 === 0;",
+  },
+  {
+    slug: "max-of-three",
+    title: "Largest of three",
+    description: "Return the biggest of three numbers.",
+    group: "basics",
+    difficulty: "easy",
+    fnName: "maxOfThree",
+    signature: "maxOfThree(a, b, c) → number",
+    prompt:
+      "Write maxOfThree(a, b, c) returning the largest of the three numbers. If two or more are tied for largest, return that value.",
+    examples: [
+      { call: "maxOfThree(1, 9, 4)", result: "9" },
+      { call: "maxOfThree(-5, -2, -9)", result: "-2" },
+      { call: "maxOfThree(3, 3, 3)", result: "3" },
+    ],
+    notes: [
+      "Math.max accepts several arguments at once.",
+      "Works with negatives and decimals too.",
+    ],
+    hint: "return Math.max(a, b, c);",
+  },
+  {
+    slug: "celsius-to-fahrenheit",
+    title: "Celsius to Fahrenheit",
+    description: "Convert a temperature between scales.",
+    group: "basics",
+    difficulty: "easy",
+    fnName: "toFahrenheit",
+    signature: "toFahrenheit(celsius) → number",
+    prompt:
+      "Write toFahrenheit(celsius) that converts a Celsius temperature to Fahrenheit using the formula c × 9/5 + 32. Return the number without rounding.",
+    examples: [
+      { call: "toFahrenheit(0)", result: "32" },
+      { call: "toFahrenheit(100)", result: "212" },
+      { call: "toFahrenheit(-40)", result: "-40" },
+      { call: "toFahrenheit(37)", result: "98.6" },
+    ],
+    notes: [
+      "Do not round — 37°C is exactly 98.6°F.",
+      "Multiply before adding, or wrap the multiplication in parentheses.",
+    ],
+    hint: "return celsius * 9 / 5 + 32;",
+  },
+  {
+    slug: "fibonacci",
+    title: "Nth Fibonacci number",
+    description: "Return the nth number in the Fibonacci sequence.",
+    group: "basics",
+    difficulty: "medium",
+    fnName: "fib",
+    signature: "fib(n) → number",
+    prompt:
+      "Write fib(n) returning the nth Fibonacci number, where fib(0) is 0, fib(1) is 1, and every later value is the sum of the previous two. Assume n is a non-negative integer. Prefer a loop — naive recursion is exponential and will crawl past n of about 35.",
+    examples: [
+      { call: "fib(0)", result: "0" },
+      { call: "fib(1)", result: "1" },
+      { call: "fib(7)", result: "13" },
+      { call: "fib(20)", result: "6765" },
+    ],
+    notes: [
+      "Keep two running values and swap them each pass instead of recursing.",
+      "An iterative version is O(n) time and O(1) space.",
+      "Handle 0 and 1 before the loop starts.",
+    ],
+    hint: "Track prev and curr, then loop n times reassigning both.",
+  },
+  {
+    slug: "gcd",
+    title: "Greatest common divisor",
+    description: "Find the largest number dividing both inputs.",
+    group: "basics",
+    difficulty: "medium",
+    fnName: "gcd",
+    signature: "gcd(a, b) → number",
+    prompt:
+      "Write gcd(a, b) returning the greatest common divisor of two positive integers, using the Euclidean algorithm: repeatedly replace the pair with (b, a % b) until b reaches 0, then a is the answer.",
+    examples: [
+      { call: "gcd(12, 18)", result: "6" },
+      { call: "gcd(7, 13)", result: "1" },
+      { call: "gcd(48, 18)", result: "6" },
+      { call: "gcd(9, 9)", result: "9" },
+    ],
+    notes: [
+      "Coprime numbers give 1, which is correct rather than an error.",
+      "The loop ends when the remainder hits 0.",
+      "A while loop is enough; recursion also works.",
+    ],
+    hint: "while (b !== 0) { [a, b] = [b, a % b]; } return a;",
+  },
+  {
+    slug: "is-prime",
+    title: "Prime check",
+    description: "Decide whether an integer is prime.",
+    group: "basics",
+    difficulty: "medium",
+    fnName: "isPrime",
+    signature: "isPrime(n) → boolean",
+    prompt:
+      "Write isPrime(n) returning true when n is a prime number. A prime is an integer greater than 1 whose only divisors are 1 and itself. Numbers of 1 and below are never prime. Only test divisors up to the square root of n.",
+    examples: [
+      { call: "isPrime(2)", result: "true" },
+      { call: "isPrime(1)", result: "false" },
+      { call: "isPrime(9)", result: "false" },
+      { call: "isPrime(97)", result: "true" },
+    ],
+    notes: [
+      "2 is the only even prime.",
+      "Testing past Math.sqrt(n) is wasted work — factors come in pairs.",
+      "Guard n <= 1 before the loop.",
+    ],
+    hint: "Loop i from 2 while i * i <= n and return false on any exact divisor.",
+  },
+  {
+    slug: "capitalize",
+    title: "Capitalize a word",
+    description: "Upper-case the first letter and lower-case the rest.",
+    group: "strings",
+    difficulty: "easy",
+    fnName: "capitalize",
+    signature: "capitalize(word) → string",
+    prompt:
+      "Write capitalize(word) that upper-cases the first character and lower-cases everything after it. An empty string returns an empty string.",
+    examples: [
+      { call: "capitalize(\"hello\")", result: "\"Hello\"" },
+      { call: "capitalize(\"wORLD\")", result: "\"World\"" },
+      { call: "capitalize(\"\")", result: "\"\"" },
+      { call: "capitalize(\"a\")", result: "\"A\"" },
+    ],
+    notes: [
+      "Guard the empty string — charAt(0) on \"\" is \"\", which is safe, but slicing logic still needs care.",
+      "Strings are immutable, so build a new one.",
+    ],
+    hint: "return word ? word[0].toUpperCase() + word.slice(1).toLowerCase() : word;",
+  },
+  {
+    slug: "count-vowels",
+    title: "Count the vowels",
+    description: "Count a, e, i, o, u in a string.",
+    group: "strings",
+    difficulty: "easy",
+    fnName: "countVowels",
+    signature: "countVowels(text) → number",
+    prompt:
+      "Write countVowels(text) returning how many vowels (a, e, i, o, u) the string contains. Count both upper and lower case. y does not count.",
+    examples: [
+      { call: "countVowels(\"hello\")", result: "2" },
+      { call: "countVowels(\"RHYTHM\")", result: "0" },
+      { call: "countVowels(\"AEIOU\")", result: "5" },
+      { call: "countVowels(\"\")", result: "0" },
+    ],
+    notes: [
+      "Lower-case the text once up front so you only compare against five letters.",
+      "A Set of vowels reads more clearly than a long condition.",
+    ],
+    hint: "Lower-case, split to characters, and filter on \"aeiou\".includes(ch).",
+  },
+  {
+    slug: "truncate",
+    title: "Truncate with an ellipsis",
+    description: "Shorten long text to a maximum length.",
+    group: "strings",
+    difficulty: "easy",
+    fnName: "truncate",
+    signature: "truncate(text, max) → string",
+    prompt:
+      "Write truncate(text, max) that returns the text unchanged when its length is max or less. When it is longer, cut it so the returned string is exactly max characters including a trailing \"...\".",
+    examples: [
+      { call: "truncate(\"hello world\", 8)", result: "\"hello...\"" },
+      { call: "truncate(\"short\", 10)", result: "\"short\"" },
+      { call: "truncate(\"abcdef\", 6)", result: "\"abcdef\"" },
+    ],
+    notes: [
+      "The ellipsis counts toward max, so slice to max - 3.",
+      "Return the original string when it already fits — do not add dots.",
+    ],
+    hint: "return text.length <= max ? text : text.slice(0, max - 3) + \"...\";",
+  },
+  {
+    slug: "longest-word",
+    title: "Longest word",
+    description: "Find the longest word in a sentence.",
+    group: "strings",
+    difficulty: "easy",
+    fnName: "longestWord",
+    signature: "longestWord(sentence) → string",
+    prompt:
+      "Write longestWord(sentence) returning the longest space-separated word. If several words tie for longest, return the first one. An empty string returns an empty string.",
+    examples: [
+      { call: "longestWord(\"the quick brown fox\")", result: "\"quick\"" },
+      { call: "longestWord(\"a bb ccc\")", result: "\"ccc\"" },
+      { call: "longestWord(\"tie four five\")", result: "\"four\"" },
+    ],
+    notes: [
+      "Split on spaces, then reduce keeping the longest seen so far.",
+      "Use strictly greater than so the first of a tie wins.",
+    ],
+    hint: "return sentence.split(\" \").reduce((best, w) => (w.length > best.length ? w : best), \"\");",
+  },
+  {
+    slug: "title-case",
+    title: "Title case a sentence",
+    description: "Capitalize every word in a sentence.",
+    group: "strings",
+    difficulty: "medium",
+    fnName: "titleCase",
+    signature: "titleCase(sentence) → string",
+    prompt:
+      "Write titleCase(sentence) that upper-cases the first letter of every space-separated word and lower-cases the rest of each word. Single spaces separate the words.",
+    examples: [
+      { call: "titleCase(\"hello world\")", result: "\"Hello World\"" },
+      { call: "titleCase(\"tHE qUICK fOX\")", result: "\"The Quick Fox\"" },
+      { call: "titleCase(\"a\")", result: "\"A\"" },
+    ],
+    notes: [
+      "Split, transform each word, then join back with a space.",
+      "Reuse the same logic as capitalize for each word.",
+    ],
+    hint: "Split on \" \", map each word to upper-first plus lower-rest, then join.",
+  },
+  {
+    slug: "word-frequency",
+    title: "Word frequency",
+    description: "Count how often each word appears.",
+    group: "strings",
+    difficulty: "medium",
+    fnName: "wordFrequency",
+    signature: "wordFrequency(text) → object",
+    prompt:
+      "Write wordFrequency(text) returning an object whose keys are the lower-cased words and whose values are how many times each appears. Words are separated by single spaces. An empty string returns an empty object.",
+    examples: [
+      { call: "wordFrequency(\"a b a\")", result: "{ a: 2, b: 1 }" },
+      { call: "wordFrequency(\"Hi hi HI\")", result: "{ hi: 3 }" },
+      { call: "wordFrequency(\"\")", result: "{}" },
+    ],
+    notes: [
+      "Lower-case before counting so \"Hi\" and \"hi\" share a key.",
+      "Guard the empty string — \"\".split(\" \") gives [\"\"], not [].",
+      "Start each key at 0 before incrementing.",
+    ],
+    hint: "Reduce over the words, doing counts[w] = (counts[w] ?? 0) + 1.",
+  },
+  {
+    slug: "caesar-cipher",
+    title: "Caesar cipher",
+    description: "Shift letters by a fixed amount.",
+    group: "strings",
+    difficulty: "hard",
+    fnName: "caesar",
+    signature: "caesar(text, shift) → string",
+    prompt:
+      "Write caesar(text, shift) that shifts every ASCII letter forward by shift positions, wrapping z to a and Z to A. Preserve case, and leave any non-letter character untouched. The shift may be larger than 26.",
+    examples: [
+      { call: "caesar(\"abc\", 1)", result: "\"bcd\"" },
+      { call: "caesar(\"xyz\", 3)", result: "\"abc\"" },
+      { call: "caesar(\"Hello, World!\", 5)", result: "\"Mjqqt, Btwqi!\"" },
+      { call: "caesar(\"abc\", 29)", result: "\"def\"" },
+    ],
+    notes: [
+      "Use charCodeAt and String.fromCharCode with the base 97 for lower case and 65 for upper.",
+      "Take shift % 26 first so large shifts still work.",
+      "Digits, spaces, and punctuation pass through unchanged.",
+    ],
+    hint: "For each letter: base + (code - base + (shift % 26)) % 26.",
+  },
+  {
+    slug: "longest-unique-substring",
+    title: "Longest substring without repeats",
+    description: "Find the longest run of distinct characters.",
+    group: "strings",
+    difficulty: "hard",
+    fnName: "longestUnique",
+    signature: "longestUnique(text) → number",
+    prompt:
+      "Write longestUnique(text) returning the length of the longest substring that contains no repeated character. Use a sliding window: move the right edge forward, and when you hit a duplicate, move the left edge past the previous occurrence.",
+    examples: [
+      { call: "longestUnique(\"abcabcbb\")", result: "3" },
+      { call: "longestUnique(\"bbbbb\")", result: "1" },
+      { call: "longestUnique(\"pwwkew\")", result: "3" },
+      { call: "longestUnique(\"\")", result: "0" },
+    ],
+    notes: [
+      "A Map from character to its last index lets you jump the left edge instead of stepping it.",
+      "The answer for \"pwwkew\" is \"wke\", not the subsequence \"pwke\".",
+      "Runs in O(n) with one pass.",
+    ],
+    hint: "Track start and a Map of last-seen indexes; on a repeat, start = max(start, seen + 1).",
+  },
+  {
+    slug: "sum-array",
+    title: "Sum an array",
+    description: "Add every number in a list.",
+    group: "arrays",
+    difficulty: "easy",
+    fnName: "sumArray",
+    signature: "sumArray(numbers) → number",
+    prompt:
+      "Write sumArray(numbers) returning the total of every number in the array. An empty array totals 0.",
+    examples: [
+      { call: "sumArray([1, 2, 3])", result: "6" },
+      { call: "sumArray([])", result: "0" },
+      { call: "sumArray([-1, 1])", result: "0" },
+      { call: "sumArray([2.5, 2.5])", result: "5" },
+    ],
+    notes: [
+      "reduce with an explicit starting value of 0 handles the empty array for free.",
+      "Without that initial value, reduce on [] throws.",
+    ],
+    hint: "return numbers.reduce((total, n) => total + n, 0);",
+  },
+  {
+    slug: "max-in-array",
+    title: "Largest in an array",
+    description: "Find the biggest number in a list.",
+    group: "arrays",
+    difficulty: "easy",
+    fnName: "maxIn",
+    signature: "maxIn(numbers) → number | null",
+    prompt:
+      "Write maxIn(numbers) returning the largest number in the array, or null when the array is empty.",
+    examples: [
+      { call: "maxIn([3, 9, 2])", result: "9" },
+      { call: "maxIn([-5, -1])", result: "-1" },
+      { call: "maxIn([])", result: "null" },
+      { call: "maxIn([4])", result: "4" },
+    ],
+    notes: [
+      "Math.max() with no arguments returns -Infinity, so check for the empty array first.",
+      "Math.max(...numbers) spreads the array, but very large arrays can exceed the argument limit.",
+    ],
+    hint: "return numbers.length ? Math.max(...numbers) : null;",
+  },
+  {
+    slug: "average",
+    title: "Average of a list",
+    description: "Compute the mean of an array of numbers.",
+    group: "arrays",
+    difficulty: "easy",
+    fnName: "average",
+    signature: "average(numbers) → number",
+    prompt:
+      "Write average(numbers) returning the arithmetic mean — the sum divided by the count. An empty array returns 0 rather than NaN.",
+    examples: [
+      { call: "average([1, 2, 3])", result: "2" },
+      { call: "average([10])", result: "10" },
+      { call: "average([])", result: "0" },
+      { call: "average([1, 2])", result: "1.5" },
+    ],
+    notes: [
+      "Dividing by 0 gives NaN, so special-case the empty array.",
+      "Do not round the result.",
+    ],
+    hint: "return numbers.length ? numbers.reduce((a, b) => a + b, 0) / numbers.length : 0;",
+  },
+  {
+    slug: "partition",
+    title: "Partition by predicate",
+    description: "Split a list into matches and non-matches.",
+    group: "arrays",
+    difficulty: "medium",
+    fnName: "partition",
+    signature: "partition(items, predicate) → [pass, fail]",
+    prompt:
+      "Write partition(items, predicate) returning an array of exactly two arrays: the items where predicate(item) is truthy, then the items where it is not. Preserve the original order inside each group.",
+    examples: [
+      { call: "partition([1, 2, 3, 4], (n) => n % 2 === 0)", result: "[[2, 4], [1, 3]]" },
+      { call: "partition([], () => true)", result: "[[], []]" },
+      { call: "partition([1, 3], (n) => n > 5)", result: "[[], [1, 3]]" },
+    ],
+    notes: [
+      "Always return two arrays, even when one of them is empty.",
+      "One reduce can fill both buckets in a single pass.",
+      "Order within each bucket must match the input.",
+    ],
+    hint: "Reduce into [[], []] and push onto index 0 or 1 based on the predicate.",
+  },
+  {
+    slug: "rotate-array",
+    title: "Rotate an array",
+    description: "Shift elements right, wrapping around.",
+    group: "arrays",
+    difficulty: "medium",
+    fnName: "rotate",
+    signature: "rotate(items, steps) → array",
+    prompt:
+      "Write rotate(items, steps) returning a new array shifted right by steps positions, wrapping elements from the end around to the front. steps may exceed the array length. Do not mutate the input.",
+    examples: [
+      { call: "rotate([1, 2, 3, 4], 1)", result: "[4, 1, 2, 3]" },
+      { call: "rotate([1, 2, 3], 3)", result: "[1, 2, 3]" },
+      { call: "rotate([1, 2, 3], 4)", result: "[3, 1, 2]" },
+      { call: "rotate([], 2)", result: "[]" },
+    ],
+    notes: [
+      "Take steps % length first so a full rotation is a no-op.",
+      "Guard the empty array — % 0 is NaN.",
+      "slice returns copies, so the original stays untouched.",
+    ],
+    hint: "const k = steps % items.length; return [...items.slice(-k), ...items.slice(0, -k)];",
+  },
+  {
+    slug: "move-zeroes",
+    title: "Move zeroes to the end",
+    description: "Push all zeroes to the back, keeping order.",
+    group: "arrays",
+    difficulty: "medium",
+    fnName: "moveZeroes",
+    signature: "moveZeroes(numbers) → array",
+    prompt:
+      "Write moveZeroes(numbers) returning a new array where every 0 has been moved to the end, and all other numbers keep their original relative order.",
+    examples: [
+      { call: "moveZeroes([0, 1, 0, 3])", result: "[1, 3, 0, 0]" },
+      { call: "moveZeroes([1, 2])", result: "[1, 2]" },
+      { call: "moveZeroes([0, 0])", result: "[0, 0]" },
+      { call: "moveZeroes([])", result: "[]" },
+    ],
+    notes: [
+      "Filtering twice — once for non-zeroes, once for zeroes — is the clearest version.",
+      "Relative order of the non-zero values must not change.",
+      "Return a new array rather than mutating.",
+    ],
+    hint: "return [...numbers.filter((n) => n !== 0), ...numbers.filter((n) => n === 0)];",
+  },
+  {
+    slug: "merge-sorted",
+    title: "Merge two sorted arrays",
+    description: "Combine two sorted lists into one.",
+    group: "arrays",
+    difficulty: "hard",
+    fnName: "mergeSorted",
+    signature: "mergeSorted(a, b) → array",
+    prompt:
+      "Write mergeSorted(a, b) taking two arrays already sorted ascending and returning one sorted array containing every element. Walk both with two pointers rather than concatenating and re-sorting — that keeps it O(n + m). Keep duplicates.",
+    examples: [
+      { call: "mergeSorted([1, 3], [2, 4])", result: "[1, 2, 3, 4]" },
+      { call: "mergeSorted([], [1])", result: "[1]" },
+      { call: "mergeSorted([1, 1], [1])", result: "[1, 1, 1]" },
+      { call: "mergeSorted([5], [1, 9])", result: "[1, 5, 9]" },
+    ],
+    notes: [
+      "Two indexes, one per array, advancing whichever value is smaller.",
+      "After the main loop, append whatever remains from the longer array.",
+      "Concat-then-sort works but is O((n + m) log(n + m)).",
+    ],
+    hint: "While both indexes are in range, push the smaller and advance that pointer.",
+  },
+  {
+    slug: "max-subarray",
+    title: "Maximum subarray sum",
+    description: "Find the largest sum of a contiguous run.",
+    group: "arrays",
+    difficulty: "hard",
+    fnName: "maxSubarray",
+    signature: "maxSubarray(numbers) → number",
+    prompt:
+      "Write maxSubarray(numbers) returning the largest sum obtainable from any contiguous, non-empty run of elements. This is Kadane's algorithm: at each element decide whether to extend the current run or start fresh from that element. An empty array returns 0.",
+    examples: [
+      { call: "maxSubarray([-2, 1, -3, 4, -1, 2, 1, -5, 4])", result: "6" },
+      { call: "maxSubarray([1, 2, 3])", result: "6" },
+      { call: "maxSubarray([-3, -1, -2])", result: "-1" },
+      { call: "maxSubarray([])", result: "0" },
+    ],
+    notes: [
+      "All-negative input returns the least negative value, not 0.",
+      "Track the best run ending here and the best seen anywhere.",
+      "One pass, O(n) time and O(1) space.",
+    ],
+    hint: "current = Math.max(n, current + n); best = Math.max(best, current);",
+  },
+  {
+    slug: "merge-objects",
+    title: "Merge two objects",
+    description: "Combine two objects, second winning ties.",
+    group: "objects",
+    difficulty: "easy",
+    fnName: "merge",
+    signature: "merge(a, b) → object",
+    prompt:
+      "Write merge(a, b) returning a new object with every key from both. When both define the same key, the value from b wins. Do not mutate either input.",
+    examples: [
+      { call: "merge({ a: 1 }, { b: 2 })", result: "{ a: 1, b: 2 }" },
+      { call: "merge({ a: 1 }, { a: 9 })", result: "{ a: 9 }" },
+      { call: "merge({}, {})", result: "{}" },
+    ],
+    notes: [
+      "Spreading b after a makes b win automatically.",
+      "This is a shallow merge — nested objects are replaced, not combined.",
+    ],
+    hint: "return { ...a, ...b };",
+  },
+  {
+    slug: "default-values",
+    title: "Apply defaults",
+    description: "Fill in missing keys from a defaults object.",
+    group: "objects",
+    difficulty: "easy",
+    fnName: "withDefaults",
+    signature: "withDefaults(options, defaults) → object",
+    prompt:
+      "Write withDefaults(options, defaults) returning a new object where any key missing from options takes its value from defaults. A key present in options wins even when its value is falsy, such as 0 or an empty string — but a key set to undefined should fall back to the default.",
+    examples: [
+      { call: "withDefaults({ a: 1 }, { a: 9, b: 2 })", result: "{ a: 1, b: 2 }" },
+      { call: "withDefaults({ a: 0 }, { a: 5 })", result: "{ a: 0 }" },
+      { call: "withDefaults({}, { a: 1 })", result: "{ a: 1 }" },
+    ],
+    notes: [
+      "Spreading defaults first, then options, gives the right precedence.",
+      "A key explicitly set to undefined still overwrites when spread — filter those out if you need the default.",
+      "0 and \"\" are valid values and must survive.",
+    ],
+    hint: "return { ...defaults, ...options };",
+  },
+  {
+    slug: "count-by",
+    title: "Count by key",
+    description: "Tally items into buckets by a computed key.",
+    group: "objects",
+    difficulty: "medium",
+    fnName: "countBy",
+    signature: "countBy(items, keyFn) → object",
+    prompt:
+      "Write countBy(items, keyFn) returning an object mapping each key produced by keyFn(item) to the number of items that produced it. An empty array returns an empty object.",
+    examples: [
+      { call: "countBy([1, 2, 3, 4], (n) => (n % 2 ? \"odd\" : \"even\"))", result: "{ odd: 2, even: 2 }" },
+      { call: "countBy([\"aa\", \"b\"], (s) => s.length)", result: "{ 2: 1, 1: 1 }" },
+      { call: "countBy([], () => \"x\")", result: "{}" },
+    ],
+    notes: [
+      "Object keys are always strings, so a numeric key becomes \"2\".",
+      "Initialise each bucket to 0 before incrementing.",
+      "Related to group-by, but stores a count instead of the items.",
+    ],
+    hint: "Reduce, doing out[keyFn(item)] = (out[keyFn(item)] ?? 0) + 1.",
+  },
+  {
+    slug: "deep-clone",
+    title: "Deep clone",
+    description: "Copy a nested structure with no shared references.",
+    group: "objects",
+    difficulty: "medium",
+    fnName: "deepClone",
+    signature: "deepClone(value) → value",
+    prompt:
+      "Write deepClone(value) returning a copy of a plain JSON-like value — numbers, strings, booleans, null, arrays, and plain objects — where nested objects and arrays are new references rather than shared with the input. Mutating the result must never affect the original.",
+    examples: [
+      { call: "deepClone({ a: { b: 1 } })", result: "{ a: { b: 1 } }" },
+      { call: "deepClone([1, [2]])", result: "[1, [2]]" },
+      { call: "deepClone(5)", result: "5" },
+      { call: "deepClone(null)", result: "null" },
+    ],
+    notes: [
+      "Recurse: primitives return as-is, arrays map over their items, objects rebuild entry by entry.",
+      "typeof null is \"object\", so check for null before recursing.",
+      "structuredClone does this natively but loses functions, and JSON round-tripping drops undefined and Dates.",
+    ],
+    hint: "If not an object or null, return it; otherwise map or rebuild recursively.",
+  },
+  {
+    slug: "flatten-object",
+    title: "Flatten an object",
+    description: "Turn nested keys into dotted paths.",
+    group: "objects",
+    difficulty: "hard",
+    fnName: "flattenObject",
+    signature: "flattenObject(obj) → object",
+    prompt:
+      "Write flattenObject(obj) returning a single-level object where nested keys are joined with dots. Only plain objects are flattened — arrays and primitives are left as values. An empty object returns an empty object.",
+    examples: [
+      { call: "flattenObject({ a: { b: 1 } })", result: "{ \"a.b\": 1 }" },
+      { call: "flattenObject({ a: 1, b: { c: { d: 2 } } })", result: "{ a: 1, \"b.c.d\": 2 }" },
+      { call: "flattenObject({})", result: "{}" },
+    ],
+    notes: [
+      "Recurse with a prefix and join it to each key with a dot.",
+      "Do not descend into arrays — keep them as a single value.",
+      "Reverses the path-building idea behind get-path.",
+    ],
+    hint: "Walk the entries; if the value is a plain object, recurse with prefix + key + \".\".",
+  },
+  {
+    slug: "deep-equal",
+    title: "Deep equality",
+    description: "Compare two nested values structurally.",
+    group: "objects",
+    difficulty: "hard",
+    fnName: "deepEqual",
+    signature: "deepEqual(a, b) → boolean",
+    prompt:
+      "Write deepEqual(a, b) returning true when two JSON-like values have the same structure and the same primitive values at every position. Arrays must match by order and length; objects must have the same set of keys with equal values.",
+    examples: [
+      { call: "deepEqual({ a: 1 }, { a: 1 })", result: "true" },
+      { call: "deepEqual([1, 2], [2, 1])", result: "false" },
+      { call: "deepEqual({ a: { b: 1 } }, { a: { b: 2 } })", result: "false" },
+      { call: "deepEqual(null, null)", result: "true" },
+    ],
+    notes: [
+      "Compare key counts first — otherwise an extra key in b slips through.",
+      "Check null before typeof, since typeof null is \"object\".",
+      "Arrays and objects are both typeof \"object\", so test Array.isArray separately.",
+    ],
+    hint: "Return true for identical primitives; otherwise recurse over keys after comparing lengths.",
+  },
+  {
+    slug: "call-n-times",
+    title: "Call a function n times",
+    description: "Collect the results of repeated calls.",
+    group: "functions",
+    difficulty: "easy",
+    fnName: "times",
+    signature: "times(n, fn) → array",
+    prompt:
+      "Write times(n, fn) that calls fn once for each index from 0 to n - 1 and returns an array of the results. fn receives the current index. When n is 0, return an empty array.",
+    examples: [
+      { call: "times(3, (i) => i * 2)", result: "[0, 2, 4]" },
+      { call: "times(0, (i) => i)", result: "[]" },
+      { call: "times(2, () => \"x\")", result: "[\"x\", \"x\"]" },
+    ],
+    notes: [
+      "Array.from({ length: n }, (_, i) => fn(i)) does this in one line.",
+      "The index starts at 0.",
+      "Return the collected results, not undefined.",
+    ],
+    hint: "return Array.from({ length: n }, (_, i) => fn(i));",
+  },
+  {
+    slug: "partial",
+    title: "Partial application",
+    description: "Pre-fill the leading arguments of a function.",
+    group: "functions",
+    difficulty: "medium",
+    fnName: "partial",
+    signature: "partial(fn, ...preset) → function",
+    prompt:
+      "Write partial(fn, ...preset) returning a new function that calls fn with the preset arguments first, followed by whatever arguments the new function is given.",
+    examples: [
+      { call: "partial((a, b) => a + b, 1)(2)", result: "3" },
+      { call: "partial((a, b, c) => a + b + c, 1, 2)(3)", result: "6" },
+      { call: "partial((a) => a * 2)(4)", result: "8" },
+    ],
+    notes: [
+      "Rest parameters collect the preset values; spread both lists at the call.",
+      "Different from bind only in that it does not change this.",
+      "The returned function may be called many times.",
+    ],
+    hint: "return (...later) => fn(...preset, ...later);",
+  },
+  {
+    slug: "curry-add",
+    title: "Curried add",
+    description: "Return a chain of single-argument functions.",
+    group: "functions",
+    difficulty: "medium",
+    fnName: "add",
+    signature: "add(a)(b)(c) → number",
+    prompt:
+      "Write add(a) so that add(a)(b)(c) returns the sum of the three numbers. Each call takes exactly one argument and returns either another function or, on the third call, the final total.",
+    examples: [
+      { call: "add(1)(2)(3)", result: "6" },
+      { call: "add(0)(0)(0)", result: "0" },
+      { call: "add(-1)(1)(5)", result: "5" },
+    ],
+    notes: [
+      "Each arrow closes over the arguments from the calls above it.",
+      "Only the last call returns a number — the earlier ones return functions.",
+      "This is currying: many one-argument functions instead of one three-argument function.",
+    ],
+    hint: "const add = (a) => (b) => (c) => a + b + c;",
+  },
+  {
+    slug: "throttle",
+    title: "Throttle a function",
+    description: "Limit how often a function may run.",
+    group: "functions",
+    difficulty: "hard",
+    fnName: "throttle",
+    signature: "throttle(fn, ms) → function",
+    prompt:
+      "Write throttle(fn, ms) returning a wrapped function that invokes fn immediately on the first call, then ignores further calls until ms milliseconds have passed since the last invocation. Arguments from the ignored calls are dropped.",
+    examples: [
+      { call: "const t = throttle(log, 100); t(1); t(2);", result: "logs 1 only" },
+      { call: "after 100ms, t(3)", result: "logs 3" },
+      { call: "throttle(fn, 0)", result: "runs on every call" },
+    ],
+    notes: [
+      "Store the timestamp of the last run and compare with Date.now().",
+      "Throttle guarantees a steady rate; debounce waits for quiet. Scroll handlers want throttle.",
+      "The first call fires straight away — that is the leading edge.",
+    ],
+    hint: "Keep last = 0; if Date.now() - last >= ms, set last and call fn.",
+  },
+  {
+    slug: "debounce",
+    title: "Debounce a function",
+    description: "Run only after the calls stop.",
+    group: "functions",
+    difficulty: "hard",
+    fnName: "debounce",
+    signature: "debounce(fn, ms) → function",
+    prompt:
+      "Write debounce(fn, ms) returning a wrapped function that delays calling fn until ms milliseconds have passed with no further calls. Every new call cancels the pending one and restarts the timer. fn receives the arguments from the most recent call.",
+    examples: [
+      { call: "const d = debounce(save, 100); d(1); d(2);", result: "saves 2 once" },
+      { call: "d(1); wait 100ms; d(2);", result: "saves 1 then 2" },
+      { call: "debounce(fn, 100) called once", result: "runs after 100ms" },
+    ],
+    notes: [
+      "Hold the timer id in a closure and clearTimeout it at the start of every call.",
+      "The trailing call wins, so pass through the latest arguments.",
+      "Search-as-you-type wants debounce; scroll position wants throttle.",
+    ],
+    hint: "let id; return (...args) => { clearTimeout(id); id = setTimeout(() => fn(...args), ms); };",
+  },
+  {
+    slug: "chain-promises",
+    title: "Await in sequence",
+    description: "Await one promise, then use its result.",
+    group: "async",
+    difficulty: "easy",
+    fnName: "addLater",
+    signature: "addLater(a, b) → Promise<number>",
+    prompt:
+      "Write an async function addLater(a, b) that waits for Promise.resolve(a), then returns that value plus b. The point is the shape: mark the function async and await the promise before using its value.",
+    examples: [
+      { call: "await addLater(2, 3)", result: "5" },
+      { call: "await addLater(0, 0)", result: "0" },
+      { call: "await addLater(-1, 1)", result: "0" },
+    ],
+    notes: [
+      "An async function always returns a promise, even when the body looks synchronous.",
+      "Forgetting await gives you \"[object Promise]3\" instead of a number.",
+      "Return the number — the async keyword wraps it for you.",
+    ],
+    hint: "async function addLater(a, b) { const v = await Promise.resolve(a); return v + b; }",
+  },
+  {
+    slug: "timeout-promise",
+    title: "Reject after a timeout",
+    description: "Fail a promise that takes too long.",
+    group: "async",
+    difficulty: "medium",
+    fnName: "withTimeout",
+    signature: "withTimeout(promise, ms) → Promise",
+    prompt:
+      "Write withTimeout(promise, ms) returning a promise that resolves with the original value if it settles within ms milliseconds, and otherwise rejects with an Error whose message is \"timeout\". Race the input against a timer.",
+    examples: [
+      { call: "withTimeout(fast, 100)", result: "resolves with the value" },
+      { call: "withTimeout(slow, 10)", result: "rejects Error(\"timeout\")" },
+      { call: "withTimeout(Promise.reject(e), 100)", result: "rejects with e" },
+    ],
+    notes: [
+      "Promise.race settles as soon as the first of its inputs settles.",
+      "The timer promise only ever rejects.",
+      "A rejection from the original promise should pass straight through.",
+    ],
+    hint: "return Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error(\"timeout\")), ms))]);",
+  },
+  {
+    slug: "sequential-map",
+    title: "Map in sequence",
+    description: "Await async work one item at a time.",
+    group: "async",
+    difficulty: "medium",
+    fnName: "mapSeries",
+    signature: "mapSeries(items, fn) → Promise<array>",
+    prompt:
+      "Write mapSeries(items, fn) that calls the async fn on each item strictly one after another — never starting the next before the previous resolves — and resolves with the array of results in input order. An empty array resolves to an empty array.",
+    examples: [
+      { call: "await mapSeries([1, 2], double)", result: "[2, 4]" },
+      { call: "await mapSeries([], fn)", result: "[]" },
+      { call: "await mapSeries([1], double)", result: "[2]" },
+    ],
+    notes: [
+      "A for...of loop with await inside runs in sequence; items.map with await does not.",
+      "Push each awaited result into an array as you go.",
+      "Use this when the calls must not overlap — otherwise Promise.all is faster.",
+    ],
+    hint: "const out = []; for (const item of items) out.push(await fn(item)); return out;",
+  },
+  {
+    slug: "settle-all",
+    title: "Collect successes and failures",
+    description: "Report every outcome without failing fast.",
+    group: "async",
+    difficulty: "hard",
+    fnName: "settleAll",
+    signature: "settleAll(promises) → Promise<array>",
+    prompt:
+      "Write settleAll(promises) resolving with an array of result objects in input order. A fulfilled promise contributes { ok: true, value }, and a rejected one contributes { ok: false, error }. The returned promise never rejects, even when every input does.",
+    examples: [
+      { call: "await settleAll([Promise.resolve(1)])", result: "[{ ok: true, value: 1 }]" },
+      { call: "await settleAll([Promise.reject(e)])", result: "[{ ok: false, error: e }]" },
+      { call: "await settleAll([])", result: "[]" },
+    ],
+    notes: [
+      "Attach a then and a catch to each promise so nothing escapes as a rejection.",
+      "Promise.all rejects on the first failure, which is the behaviour you are replacing.",
+      "Order must follow the input, not completion time.",
+    ],
+    hint: "return Promise.all(promises.map((p) => p.then((value) => ({ ok: true, value })).catch((error) => ({ ok: false, error }))));",
+  },
+  {
+    slug: "parallel-limit",
+    title: "Limit concurrency",
+    description: "Run async tasks with a cap on parallelism.",
+    group: "async",
+    difficulty: "hard",
+    fnName: "limitAll",
+    signature: "limitAll(tasks, limit) → Promise<array>",
+    prompt:
+      "Write limitAll(tasks, limit) where tasks is an array of functions returning promises. Run at most limit of them at any moment, starting the next as soon as a slot frees, and resolve with the results in the original task order.",
+    examples: [
+      { call: "await limitAll([t1, t2, t3], 2)", result: "[r1, r2, r3]" },
+      { call: "await limitAll([], 2)", result: "[]" },
+      { call: "await limitAll(tasks, 1)", result: "runs one at a time" },
+    ],
+    notes: [
+      "Keep a shared cursor and start limit workers that each pull the next index.",
+      "Write results to results[index] so completion order does not scramble them.",
+      "This is how you avoid firing 500 requests at once.",
+    ],
+    hint: "Start `limit` worker loops that each take the next index off a shared counter.",
   },
 ];
 

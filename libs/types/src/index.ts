@@ -56,21 +56,13 @@ export type Profile = {
   education: Education[];
 };
 
-export type PracticeGroup = "basics" | "arrays" | "objects" | "functions" | "async";
+export type PracticeGroup = "basics" | "strings" | "arrays" | "objects" | "functions" | "async";
 
 export type PracticeDifficulty = "easy" | "medium" | "hard";
 
 export type PracticeExample = {
   call: string;
   result: string;
-};
-
-export type PracticeTest = {
-  label: string;
-  expected: unknown;
-  args?: unknown[];
-  /** Body of `async () => { ... }` with `fn` bound to the user’s function. Must `return` the value to compare. */
-  run?: string;
 };
 
 export type PracticeQuestion = {
@@ -85,8 +77,6 @@ export type PracticeQuestion = {
   examples: PracticeExample[];
   notes: string[];
   hint: string;
-  starter: string;
-  tests: PracticeTest[];
 };
 
 export type ToolGroup = "encode" | "format" | "generate" | "inspect";
