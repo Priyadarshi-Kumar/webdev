@@ -56,7 +56,16 @@ export type Profile = {
   education: Education[];
 };
 
-export type PracticeGroup = "basics" | "strings" | "arrays" | "objects" | "functions" | "async";
+export type PracticeGroup =
+  | "basics"
+  | "strings"
+  | "arrays"
+  | "objects"
+  | "functions"
+  | "async"
+  | "polyfills"
+  | "dom"
+  | "react";
 
 export type PracticeDifficulty = "easy" | "medium" | "hard";
 
