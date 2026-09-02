@@ -1,0 +1,307 @@
+---
+title: Prototypes in JavaScript — prototype, __proto__, and the chain
+description: One link per object, followed on every property miss. Why prototype and __proto__ are different things, what class desugars to, how shadowing works, and where prototype pollution comes from.
+slug: prototype-and-proto
+date: 2026-09-02
+subject: javascript
+tags:
+  - javascript
+  - interview
+---
+
+JavaScript has no classes underneath. It has **objects that point at other objects**, and a lookup rule that follows those pointers. Everything else — `class`, `extends`, `super`, `instanceof` — is syntax over that one idea.
+
+The confusion is almost entirely a naming accident: `prototype` and `__proto__` sound like the same thing and are not. Get that pair straight and the rest collapses into something simple.
+
+## Objects link to other objects
+
+Every object has an internal link to another object — or to `null`. The spec calls it `[[Prototype]]`. It is not a normal property you can see in a `console.log` of the object's keys; it is a hidden slot the engine reads during lookup.
+
+### Lookup walks the chain
+
+When you read `obj.foo`, the engine checks `obj` for an own property named `foo`. If there is none, it follows the link and checks that object, and keeps going until it either finds `foo` or reaches `null` and returns `undefined`.
+
+```js
+const animal = { legs: 4, speak() { return "..."; } };
+const dog = Object.create(animal);
+dog.name = "Rex";
+
+dog.name;    // "Rex"   — own property
+dog.legs;    // 4       — found one link up
+dog.speak(); // "..."   — found one link up
+dog.wings;   // undefined — chain exhausted
+```
+
+The chain for `dog` is:
+
+```txt
+dog  →  animal  →  Object.prototype  →  null
+```
+
+That last stretch is why every plain object already has `toString`, `hasOwnProperty`, and `valueOf` without you writing them.
+
+### Writing does not walk the chain
+
+Reading walks up. Assigning normally does not — it creates an **own** property that shadows whatever was above.
+
+```js
+dog.legs = 3;
+
+dog.legs;    // 3 — own property now
+animal.legs; // 4 — untouched
+```
+
+There are two exceptions worth knowing, because they surprise people:
+
+- If something up the chain defines a **setter** for that key, the setter runs instead of an own property being created.
+- If something up the chain defines a **non-writable data property**, the assignment silently fails in sloppy mode and throws in strict mode.
+
+## prototype vs `__proto__`
+
+These are two different things with unfortunately similar names.
+
+### `__proto__` is the link on any object
+
+`__proto__` is a legacy accessor — a getter/setter pair inherited from `Object.prototype` — that exposes the internal `[[Prototype]]` link. It exists on ordinary objects.
+
+```js
+dog.__proto__ === animal; // true
+```
+
+It was retrofitted into the spec because browsers had already shipped it. The modern spelling is a pair of functions:
+
+```js
+Object.getPrototypeOf(dog);          // animal
+Object.setPrototypeOf(dog, other);   // works, but see the warning below
+```
+
+Prefer those. `__proto__` only exists on objects that inherit from `Object.prototype`, so it quietly does nothing useful on an object created with `Object.create(null)`.
+
+### `.prototype` is a property on functions
+
+`.prototype` is an ordinary, visible property that lives on **functions**, and it has exactly one job: it becomes the `[[Prototype]]` of objects created with `new`.
+
+```js
+function Dog(name) {
+  this.name = name;
+}
+
+Dog.prototype.speak = function () {
+  return `${this.name} barks`;
+};
+
+const rex = new Dog("Rex");
+rex.speak();                            // "Rex barks"
+Object.getPrototypeOf(rex) === Dog.prototype; // true
+rex.__proto__ === Dog.prototype;              // same thing
+```
+
+So the sentence to memorise: **`Dog.prototype` is not Dog's prototype.** It is the prototype that Dog's *instances* will get. Dog's own prototype is `Function.prototype`.
+
+```js
+Object.getPrototypeOf(Dog) === Function.prototype; // true
+```
+
+Not every function has one. Arrow functions and shorthand methods have no `.prototype` property at all, which is exactly why you cannot call them with `new`.
+
+### The constructor property
+
+`Fn.prototype` starts life as an object with a single non-enumerable property pointing back at the function:
+
+```js
+Dog.prototype.constructor === Dog; // true
+rex.constructor === Dog;           // inherited through the chain
+```
+
+This is why reassigning the whole prototype object breaks things:
+
+```js
+Dog.prototype = { speak() { return "hi"; } };   // constructor link is gone
+new Dog("Rex").constructor === Object;          // true — wrong
+```
+
+Add to `Dog.prototype` rather than replacing it, or restore `constructor` yourself.
+
+## Creating the link
+
+### Object.create
+
+The most direct tool: make a new object with the prototype you name.
+
+```js
+const base = { greet() { return "hi"; } };
+const child = Object.create(base);          // child → base
+const orphan = Object.create(null);         // orphan → null
+```
+
+### new
+
+`new Fn(args)` does four things: create an empty object, set its `[[Prototype]]` to `Fn.prototype`, call `Fn` with `this` bound to that object, and return the object unless the constructor returned a different object. [Implementing `this`](/blog/this-in-javascript) builds that by hand.
+
+### Do not use setPrototypeOf on a live object
+
+Changing an object's prototype after it exists is legal and slow. Engines optimise property access around an object's shape; reassigning the prototype invalidates that work and can deoptimise every site that touched the object.
+
+```js
+const o = {};
+Object.setPrototypeOf(o, base);  // works, but slow — avoid on hot objects
+const better = Object.create(base); // set it at creation instead
+```
+
+## Classes are the same machinery
+
+`class` is syntax. It creates a function, puts the methods on that function's `.prototype`, and wires up the chain.
+
+```js
+class Animal {
+  constructor(name) {
+    this.name = name;
+  }
+  speak() {
+    return `${this.name} makes a sound`;
+  }
+}
+
+class Dog extends Animal {
+  speak() {
+    return `${this.name} barks`;
+  }
+}
+```
+
+That produces exactly the structure you would have built manually:
+
+```js
+typeof Animal;                                        // "function"
+Object.getOwnPropertyNames(Animal.prototype);         // ["constructor", "speak"]
+Object.getPrototypeOf(Dog.prototype) === Animal.prototype; // true — instance chain
+Object.getPrototypeOf(Dog) === Animal;                     // true — static chain
+```
+
+Note there are **two** chains. Instance methods inherit through `Dog.prototype → Animal.prototype`. Static members inherit through `Dog → Animal`, which is why a static method on the parent is callable on the child.
+
+### Where each member lands
+
+| Written as | Ends up on |
+| --- | --- |
+| `speak() {}` | `Dog.prototype` (non-enumerable) |
+| `static create() {}` | `Dog` itself |
+| `count = 0` (class field) | each **instance**, as an own property |
+| `#secret` | the instance, genuinely private |
+
+Class fields being per-instance matters: a method is created once and shared by every instance, while an arrow-function class field is a fresh function per instance. That is the memory tradeoff behind `onClick = () => {}` in older React class components.
+
+### Class bodies are strict
+
+Everything inside a `class` runs in strict mode, and class declarations are not hoisted in a usable way — referencing one before its definition throws a `ReferenceError` rather than giving you `undefined`.
+
+## Checking the chain
+
+```js
+rex instanceof Dog;                    // true
+Dog.prototype.isPrototypeOf(rex);      // true
+Object.hasOwn(rex, "name");            // true  — own property
+Object.hasOwn(rex, "speak");           // false — inherited
+```
+
+`instanceof` does not compare constructors. It walks the object's prototype chain looking for `Dog.prototype`, which is why it still returns `true` for a grandchild class, and why it can return `false` across iframes or realms where each has its own `Array.prototype`. Use `Array.isArray` rather than `x instanceof Array` for that reason.
+
+### Own versus inherited when iterating
+
+```js
+for (const key in dog) { /* own AND inherited enumerable keys */ }
+Object.keys(dog);        // own enumerable only
+```
+
+`for...in` walking the chain is the reason older code is littered with `hasOwnProperty` guards. Prefer `Object.keys`, `Object.entries`, or `Object.hasOwn`.
+
+## Objects with no prototype
+
+`Object.create(null)` gives a genuinely empty object. It has no `toString`, no `hasOwnProperty`, and no `__proto__` accessor.
+
+```js
+const dict = Object.create(null);
+dict.constructor; // undefined — nothing inherited
+dict["__proto__"] = "safe"; // a plain key, not the magic link
+```
+
+That is exactly what you want for a lookup table keyed by user input, because no key can collide with something inherited from `Object.prototype`. The tradeoff is that `dict.toString()` throws and some libraries assume the methods exist.
+
+## Prototype pollution
+
+Because `__proto__` is a setter on `Object.prototype`, a naive recursive merge over untrusted JSON can write to every object in the program at once.
+
+```js
+// attacker-controlled payload
+const payload = JSON.parse('{"__proto__": {"isAdmin": true}}');
+naiveMerge({}, payload);
+
+({}).isAdmin; // true — every object now inherits it
+```
+
+The defences are straightforward: skip the keys `__proto__`, `constructor`, and `prototype` while merging, build your accumulator with `Object.create(null)`, or freeze `Object.prototype`. [Web security](/blog/web-security) covers the attack in more detail.
+
+## Common mistakes
+
+- **Thinking `Dog.prototype` is Dog's prototype.** It is the prototype for Dog's instances. Dog's own is `Function.prototype`.
+- **Replacing `Fn.prototype` wholesale.** You drop the `constructor` link. Assign individual properties instead.
+- **Using `setPrototypeOf` on hot objects.** Set the prototype at creation with `Object.create` or `new`.
+- **Putting mutable state on a prototype.** `Dog.prototype.tags = []` gives every instance the *same* array. Initialise arrays and objects in the constructor.
+- **Relying on `for...in` for own keys.** It walks the chain.
+- **Merging untrusted data recursively.** That is prototype pollution.
+- **`x instanceof Array` across realms.** Use `Array.isArray`.
+
+## Interview answers
+
+<details>
+<summary>What is the difference between <code>prototype</code> and <code>&#95;&#95;proto&#95;&#95;</code>?</summary>
+
+`__proto__` is a legacy accessor exposing an object's internal `[[Prototype]]` link — the object it inherits from. `prototype` is a normal property that exists on functions, and it is the object that will be used as the `[[Prototype]]` for instances created with `new`. So `rex.__proto__ === Dog.prototype`. Use `Object.getPrototypeOf` instead of `__proto__` in new code.
+
+</details>
+
+<details>
+<summary>How does property lookup work?</summary>
+
+The engine checks the object for an own property. On a miss it follows the `[[Prototype]]` link and checks that object, repeating until it finds the key or hits `null`, in which case the result is `undefined`. Assignment behaves differently: it creates an own property that shadows the inherited one, unless a setter or a non-writable property exists up the chain.
+
+</details>
+
+<details>
+<summary>Are JavaScript classes real classes?</summary>
+
+No. `class` is syntax over the prototype system. Methods are placed on `Constructor.prototype`, `static` members on the constructor function, and `extends` links both `Child.prototype` to `Parent.prototype` and `Child` to `Parent`. The differences from a plain function are behavioural — class bodies are strict, methods are non-enumerable, and calling a class without `new` throws.
+
+</details>
+
+<details>
+<summary>Where do class fields live compared to methods?</summary>
+
+Methods live on the prototype and are shared by every instance. Class fields are own properties created on each instance during construction, so an arrow-function field produces a separate function per instance. That is the tradeoff: an arrow field binds `this` automatically but costs memory per instance.
+
+</details>
+
+<details>
+<summary>Why avoid <code>Object.setPrototypeOf</code>?</summary>
+
+Engines optimise property access based on an object's shape, and changing the prototype after creation invalidates those optimisations, potentially deoptimising code that already touched the object. Set the prototype when you create the object, with `Object.create` or `new`.
+
+</details>
+
+<details>
+<summary>What is prototype pollution?</summary>
+
+Writing to `Object.prototype` through a crafted key — usually `__proto__` in a payload passed to a recursive merge or a deep-set utility. Because almost every object inherits from `Object.prototype`, one write affects the whole program and can flip authorization flags or inject properties that later code trusts. Block `__proto__`, `constructor`, and `prototype` keys, or use null-prototype accumulators.
+
+</details>
+
+<details>
+<summary>Why use <code>Object.create(null)</code>?</summary>
+
+It creates an object with no prototype, so it inherits nothing — no `toString`, no `constructor`, no `__proto__` setter. That makes it a safe dictionary for user-supplied keys, since no key can collide with an inherited member and `__proto__` becomes an ordinary string key.
+
+</details>
+
+---
+
+Related: [Implement your own this](/blog/this-in-javascript) (what `new` really does), [How JavaScript actually works](/blog/how-javascript-works), [Web security](/blog/web-security) (prototype pollution), [TypeScript](/blog/typescript).
