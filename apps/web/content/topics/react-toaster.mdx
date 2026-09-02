@@ -1,0 +1,561 @@
+---
+title: Build your own toast system in React — callable from anywhere
+description: A toast store outside React, subscribed with useSyncExternalStore, so you can fire toasts from components with a hook and from plain modules like API interceptors with a function call.
+slug: react-toaster
+date: 2026-09-02
+subject: react
+tags:
+  - react
+  - hooks
+  - javascript
+  - interview
+---
+
+Every toast library gets judged on one question: **can I call it from a file that is not a component?**
+
+Inside a component, anything works — local state, context, a hook. The moment you want a failed request in `api.ts` to raise a toast, or a router guard to say "session expired", the component-shaped solutions fall apart. An Axios interceptor cannot call `useContext`.
+
+This note builds a toast system that works from both sides, using the primitive React provides for exactly this: a store that lives outside React, subscribed with `useSyncExternalStore`.
+
+## What we are building
+
+The finished API has two entry points backed by one source of truth.
+
+```ts
+// from any module — no component required
+import { toast } from "@/toast";
+
+toast.error("Payment failed");
+```
+
+```tsx
+// from inside a component
+const toast = useToast();
+toast.success("Saved");
+```
+
+Both call the same store. Neither needs a provider above it.
+
+## Why the obvious approaches fail
+
+### Component state
+
+Holding the toast array in `useState` inside `<App />` means only `<App />` and its children can add to it. Everything outside React's tree — utilities, interceptors, service workers, event listeners — has no path in. You are also back to <Term id="prop-drilling">prop drilling</Term> or context to reach deep children.
+
+### Context alone
+
+Context is the usual answer, and it is genuinely fine for the inside-a-component case. It cannot solve the outside case, because reading context requires `useContext`, and `useContext` requires a component. A plain function cannot participate.
+
+### The escape-hatch ref
+
+A tempting hack is to stash the setter in a module variable:
+
+```tsx
+// don't
+let externalAdd: ((t: Toast) => void) | null = null;
+
+function Toaster() {
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  externalAdd = (t) => setToasts((prev) => [...prev, t]);  // assign during render
+  return /* … */;
+}
+```
+
+This looks like it works and is quietly broken. Assigning during render is a side effect in the render phase. Any toast fired before `Toaster` mounts is dropped onto a `null`. Two roots or a remount leave a stale closure pointing at an unmounted tree. Under <Term id="concurrent-rendering">concurrent rendering</Term> the assignment may happen on a render React later throws away.
+
+The fix is to stop treating React as the owner of the data.
+
+## The idea: state outside React
+
+Keep the toast list in a module-level store. React does not own it — React **subscribes** to it. That is precisely what `useSyncExternalStore` exists for, and it is the same primitive [Zustand](/blog/zustand) uses under the hood.
+
+The store needs three things:
+
+- `subscribe(listener)` — register a callback, return an unsubscribe function
+- `getSnapshot()` — return the current value
+- `getServerSnapshot()` — return a value for server rendering
+
+## The store
+
+### State and listeners
+
+```ts
+// toast-store.ts
+export type ToastVariant = "success" | "error" | "info" | "loading";
+
+export type Toast = {
+  id: string;
+  title: string;
+  description?: string;
+  variant: ToastVariant;
+  duration: number; // ms; Infinity to keep it until dismissed
+};
+
+type Listener = () => void;
+
+const MAX_VISIBLE = 4;
+
+let toasts: Toast[] = [];
+const listeners = new Set<Listener>();
+
+function setToasts(next: Toast[]) {
+  toasts = next;
+  for (const listener of listeners) listener();
+}
+
+export function subscribe(listener: Listener) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+export function getSnapshot() {
+  return toasts;
+}
+
+const EMPTY: Toast[] = [];
+export function getServerSnapshot() {
+  return EMPTY;
+}
+```
+
+Two details in there matter more than they look.
+
+**`getSnapshot` returns the same array reference until something actually changes.** If you write `return [...toasts]`, React compares snapshots with `Object.is`, sees a new array every time, and re-renders forever. Build the new array in the mutation, not in the getter.
+
+**`getServerSnapshot` returns a shared constant**, not a fresh `[]`, for the same reason. On a prerendered or server-rendered page there are no toasts yet, and a stable empty array keeps <Term id="hydration">hydration</Term> quiet.
+
+### Ids
+
+```ts
+let counter = 0;
+
+function createId() {
+  counter += 1;
+  return `toast-${counter}`;
+}
+```
+
+A counter beats `Math.random()` here: it is deterministic, which makes tests and snapshot debugging predictable.
+
+### Timers
+
+Auto-dismiss lives in the store, not in the component. If a toast owned its own `setTimeout`, unmounting the list mid-animation would leak it.
+
+```ts
+type TimerRecord = {
+  timeout: ReturnType<typeof setTimeout>;
+  startedAt: number;
+  remaining: number;
+};
+
+const timers = new Map<string, TimerRecord>();
+
+function schedule(id: string, duration: number) {
+  if (!Number.isFinite(duration)) return;
+  const timeout = setTimeout(() => dismissToast(id), duration);
+  timers.set(id, { timeout, startedAt: Date.now(), remaining: duration });
+}
+
+function clearTimer(id: string) {
+  const record = timers.get(id);
+  if (!record) return;
+  clearTimeout(record.timeout);
+  timers.delete(id);
+}
+```
+
+### Add, dismiss, update
+
+```ts
+export type ToastInput = {
+  title: string;
+  description?: string;
+  variant?: ToastVariant;
+  duration?: number;
+};
+
+export function addToast(input: ToastInput): string {
+  const id = createId();
+  const toast: Toast = {
+    id,
+    title: input.title,
+    description: input.description,
+    variant: input.variant ?? "info",
+    duration: input.duration ?? 4000,
+  };
+
+  const next = [...toasts, toast];
+  // drop the oldest so the stack cannot grow without bound
+  const overflow = next.slice(0, Math.max(0, next.length - MAX_VISIBLE));
+  for (const old of overflow) clearTimer(old.id);
+
+  setToasts(next.slice(-MAX_VISIBLE));
+  schedule(id, toast.duration);
+  return id;
+}
+
+export function dismissToast(id: string) {
+  clearTimer(id);
+  setToasts(toasts.filter((toast) => toast.id !== id));
+}
+
+export function updateToast(id: string, patch: Partial<ToastInput>) {
+  const existing = toasts.find((toast) => toast.id === id);
+  if (!existing) return;
+
+  const updated: Toast = { ...existing, ...patch };
+  setToasts(toasts.map((toast) => (toast.id === id ? updated : toast)));
+
+  if (patch.duration !== undefined) {
+    clearTimer(id);
+    schedule(id, updated.duration);
+  }
+}
+
+export function clearToasts() {
+  for (const toast of toasts) clearTimer(toast.id);
+  setToasts([]);
+}
+```
+
+`updateToast` reschedules when the duration changes. That is what turns a persistent "Saving…" toast into one that disappears on its own once it becomes "Saved".
+
+### Pause on hover
+
+A toast that vanishes while you are reading it is a bug. Track the remaining time instead of restarting the countdown.
+
+```ts
+export function pauseToast(id: string) {
+  const record = timers.get(id);
+  if (!record) return;
+  clearTimeout(record.timeout);
+  record.remaining -= Date.now() - record.startedAt;
+}
+
+export function resumeToast(id: string) {
+  const record = timers.get(id);
+  if (!record) return;
+  if (record.remaining <= 0) {
+    dismissToast(id);
+    return;
+  }
+  record.timeout = setTimeout(() => dismissToast(id), record.remaining);
+  record.startedAt = Date.now();
+}
+```
+
+## The public API
+
+### The callable object
+
+`toast("…")` should work, and so should `toast.error("…")`. `Object.assign` on a function gives you both.
+
+```ts
+// toast.ts
+import {
+  addToast,
+  clearToasts,
+  dismissToast,
+  updateToast,
+  type ToastInput,
+} from "./toast-store";
+
+type Options = Omit<ToastInput, "title" | "variant">;
+
+function base(input: string | ToastInput) {
+  return addToast(typeof input === "string" ? { title: input } : input);
+}
+
+export const toast = Object.assign(base, {
+  success: (title: string, options?: Options) =>
+    addToast({ ...options, title, variant: "success" }),
+
+  error: (title: string, options?: Options) =>
+    addToast({ ...options, title, variant: "error", duration: options?.duration ?? 6000 }),
+
+  info: (title: string, options?: Options) =>
+    addToast({ ...options, title, variant: "info" }),
+
+  loading: (title: string, options?: Options) =>
+    addToast({ ...options, title, variant: "loading", duration: Infinity }),
+
+  dismiss: dismissToast,
+  clear: clearToasts,
+});
+```
+
+Errors get a longer default duration than successes, because "it worked" is glanceable and "it failed" usually has to be read.
+
+### Promise toasts
+
+One call that covers the whole lifecycle of an async action:
+
+```ts
+type PromiseMessages<T> = {
+  loading: string;
+  success: string | ((value: T) => string);
+  error: string | ((error: unknown) => string);
+};
+
+function resolveMessage<T>(message: string | ((value: T) => string), value: T) {
+  return typeof message === "function" ? message(value) : message;
+}
+
+export async function toastPromise<T>(promise: Promise<T>, messages: PromiseMessages<T>) {
+  const id = toast.loading(messages.loading);
+  try {
+    const value = await promise;
+    updateToast(id, {
+      title: resolveMessage(messages.success, value),
+      variant: "success",
+      duration: 4000,
+    });
+    return value;
+  } catch (error) {
+    updateToast(id, {
+      title: resolveMessage(messages.error, error),
+      variant: "error",
+      duration: 6000,
+    });
+    throw error;
+  }
+}
+```
+
+Rethrowing matters. A toast is a notification, not error handling — swallowing the rejection here would hide the failure from the caller.
+
+## Reading it from React
+
+### The subscription hook
+
+```tsx
+// use-toasts.ts
+import { useSyncExternalStore } from "react";
+import { getServerSnapshot, getSnapshot, subscribe } from "./toast-store";
+
+export function useToasts() {
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+}
+```
+
+That is the entire React integration. Because it goes through `useSyncExternalStore`, it is safe under concurrent rendering — two components reading the store in one pass cannot disagree, which is the <Term id="react-tearing">tearing</Term> problem this hook was designed to prevent.
+
+### The hook components use
+
+```tsx
+export function useToast() {
+  return toast;
+}
+```
+
+Deliberately thin. `toast` is a module singleton, so its identity never changes — putting it in a dependency array is free, and it can never cause a <Term id="stale-closure">stale closure</Term>. The hook exists because `useToast()` is the shape people expect, and because it gives you one place to add scoping later without changing every call site.
+
+## The Toaster component
+
+Mount this once, near the root.
+
+```tsx
+// Toaster.tsx
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { useToasts } from "./use-toasts";
+import { dismissToast, pauseToast, resumeToast } from "./toast-store";
+
+export function Toaster() {
+  const toasts = useToasts();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+
+  const alerts = toasts.filter((toast) => toast.variant === "error");
+  const statuses = toasts.filter((toast) => toast.variant !== "error");
+
+  return createPortal(
+    <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-80 flex-col gap-2">
+      <ol aria-live="assertive" className="contents">
+        {alerts.map((toast) => (
+          <ToastItem key={toast.id} toast={toast} />
+        ))}
+      </ol>
+      <ol aria-live="polite" className="contents">
+        {statuses.map((toast) => (
+          <ToastItem key={toast.id} toast={toast} />
+        ))}
+      </ol>
+    </div>,
+    document.body,
+  );
+}
+```
+
+The `mounted` guard is not optional on a server-rendered or prerendered site. `createPortal` needs `document`, which does not exist during a build. Returning `null` on the server and on the first client render keeps both trees identical — see [rendering strategies](/blog/rendering-strategies) for why that first render has to match.
+
+### The item
+
+```tsx
+function ToastItem({ toast }: { toast: Toast }) {
+  return (
+    <li
+      className="pointer-events-auto relative rounded-xl border bg-white p-3 shadow-lg dark:bg-zinc-900"
+      onMouseEnter={() => pauseToast(toast.id)}
+      onMouseLeave={() => resumeToast(toast.id)}
+      onFocus={() => pauseToast(toast.id)}
+      onBlur={() => resumeToast(toast.id)}
+    >
+      <p className="text-sm font-semibold">{toast.title}</p>
+      {toast.description ? (
+        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{toast.description}</p>
+      ) : null}
+      <button
+        type="button"
+        onClick={() => dismissToast(toast.id)}
+        className="absolute right-2 top-2"
+      >
+        <span className="sr-only">Dismiss notification</span>
+        <X size={14} aria-hidden />
+      </button>
+    </li>
+  );
+}
+```
+
+Pausing on `focus` as well as `mouseenter` is what makes it usable by keyboard.
+
+## Accessibility
+
+Toasts are one of the easiest components to make hostile to screen reader and keyboard users. Four rules cover most of it.
+
+### Announce with the right urgency
+
+Use `aria-live="polite"` for success and info, so the announcement waits for a pause in speech. Use `aria-live="assertive"` for errors, which interrupts. That is why the component above renders two regions — a toast cannot change its own politeness after the fact, so the urgency has to be decided by which region it lands in.
+
+### Do not steal focus
+
+Moving focus to a toast rips the user out of whatever they were doing. Leave focus alone. If the toast contains the only way to undo an action, that action needs to exist somewhere permanent too — a toast is transient by definition and a keyboard user may never reach it in time.
+
+### Give every control a name
+
+An icon-only dismiss button needs text for assistive tech, hence the `sr-only` span. The same applies to any action inside the toast.
+
+### Respect timing preferences
+
+Auto-dismiss after four seconds is a guess about reading speed. WCAG's "Timing Adjustable" criterion is the reason pause-on-hover and pause-on-focus matter, and why anything the user must act on should not disappear on a timer at all — give it `duration: Infinity`.
+
+The [accessibility note](/blog/accessibility) covers live regions in more depth.
+
+## Using it from outside React
+
+This is the payoff. No provider, no hook, no component:
+
+```ts
+// api.ts
+import axios from "axios";
+import { toast } from "./toast";
+
+export const api = axios.create({ baseURL: "/api" });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      toast.error("Session expired", { description: "Sign in again to continue." });
+    } else if (!error.response) {
+      toast.error("Network unreachable");
+    }
+    return Promise.reject(error);
+  },
+);
+```
+
+The same call works in a route guard, a WebSocket `onclose` handler, a `visibilitychange` listener, or a plain utility function.
+
+## Testing
+
+Because the store is a plain module, tests do not need a React tree to exercise the logic.
+
+```ts
+import { beforeEach, expect, it, vi } from "vitest";
+import { addToast, clearToasts, getSnapshot } from "./toast-store";
+
+beforeEach(() => {
+  clearToasts();
+  vi.useFakeTimers();
+});
+
+it("auto-dismisses after the duration", () => {
+  addToast({ title: "Saved", duration: 1000 });
+  expect(getSnapshot()).toHaveLength(1);
+
+  vi.advanceTimersByTime(1000);
+  expect(getSnapshot()).toHaveLength(0);
+});
+```
+
+The one discipline a module singleton demands: **reset it between tests**. Without the `clearToasts()` in `beforeEach`, state and pending timers leak across test files and you get failures that depend on execution order.
+
+## Where a toast is the wrong answer
+
+This site's browser tools use a local `useCopy` hook that flips a button from "Copy" to "Copied" for a moment. That is the better pattern for that job — feedback attached to the control the user just pressed, with no announcement and nothing to dismiss.
+
+Reach for a toast when the feedback is **global** (a background save finished), **detached** from a control (a request failed in an interceptor), or **needs to outlive** the component that triggered it (navigating away after submitting). Otherwise, inline feedback is calmer and more accessible.
+
+## Common mistakes
+
+- **Returning a new array from `getSnapshot`.** Infinite re-render loop. Build the array in the mutation.
+- **A fresh `[]` from `getServerSnapshot`.** Same problem, on the server.
+- **Mounting two `<Toaster />` components.** One store, two subscribers, every toast rendered twice.
+- **Timers owned by the item component.** They stop when the item unmounts mid-animation. Keep them in the store.
+- **Firing toasts from an effect without a dependency guard.** StrictMode runs effects twice in development, so you get two toasts and assume the store is broken.
+- **`aria-live` on the toast itself** instead of a container that is already in the DOM. Live regions must exist before content is inserted, or nothing is announced.
+- **Putting an undo action only in the toast.** It disappears; the action must live somewhere else too.
+
+## Interview answers
+
+<details>
+<summary>Why can't context alone power a toast API callable from anywhere?</summary>
+
+Reading context requires `useContext`, which only works inside a component during render. An Axios interceptor, a router guard, or a plain utility module is not a component, so it has no way to reach the provider. Moving the state outside React and subscribing to it with `useSyncExternalStore` removes that constraint — the store is importable from anywhere and React just watches it.
+
+</details>
+
+<details>
+<summary>What does <code>useSyncExternalStore</code> actually solve here?</summary>
+
+It lets React subscribe to state it does not own, without tearing. Under concurrent rendering React can pause and resume work, so two components reading a mutable external value in one pass could otherwise observe different versions of it. The hook takes a subscribe function and a snapshot getter, and guarantees a consistent read across a render pass.
+
+</details>
+
+<details>
+<summary>Why must <code>getSnapshot</code> return the same reference between changes?</summary>
+
+React compares the previous and next snapshot with `Object.is` to decide whether to re-render. Returning a freshly built array or object every call means the comparison never matches, so React re-renders, calls `getSnapshot` again, gets another new reference, and loops. Create the new array when the state mutates and return that stored reference from the getter.
+
+</details>
+
+<details>
+<summary>How do you make toasts accessible?</summary>
+
+Render them into a live region that already exists in the DOM — `aria-live="polite"` for success and info, `aria-live="assertive"` for errors — so insertions get announced. Do not move focus to the toast. Give icon-only dismiss buttons an accessible name. Pause the auto-dismiss timer on hover and on focus, and never put a required action behind a timer.
+
+</details>
+
+<details>
+<summary>How does this behave with SSR or static prerendering?</summary>
+
+`getServerSnapshot` returns a stable empty array, so the server renders no toasts. The `Toaster` also returns `null` until it has mounted, because `createPortal` needs `document`. The first client render therefore matches the server output, and the portal appears on the following commit — no hydration mismatch.
+
+</details>
+
+<details>
+<summary>What are the tradeoffs of a module-level singleton?</summary>
+
+You get an API callable from anywhere with no provider and stable function identities. The costs are that it is global state — tests must reset it explicitly, two mounted renderers will double-render every toast, and per-subtree scoping (different toasts in different regions) needs an explicit store instance plus context rather than the singleton.
+
+</details>
+
+---
+
+Related: [Zustand](/blog/zustand) (the same `useSyncExternalStore` foundation), [What is tearing in React?](/blog/react-tearing), [What is a custom hook?](/blog/custom-hook), [Web accessibility](/blog/accessibility) (live regions), [React Hooks, by version](/blog/react-hooks).
