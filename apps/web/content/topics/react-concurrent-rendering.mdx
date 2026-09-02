@@ -1,0 +1,298 @@
+---
+title: React concurrent rendering — how interruptible rendering actually works
+description: Lanes, time slicing, and the render/commit split — why React can pause a render, what startTransition and useDeferredValue really do, and the rules concurrency imposes on your components.
+slug: react-concurrent-rendering
+date: 2026-09-02
+subject: react
+tags:
+  - react
+  - hooks
+  - javascript
+  - interview
+---
+
+The one-sentence version of <Term id="concurrent-rendering">concurrent rendering</Term> — "React can pause a render" — is true and almost useless. It does not tell you why your `startTransition` changed nothing, why React renders your component twice in development, or why reading `window.innerWidth` during render became a bug.
+
+This note is the mechanism: what React interrupts, where it is allowed to stop, what it does with the abandoned work, and which rules your components now have to follow.
+
+## The problem it was built to solve
+
+### One long render blocks everything
+
+React's original renderer was recursive and synchronous. Once `setState` triggered a render, React walked the entire tree and committed it in a single, uninterruptible burst. That burst is a **task** on the main thread, and while it runs the browser cannot paint, cannot run your click handler, and cannot process input.
+
+```tsx
+function onChange(value: string) {
+  setQuery(value);        // triggers a render of 5,000 rows
+}                         // 180ms of blocked main thread
+```
+
+The user types `r`, and the letter appears 180 milliseconds later. Nothing is broken — the work is simply too big to do between keystrokes. The [event loop note](/blog/event-loop) explains why the browser has no opportunity to paint until that task ends.
+
+### The fix is scheduling, not speed
+
+React's answer was not to make rendering faster. It was to make rendering **interruptible**, so urgent work can jump the queue and the browser can paint in the gaps.
+
+This matters for expectations: concurrent rendering does not reduce the total work. It changes **when** the work happens and **what order** it happens in.
+
+## What "concurrent" does not mean
+
+It does not mean threads, and it does not mean parallelism. There is still exactly one JavaScript call stack and one main thread. React is doing **cooperative scheduling** — it voluntarily stops and hands control back to the browser, then resumes later.
+
+If you need genuine parallelism, that is still a [Web Worker](/blog/web-worker).
+
+The name has history worth knowing: React 18 dropped the earlier "Concurrent Mode" framing. There is no mode to switch on. Calling `createRoot` gives you the concurrent renderer, and individual features opt in per update.
+
+```tsx
+import { createRoot } from "react-dom/client";
+
+createRoot(document.getElementById("root")!).render(<App />);
+```
+
+## Render is a draft; commit is not
+
+The single most useful mental model is that React splits an update into two phases with very different rules.
+
+### The render phase is interruptible
+
+React builds a work-in-progress tree by calling your components. This phase can be paused, resumed, restarted from scratch, or **thrown away entirely** without anyone seeing it. Nothing has touched the DOM yet.
+
+Because a render may be discarded, calling your component is not a promise that its output will ever appear on screen.
+
+### The commit phase is atomic
+
+Once React has a complete tree it applies it to the DOM in one synchronous, uninterruptible pass, then runs layout effects and effects. The user never observes half of an update.
+
+That asymmetry explains most of the rules further down: anything with a side effect must live in the commit phase (effects), because the render phase might run twice and produce nothing.
+
+### Where React is allowed to pause
+
+React yields **between components**, not inside one. If a single component takes 200 milliseconds to render, concurrency cannot help — there is no yield point inside your function body.
+
+This is the most common reason `startTransition` appears to do nothing. Transitions split work across many components; they do not split work inside one expensive component. For that you need memoization, virtualization, or less work — see [web performance](/blog/web-performance).
+
+## Lanes and priority
+
+Internally React assigns each update a **lane** — a priority bucket, implemented as a bitmask so several can be worked on and tested together.
+
+| Roughly | Examples |
+| --- | --- |
+| Discrete / urgent | Click, keypress, input |
+| Continuous | Scroll, drag, mouseover |
+| Default | Network responses, timeouts |
+| Transition | Anything inside `startTransition` |
+| Idle | Offscreen, lowest value work |
+
+When a higher-priority update arrives mid-render, React abandons the in-progress work, handles the urgent update first, and restarts the lower-priority render afterwards. The abandoned render is simply discarded — which is exactly why render must be free of side effects.
+
+### Time slicing
+
+While working through low-priority lanes React checks whether it has run long enough, and if so yields to the browser and schedules a continuation. The current implementation targets a slice of roughly five milliseconds.
+
+It resumes using a `MessageChannel` rather than `setTimeout`, because nested `setTimeout` calls get clamped to about four milliseconds by the browser — which would burn most of the budget on waiting.
+
+## The opt-in APIs
+
+Concurrency is not automatic. Every update is urgent unless you say otherwise.
+
+### startTransition
+
+Marks the state updates inside the callback as non-urgent.
+
+```tsx
+import { startTransition } from "react";
+
+function onChange(value: string) {
+  setQuery(value);                       // urgent: the input must feel instant
+  startTransition(() => {
+    setResults(search(value));           // can be interrupted and restarted
+  });
+}
+```
+
+Type another letter and React throws away the in-flight results render and starts again with the new query. The input never stalls.
+
+### useTransition
+
+The hook form adds a pending flag, which is usually what you want in a UI.
+
+```tsx
+const [isPending, startTransition] = useTransition();
+
+return (
+  <>
+    <input value={query} onChange={(event) => onChange(event.target.value)} />
+    <ResultList items={results} className={isPending ? "opacity-60" : undefined} />
+  </>
+);
+```
+
+Dimming stale content is a better pattern than swapping in a spinner: the user keeps reading the old results while the new ones compute.
+
+### useDeferredValue
+
+Use this when the expensive work derives from a value you do not control as two separate state variables — a prop, for instance.
+
+```tsx
+const deferredQuery = useDeferredValue(query);
+const results = useMemo(() => search(deferredQuery), [deferredQuery]);
+const isStale = query !== deferredQuery;
+```
+
+React renders once urgently with the **previous** value, then schedules a second, interruptible render with the new one. Comparing the two values tells you whether what is on screen is stale.
+
+### Choosing between them
+
+- You own the state update and can wrap it → `startTransition`
+- You need a pending indicator → `useTransition`
+- The value arrives as a prop, or you cannot split the update → `useDeferredValue`
+
+All three need the expensive child to be **memoized** to pay off. If the child re-renders on every parent render regardless, deferring the value changes nothing.
+
+### Actions build on this
+
+React 19's Actions — `useActionState`, `useOptimistic`, and passing a function to a form's `action` prop — are transitions with conventions layered on top. An async Action runs inside a transition, so its pending state and interruption behaviour come from the same machinery.
+
+## Automatic batching
+
+React 18 also made batching universal. Before, multiple `setState` calls were batched inside React event handlers but **not** inside promises, timeouts, or native listeners.
+
+```tsx
+setTimeout(() => {
+  setCount((c) => c + 1);
+  setFlag(true);
+  // React 17: two renders. React 18+: one.
+}, 0);
+```
+
+When you genuinely need the DOM updated before the next line — measuring an element, or an integration that reads layout immediately — opt out with `flushSync`:
+
+```tsx
+import { flushSync } from "react-dom";
+
+flushSync(() => setOpen(true));
+panelRef.current?.scrollIntoView();   // the panel is in the DOM now
+```
+
+Use it sparingly. It forces a synchronous render and gives up the benefit.
+
+## Suspense under concurrency
+
+<Term id="react-suspense">Suspense</Term> and concurrent rendering were designed together, and two behaviours only make sense as a pair.
+
+### Transitions suppress unwanted fallbacks
+
+If content is already on screen and an update inside a transition suspends, React keeps showing the existing UI instead of replacing it with a fallback. Without transitions, navigating between tabs would flash a spinner over content the user was already reading.
+
+### Streaming SSR
+
+On the server, `Suspense` boundaries become the chunk boundaries of a streamed response — the shell is sent immediately and slower regions follow. [Rendering strategies](/blog/rendering-strategies) covers that side, and [hydration](/blog/hydration) covers what the client does with it. Hydration itself became selective and interruptible: React can prioritise hydrating the part of the page the user just clicked.
+
+## The rules concurrency imposes
+
+These are the practical consequences, and the source of most "React 18 broke my app" reports.
+
+### Render must be pure
+
+React may call your component twice and discard the first result, or abandon a render entirely. So the render phase must not mutate anything outside itself, write to refs, trigger network requests, or push to a module-level array. Same inputs, same output, no side effects.
+
+### StrictMode double-invokes on purpose
+
+In development, `StrictMode` renders components twice and mounts, unmounts, then remounts each component — running effects twice. This is not a bug to work around; it is a detector for exactly the impurities above. If double-invocation breaks your component, concurrency would have broken it in production.
+
+```tsx
+useEffect(() => {
+  const connection = connect(roomId);
+  return () => connection.disconnect();   // cleanup makes remount safe
+}, [roomId]);
+```
+
+Write the cleanup and the double-invocation becomes a non-event.
+
+### External state can tear
+
+Because a render can pause, two components reading a mutable external value during one pass can see **different** values — that is <Term id="react-tearing">tearing</Term>. Reading `Date.now()`, `window.innerWidth`, or a hand-rolled store during render is unsafe.
+
+```tsx
+const width = useSyncExternalStore(subscribe, () => window.innerWidth, () => 1024);
+```
+
+`useSyncExternalStore` exists to give React a consistent snapshot across a render pass. [Building a toast system](/blog/react-toaster) walks through a full store built on it, and [Zustand](/blog/zustand) uses the same primitive internally.
+
+### Ids must be stable
+
+Random ids generated during render differ between the server pass and the client pass. Use `useId`.
+
+## Measuring whether it helped
+
+Transitions target **responsiveness**, so measure that, not total render time.
+
+- **INP** in field data is the metric that moves — it captures the delay between interaction and the next paint
+- **Long tasks** in a Performance recording should get shorter and more numerous, since React is now yielding
+- The **React Profiler** shows which updates were transitions and what got interrupted
+
+If INP does not improve, the bottleneck is probably a single component that is too expensive to render at all. Concurrency cannot subdivide that.
+
+## Common misconceptions
+
+- **"It runs in parallel."** No. One thread, cooperative yielding.
+- **"It makes my app faster."** It makes it feel more responsive. Total work is unchanged, and there is a small scheduling overhead.
+- **"Wrap everything in `startTransition`."** Then nothing is urgent and the input lags again. Mark the *result* of an interaction as non-urgent, never the interaction itself.
+- **"React 18 turns it on automatically."** `createRoot` enables the renderer; each update still opts in.
+- **"`useDeferredValue` debounces."** A debounce waits a fixed time then does the work once. `useDeferredValue` starts immediately at low priority and restarts when interrupted — no fixed delay, and it adapts to how fast the device is.
+- **"StrictMode double-render is a bug."** It is a purity check, development only.
+
+## Interview answers
+
+<details>
+<summary>What is concurrent rendering in React?</summary>
+
+A rendering model where React can start a render, pause it, resume it, or discard it before committing. It prepares the next UI in memory and only touches the DOM once a complete tree is ready, which lets urgent updates like typing interrupt long-running background renders. It is cooperative scheduling on a single thread, not multithreading.
+
+</details>
+
+<details>
+<summary>Which phase is interruptible, and why does it matter?</summary>
+
+The render phase is interruptible; the commit phase is atomic. Because a render may run twice or be thrown away, render must be pure — no mutations, no subscriptions, no fetching. Side effects belong in effects, which run during commit, when React has decided the work is real.
+
+</details>
+
+<details>
+<summary>What is the difference between <code>startTransition</code> and <code>useDeferredValue</code>?</summary>
+
+`startTransition` wraps the *update* — you mark specific `setState` calls as non-urgent at the call site. `useDeferredValue` wraps the *value* — React gives you the previous value during the urgent render and re-renders with the new one at lower priority. Use the first when you own the setter, the second when the value comes in as a prop or cannot be split.
+
+</details>
+
+<details>
+<summary>Is <code>useDeferredValue</code> the same as debouncing?</summary>
+
+No. A debounce always waits a fixed interval before doing anything. `useDeferredValue` begins the work immediately at low priority and abandons it if a more urgent update arrives, so on a fast device the result can appear right away, and on a slow one it degrades gracefully. It adapts instead of guessing a delay.
+
+</details>
+
+<details>
+<summary>Why does StrictMode render components twice?</summary>
+
+To surface code that is not safe under concurrency. React may render a component more than once per commit or discard a render, so anything impure — mutating a module variable, writing a ref during render, starting a request in the body — is a latent bug. Development-mode double invocation makes it fail immediately rather than intermittently in production.
+
+</details>
+
+<details>
+<summary>What is tearing and how do you prevent it?</summary>
+
+Two components reading the same mutable external value during one interruptible render pass, and observing different values because the value changed while React was paused. The fix is `useSyncExternalStore`, which takes a subscribe function and a snapshot getter and guarantees a consistent read for the whole pass.
+
+</details>
+
+<details>
+<summary>I wrapped an update in a transition and nothing improved. Why?</summary>
+
+Most often one of three things. The expensive child is not memoized, so it re-renders anyway. Or the cost is inside a single component, and React can only yield between components. Or the urgent update was wrapped too — if everything is a transition, nothing is prioritised.
+
+</details>
+
+---
+
+Related: [What is concurrent rendering?](/blog/concurrent-rendering) (the short version), [What is tearing in React?](/blog/react-tearing), [React Suspense](/blog/react-suspense), [When React re-renders](/blog/react-rerender-internals), [The event loop](/blog/event-loop), [Web performance](/blog/web-performance) (INP).
