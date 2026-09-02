@@ -6,7 +6,7 @@ date: 2026-08-22
 subject: javascript
 tags:
   - javascript
-  - tooling
+  - interview
 ---
 
 
@@ -264,6 +264,73 @@ Object.getPrototypeOf(u) === User.prototype; // true
 
 If the constructor `return`s an object, that object wins. If it returns a primitive (or nothing), the engine keeps the instance it created. That is why `return this` in a constructor is redundant, and why `return { ok: true }` replaces the instance.
 
+## this in classes
+
+A `class` is a function with its methods parked on `Fn.prototype`, so the same four rules apply — with two wrinkles.
+
+### Methods are shared, fields are per-instance
+
+```js
+class Counter {
+  count = 0;                       // own property on each instance
+  inc() { this.count += 1; }       // one function on Counter.prototype
+  incArrow = () => { this.count += 1; }; // a new function per instance
+}
+```
+
+`inc` is an ordinary method: calling `c.inc()` sets `this` to `c`, and detaching it loses that. `incArrow` is a class field holding an arrow, so it captured `this` when the instance was built and survives detachment — at the cost of one function object per instance. That is the whole tradeoff behind auto-binding handlers.
+
+```js
+const c = new Counter();
+const loose = c.inc;
+loose();        // TypeError — class bodies are strict, so this is undefined
+const bound = c.incArrow;
+bound();        // fine — the arrow captured the instance
+```
+
+### Class bodies are always strict
+
+There is no sloppy-mode fallback inside a class. A detached method gets `undefined`, not `globalThis`, so the failure is a loud `TypeError` rather than a silent write to the global object. [Prototypes](/blog/prototype-and-proto) covers where each member actually lands.
+
+## Where this goes missing
+
+Every one of these is the same bug — the function was extracted from its call site.
+
+### Callbacks and timers
+
+```js
+setTimeout(user.greet, 0);          // detached — this is not user
+setTimeout(() => user.greet(), 0);  // call site preserved
+setTimeout(user.greet.bind(user), 0);
+```
+
+### DOM event handlers
+
+In a regular function used as a listener, `this` is the element the listener is attached to — the same value as `event.currentTarget`. Convert it to an arrow and you lose that, so read `event.currentTarget` explicitly if you want both.
+
+```js
+button.addEventListener("click", function () {
+  this;                 // the button
+});
+
+button.addEventListener("click", (event) => {
+  this;                 // enclosing this — NOT the button
+  event.currentTarget;  // the button
+});
+```
+
+### Array methods accept a thisArg
+
+`map`, `filter`, `forEach`, `some`, `every`, and `find` all take an optional second argument used as `this` inside the callback. It only works for regular functions, since arrows ignore it.
+
+```js
+[1, 2].map(function (n) { return this.factor * n; }, { factor: 10 }); // [10, 20]
+```
+
+### React
+
+Function components never read `this`, which is one reason hooks removed a whole category of bug. In class components you still need `this.handleClick = this.handleClick.bind(this)` in the constructor, or a class field arrow.
+
 ## What the spec adds (optional)
 
 The spec uses a few labels for the same story:
@@ -297,3 +364,51 @@ new F();                // this → new instance
 ```
 
 Write `myCall` / `myBind` / `myNew` once. After that, `this` is just the argument you forgot you were passing.
+
+## Interview answers
+
+<details>
+<summary>What determines the value of <code>this</code>?</summary>
+
+The call site, not the definition site. Four rules, in precedence order: `new` creates a fresh instance and binds it; `call`, `apply`, or `bind` set it explicitly; a method call binds the object before the dot; and a bare call gives `undefined` in strict mode or `globalThis` in sloppy mode. Arrow functions sit outside all four — they have no `this` slot and read the enclosing scope's.
+
+</details>
+
+<details>
+<summary>Why does a detached method lose <code>this</code>?</summary>
+
+`obj.fn` evaluates to just the function; the binding comes from the call expression `obj.fn()`, not from the function itself. Assigning it to a variable or passing it to `setTimeout` drops the receiver, so the later call is a bare call. Fix it with `bind`, an arrow wrapper, or by calling it as `obj.fn()`.
+
+</details>
+
+<details>
+<summary>How do <code>call</code>, <code>apply</code>, and <code>bind</code> differ?</summary>
+
+`call` and `apply` both invoke immediately and differ only in argument shape — `call` takes them individually, `apply` takes an array. `bind` invokes nothing: it returns a new function with `this` and any leading arguments pre-filled, which you call later.
+
+</details>
+
+<details>
+<summary>Can you use <code>new</code> on an arrow function?</summary>
+
+No. Arrows have no `this` slot of their own and no `prototype` property, both of which `new` requires. It throws a `TypeError`.
+
+</details>
+
+<details>
+<summary>What does <code>new</code> actually do?</summary>
+
+Four steps: create an empty object, set its prototype to the constructor's `prototype` property, call the constructor with `this` bound to that object, and return the object — unless the constructor explicitly returned a different object, in which case that one wins. A returned primitive is ignored.
+
+</details>
+
+<details>
+<summary>Why is a class field arrow different from a prototype method?</summary>
+
+A method lives once on the prototype and is shared, so it depends on the call site for `this`. A class field arrow is created per instance during construction and captures that instance permanently, so it survives being detached — at the cost of one function object per instance.
+
+</details>
+
+---
+
+Related: [Prototypes in JavaScript](/blog/prototype-and-proto) (what `new` wires up), [How JavaScript actually works](/blog/how-javascript-works), [React Hooks](/blog/react-hooks).
