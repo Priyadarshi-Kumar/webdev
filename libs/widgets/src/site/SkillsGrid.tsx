@@ -41,7 +41,7 @@ export function SkillsGrid({
         <p className="mt-1 font-display text-lg font-semibold tracking-tight text-zinc-950 dark:text-white">
           Stack at a glance
         </p>
-        <div className="mt-4 min-h-0 flex-1 space-y-5 overflow-y-auto pr-1 lg:overflow-visible">
+        <div className="rail-scroll mt-4 min-h-0 flex-1 space-y-5 overflow-y-auto pr-1 lg:overflow-visible">
           {groups.map((group, index) => (
             <div
               key={group.label}

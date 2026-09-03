@@ -35,7 +35,7 @@ const rows = [
 
 export function ManagerCompare() {
   return (
-    <div className="not-prose my-6 -mx-3 max-w-[calc(100%+1.5rem)] overflow-x-auto overscroll-x-contain border-y border-zinc-200 sm:mx-0 sm:max-w-none sm:rounded-xl sm:border dark:border-white/10">
+    <div className="not-prose rail-scroll my-6 -mx-3 max-w-[calc(100%+1.5rem)] overflow-x-auto overscroll-x-contain border-y border-zinc-200 sm:mx-0 sm:max-w-none sm:rounded-xl sm:border dark:border-white/10">
       <table className="min-w-[40rem] w-full border-collapse text-left text-[13px] leading-snug">
         <thead>
           <tr className="border-b border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-zinc-900">

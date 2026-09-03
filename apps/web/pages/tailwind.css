@@ -47,6 +47,33 @@ html {
     outline-offset: 2px;
   }
 
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(161 161 170 / 0.45) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: rgb(161 161 170 / 0.4);
+    border-radius: 999px;
+  }
+
+  :where(.dark) *::-webkit-scrollbar-thumb {
+    background: rgb(255 255 255 / 0.16);
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--theme-accent-rgb) / 0.55);
+  }
+
   ::selection {
     background: rgb(var(--theme-accent-rgb) / 0.3);
   }
@@ -341,33 +368,6 @@ html {
 
   .prose-article .group\/term > a {
     @apply font-[inherit] no-underline;
-  }
-
-  .rail-scroll {
-    scrollbar-width: thin;
-    scrollbar-color: rgb(161 161 170 / 0.45) transparent;
-  }
-
-  .rail-scroll::-webkit-scrollbar {
-    width: 5px;
-    height: 5px;
-  }
-
-  .rail-scroll::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .rail-scroll::-webkit-scrollbar-thumb {
-    background: rgb(161 161 170 / 0.4);
-    border-radius: 999px;
-  }
-
-  :where(.dark) .rail-scroll::-webkit-scrollbar-thumb {
-    background: rgb(255 255 255 / 0.16);
-  }
-
-  .rail-scroll::-webkit-scrollbar-thumb:hover {
-    background: rgb(var(--theme-accent-rgb) / 0.55);
   }
 
   .scroll-hint-fade {

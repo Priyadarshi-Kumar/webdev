@@ -117,7 +117,7 @@ export function ArticleToc({ items }: { items: TocEntry[] }) {
       </p>
       <ScrollHints
         frameClassName="pointer-events-auto max-h-[calc(100dvh-16rem)]"
-        className="max-h-[calc(100dvh-16rem)] overflow-y-auto"
+        className="rail-scroll max-h-[calc(100dvh-16rem)] overflow-y-auto"
       >
         <TocLinks items={items} activeId={activeId} onActive={setActiveId} />
       </ScrollHints>

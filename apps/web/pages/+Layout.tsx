@@ -16,7 +16,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <ScrollHints
         id="page-content"
         frameClassName="z-10 flex min-h-0 flex-1 flex-col"
-        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain lg:flex lg:flex-col"
+        className="rail-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain lg:flex lg:flex-col"
       >
         <main
           className={`mx-auto w-full min-w-0 max-w-6xl overflow-x-hidden px-3 pb-6 sm:px-6 sm:pb-8 lg:flex-1 ${

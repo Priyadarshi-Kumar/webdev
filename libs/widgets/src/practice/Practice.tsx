@@ -313,7 +313,7 @@ function PracticeMobileFilters({
             role="dialog"
             aria-modal="true"
             aria-labelledby="practice-mobile-filters-title"
-            className="absolute inset-x-0 bottom-0 max-h-[min(85svh,34rem)] overflow-y-auto rounded-t-3xl border border-zinc-200/80 bg-white/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_-16px_rgba(15,23,42,0.35)] dark:border-white/10 dark:bg-zinc-950/95"
+            className="rail-scroll absolute inset-x-0 bottom-0 max-h-[min(85svh,34rem)] overflow-y-auto rounded-t-3xl border border-zinc-200/80 bg-white/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_-16px_rgba(15,23,42,0.35)] dark:border-white/10 dark:bg-zinc-950/95"
           >
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2
