@@ -1,0 +1,355 @@
+---
+title: React Virtuoso — virtualisation that measures for you
+description: How Virtuoso implements windowing — size engine, variable heights, groups, grids, tables, and chat — and where it sits next to TanStack Virtual and react-window.
+slug: react-virtuoso
+date: 2026-09-04
+subject: react
+tags:
+  - react
+  - javascript
+  - interview
+---
+
+[react-virtuoso](https://virtuoso.dev/react-virtuoso/) is a React library that implements <Term id="virtualisation">list virtualisation</Term> as four components: a flat list, a grouped list, a CSS grid, and a table. You give it a count (or an array), a viewport with a real height, and an `itemContent` render function. It mounts the window, sizes the scrollbar from measured row heights, and keeps that window in sync as the user scrolls.
+
+The conceptual note — spacers, overscan, prefix sums — lives in [list virtualisation](/blog/virtualisation). This note is how Virtuoso *fits* that model, what it adds on top, and the APIs you actually reach for.
+
+## How it fits virtualisation
+
+A hand-rolled window does this:
+
+1. Know (or guess) each row’s height.
+2. From `scrollTop`, find `startIndex` / `endIndex`.
+3. Render that slice.
+4. Make the scrollable content as tall as the **full** list.
+
+Virtuoso owns steps 1, 2, and 4. You own step 3 — `itemContent` — and the data.
+
+The important product choice: **variable height is the default**, not an advanced mode. `react-window`’s `FixedSizeList` is division. Virtuoso always behaves like the measured, prefix-sum case. You can hint with `defaultItemHeight` so the first paint is closer, but you do not pass a `itemSize(index)` callback unless you want to.
+
+That is why people reach for it for chat, comments, and mixed search results — the rows were never one height, and they change after mount.
+
+### The size engine
+
+On first render of a row, Virtuoso uses an estimate (the default item height, or whatever it has already seen). After layout it **measures** the DOM node. When the number changes, it patches the size table and restretches the spacer so items below shift.
+
+It keeps watching. A `ResizeObserver` on the item (and on the scroller) means an image that loads, a line of text that wraps after a font swap, or an accordion that opens does not leave the scrollbar lying. That is the “dynamic size changes” feature on the docs site, and it is the difference between a demo list of `height: 30` divs and production UI.
+
+Because measurement uses the content box, **margins on the item poke a hole in the math**. `contentRect` does not include them. The engine thinks the row is shorter than the space it actually occupies, the total height comes out small, and the user cannot reach the last items. Put padding on the wrapper. Set `margin: 0` on the first and last block inside the row. This is the first thing to check when a Virtuoso list “won’t scroll to the end”.
+
+### Mapping scroll position to an index
+
+Once heights live in a table, `scrollTop` → index is a search over prefix sums, not a division. Virtuoso does that internally. You rarely see `{ start, size, index }` objects the way you do with TanStack Virtual’s `getVirtualItems()`. The component applies the translate / padding itself.
+
+You *can* observe the window with `rangeChanged`:
+
+```tsx
+<Virtuoso
+  rangeChanged={({ startIndex, endIndex }) => {
+    logVisible(startIndex, endIndex);
+  }}
+/>
+```
+
+That callback is for analytics, prefetch, and “load when the window nears the end” — not for positioning DOM. Positioning is already done.
+
+### What you still have to give it
+
+Virtualisation only windows **inside a scroller**. Virtuoso needs a height. Either:
+
+```tsx
+<Virtuoso style={{ height: "100%" }} totalCount={rows.length} itemContent={itemContent} />
+```
+
+in a parent that is actually bounded (`height: 100%` / flex child with `min-height: 0`), or `useWindowScroll` if the document is the scroller.
+
+If the list grows with its content, there is no overflow, the window is “everything”, and you have paid for a library that is rendering the whole array. That bug is layout, not Virtuoso.
+
+## The four components
+
+| Component | Use when |
+| --- | --- |
+| `Virtuoso` | A flat list. Messages, logs, results, settings. |
+| `GroupedVirtuoso` | Sections with sticky headers (A, B, C… or dates). |
+| `VirtuosoGrid` | Same-sized cards in a responsive CSS grid. |
+| `TableVirtuoso` | A real `<table>` with virtualised rows, optional sticky header. |
+
+Pick the component that matches the markup you need. Do not force a grid into `Virtuoso` with floated cards — column count and window math will fight.
+
+## A minimum list
+
+```tsx
+import { Virtuoso } from "react-virtuoso";
+
+function UserList({ users }: { users: User[] }) {
+  return (
+    <Virtuoso
+      style={{ height: "100%" }}
+      data={users}
+      computeItemKey={(_, user) => user.id}
+      itemContent={(_index, user) => (
+        <UserRow user={user} />
+      )}
+    />
+  );
+}
+```
+
+`data` is the comfortable API: `itemContent` receives `(index, item)`. The older `totalCount={n}` API still works when you look items up yourself — useful when the backing store is not an array you want to pass in.
+
+```tsx
+<Virtuoso
+  style={{ height: 400 }}
+  totalCount={10_000}
+  itemContent={(index) => <div>Row {index}</div>}
+/>
+```
+
+`computeItemKey` is the `key` you would have put on the row. Use a stable id. Index keys reuse the wrong component state when the window slides or when you prepend.
+
+Keep `itemContent` **referentially stable** if the rows are heavy. The callback runs for every item in the window, often. Inline a `memo`’d child rather than a fat closure:
+
+```tsx
+const itemContent = useCallback((index: number, user: User) => {
+  return <UserRow user={user} />;
+}, []);
+
+const UserRow = memo(function UserRow({ user }: { user: User }) {
+  return <div className="px-3 py-2">{user.name}</div>;
+});
+```
+
+The docs are explicit: do not hide a complex tree inside `itemContent` without memo. Virtuoso can skip positioning work; it cannot skip your JSX.
+
+## Overscan and “render more than the viewport”
+
+Virtuoso’s extra pixels are `increaseViewportBy`, not a row count named `overscan`.
+
+```tsx
+<Virtuoso
+  increaseViewportBy={{ top: 200, bottom: 200 }}
+  // or a single number for both edges
+/>
+```
+
+If the scroller is 400px tall and you add 200px each side, you paint ~800px of rows. That hides blank edges on a fling and costs more commit work. Start small; raise it if you see gaps on a throttled CPU.
+
+For **slow** rows (heavy charts, unoptimised images), overscan makes jank worse because more slow things mount per frame. Then you want **scroll seek**: while velocity is high, swap the real row for a placeholder.
+
+```tsx
+<Virtuoso
+  scrollSeekConfiguration={{
+    enter: (velocity) => Math.abs(velocity) > 200,
+    exit: (velocity) => Math.abs(velocity) < 30,
+  }}
+  components={{
+    ScrollSeekPlaceholder: ({ height }) => (
+      <div style={{ height }} className="bg-zinc-900/40" />
+    ),
+  }}
+/>
+```
+
+`isScrolling` is the poorer cousin: you still mount the real component, you just tell it to skip images. Prefer seek placeholders when mount itself is the cost.
+
+## Infinite load — `endReached` and `startReached`
+
+Virtualisation windows the DOM. Paging windows the network. Virtuoso wires the second to the first with edge callbacks.
+
+```tsx
+<Virtuoso
+  data={messages}
+  endReached={() => {
+    if (!hasMore || loading) return;
+    void loadOlder(); // or load newer, depending on sort
+  }}
+  startReached={() => {
+    if (!hasMoreAbove || loading) return;
+    void loadAbove();
+  }}
+  itemContent={(index, message) => <Bubble message={message} />}
+/>
+```
+
+`endReached` fires when the window nears the last loaded item — not when the user hits a sentinel `div` you placed. Guard on `loading` or you will request page 3 while page 2 is in flight.
+
+**Prepend** (chat history: scroll up, older messages appear above) needs `firstItemIndex`. If you unshift 50 items, every index shifts by 50 and the engine would think you jumped. You tell it the first item’s “absolute” index so the viewport stays on the same messages:
+
+```tsx
+<Virtuoso
+  firstItemIndex={oldestLoadedIndex}
+  data={messages}
+  startReached={loadOlder}
+  followOutput={followOutput}
+/>
+```
+
+`oldestLoadedIndex` counts down as you prepend (… 950, 900, 850) or you keep a monotonic index from the server. The point is: **do not let prepend look like “the item at index 0 changed identity”.**
+
+## Chat: `followOutput`, `alignToBottom`, `autoscrollToBottom`
+
+A message list wants three behaviours that a directory list does not:
+
+1. If the user is **at the bottom**, a new message should stick them to the bottom.
+2. If they have **scrolled up** to read history, a new message must not yank them down.
+3. Short threads should sit on the bottom of the pane (`alignToBottom`), like iMessage.
+
+```tsx
+<Virtuoso
+  alignToBottom
+  followOutput={(atBottom) => (atBottom ? "smooth" : false)}
+  data={messages}
+  itemContent={(index, message) => <Bubble message={message} />}
+/>
+```
+
+`followOutput={true}` / `"smooth"` only auto-scrolls when you are already at the bottom, unless you pass a function. Images that load after the item is measured can still leave you a few pixels off; the ref method `autoscrollToBottom()` exists for “the image finished, snap again if we were following”.
+
+There is a separate package in the Virtuoso family aimed at message lists with pinning and new-message separators. If you are building a full messenger, read that too. For a straightforward feed of bubbles, `Virtuoso` plus the props above is enough.
+
+## Grouped lists
+
+`GroupedVirtuoso` virtualises **items and sticky group headers**. You do not render the headers yourself as extra rows in `data`.
+
+```tsx
+<GroupedVirtuoso
+  style={{ height: "100%" }}
+  groupCounts={counts} // e.g. [12, 4, 30] — items per group
+  groupContent={(groupIndex) => (
+    <div className="sticky top-0 bg-zinc-950 px-3 py-1 text-xs">
+      {groups[groupIndex].label}
+    </div>
+  )}
+  itemContent={(index, groupIndex) => (
+    <PersonRow person={flat[index]} />
+  )}
+/>
+```
+
+`groupCounts={[20, 30]}` means two groups, 20 then 30 items. `itemContent` gets the flat index and the group index. The header stays sticky as you scroll through that group; when the next group’s header arrives it pushes the previous one away. That is CSS sticky plus the engine knowing header size, not a second virtualiser.
+
+Load-on-demand still works: grow `groupCounts` as pages arrive, same as growing `data`.
+
+## Grids
+
+`VirtuosoGrid` is for **same-sized** cells. You do not tell it a column count in JS. You style the list as a CSS grid (gap, `minmax`, media queries). It measures a cell, measures the container, and infers how many columns fit — so a resize from 4 columns to 2 does not require new props.
+
+```tsx
+<VirtuosoGrid
+  style={{ height: "100%" }}
+  totalCount={photos.length}
+  itemContent={(index) => <PhotoCard photo={photos[index]} />}
+  listClassName="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
+/>
+```
+
+Variable-height masonry (Pinterest) is out of scope. Different cell heights in a CSS grid make the row height the max of the row; the engine’s “one size” assumption breaks. Use `Virtuoso` (one column) or a specialised masonry virtualiser.
+
+## Tables
+
+`TableVirtuoso` keeps `<table>` / `<thead>` / `<tbody>` so you do not fake a grid with divs and lose table semantics.
+
+```tsx
+<TableVirtuoso
+  style={{ height: 480 }}
+  data={rows}
+  fixedHeaderContent={() => (
+    <tr>
+      <th>Name</th>
+      <th>Role</th>
+    </tr>
+  )}
+  itemContent={(_index, row) => (
+    <>
+      <td>{row.name}</td>
+      <td>{row.role}</td>
+    </>
+  )}
+/>
+```
+
+`fixedHeaderContent` is the sticky header. There is support for window scrolling and frozen columns — use those when the table is the page, not a pane. Row virtualisation is the win: 50,000 records, ~30 `<tr>` in the DOM.
+
+Do not put `margin` on `<td>` content that changes height without going through the same measurement rules as the list.
+
+## Custom markup and UI libraries
+
+Virtuoso renders a scroller, a list wrapper, items, optional header/footer. Almost all of that is swappable through `components`, which is how it works with MUI, Mantine, shadcn, and drag-and-drop.
+
+```tsx
+<Virtuoso
+  components={{
+    Scroller: forwardRef((props, ref) => (
+      <div {...props} ref={ref} className="h-full overflow-auto" />
+    )),
+    List: forwardRef((props, ref) => <ul {...props} ref={ref} />),
+    Item: ({ children, ...props }) => <li {...props}>{children}</li>,
+    Header: () => <div className="p-3 text-sm">Pinned notice</div>,
+    Footer: () => (loading ? <Spinner /> : null),
+  }}
+/>
+```
+
+Forward the ref. Drop the ref and measurement dies. The same pattern wraps a `Command` list, a MUI `TableBody`, or a dnd-kit sortable context. You are not forking the library; you are replacing the host nodes.
+
+`context` passes extra data into those components without closing over stale props in `itemContent`.
+
+## Imperative API
+
+```tsx
+const ref = useRef<VirtuosoHandle>(null);
+
+ref.current?.scrollToIndex({ index: 240, align: "start", behavior: "smooth" });
+ref.current?.scrollTo({ top: 0 });
+ref.current?.autoscrollToBottom();
+```
+
+`initialTopMostItemIndex` is the declarative version for first paint: skip rendering the rows above so a deep link at item 5000 does not mount 4999 estimates first.
+
+```tsx
+<Virtuoso initialTopMostItemIndex={5000} totalCount={20_000} itemContent={itemContent} />
+```
+
+## Virtuoso vs TanStack Virtual vs react-window
+
+| | Virtuoso | `@tanstack/react-virtual` | `react-window` |
+| --- | --- | --- | --- |
+| Markup | Library renders the scroller and items | You render; hook returns items + offsets | Library lists / grids |
+| Variable height | Default, measured | You estimate; it can measure | `VariableSizeList` + you call `resetAfterIndex` |
+| Groups / table / grid | First-class components | DIY | Separate components, more wiring |
+| Chat helpers | `followOutput`, `firstItemIndex` | DIY | DIY |
+| Bundle / control | More opinion | Headless, small core | Small, older patterns |
+
+TanStack Virtual is the right tool when the DOM is already yours (an existing table, a canvas-adjacent overlay, a weird scroller). Virtuoso is the right tool when you want the window, the measurement, and the sticky group / chat behaviour without rebuilding them. `react-window` is still fine for fixed-size rows if it is already in the repo; I would not add it to a new app that has mixed-height rows.
+
+The [web performance](/blog/web-performance) example uses TanStack’s `useVirtualizer` because it shows the math (`getVirtualItems`, `row.start`) in a few lines. In product code, that same list is often a `Virtuoso`.
+
+## Pitfalls
+
+- **No height on the scroller.** Flex parent without `min-height: 0`. The list expands, never windows.
+- **Margins on items.** Total height too small; last rows unreachable.
+- **Index keys.** State leaks across rows; prepend jumps.
+- **Unstable `itemContent`.** Wipes memo and remounts children every scroll frame.
+- **Fetching in `itemContent`.** The window will spam requests. Fetch by range in `rangeChanged` / `endReached`, or in the parent.
+- **Putting the filter inside the virtualiser.** Filter `data` first, then pass the filtered array. Empty states are a normal list, not a 0-height Virtuoso.
+- **`overflow: hidden` on a row that needs to grow.** Measurement will freeze at the clipped size.
+- **Nested virtualisers** (a virtual list of virtual lists) — possible, easy to get nested scroll chains wrong. Prefer one scroller.
+
+## Interview questions
+
+- **What problem does Virtuoso solve that `items.map` does not?** It keeps DOM and layout cost proportional to the viewport, not to `items.length`, including when row heights vary.
+- **How does it know row height?** Estimate, then measure with a resize observer; prefix sums turn those heights into offsets.
+- **Why do item margins break it?** Measurement ignores margins, so the spacer is short.
+- **`data` vs `totalCount`?** `data` passes the item into `itemContent`. `totalCount` is enough when you look up by index.
+- **How do you prepend without jumping?** `firstItemIndex` so existing items keep their identity in the size table.
+- **How do you keep a chat pinned to the newest message?** `followOutput` (function of `atBottom`) plus `alignToBottom` for short lists.
+- **When would you pick TanStack Virtual instead?** When you must own the markup, or you already have a scroller and only need index math.
+- **Is `endReached` virtualisation?** No. It is pagination hooked to the window. You still need the window if the loaded set is huge.
+
+## Related reading
+
+- [List virtualisation](/blog/virtualisation) — the model Virtuoso implements
+- [Web performance](/blog/web-performance) — INP, list cost, when to virtualise
+- [React concurrent rendering](/blog/react-concurrent-rendering) — a transition will not split one fat row
+- [When React re-renders](/blog/react-rerender-internals)
+- [Zustand](/blog/zustand) — if the list data lives outside React, pass `data` from a selector, not the whole store

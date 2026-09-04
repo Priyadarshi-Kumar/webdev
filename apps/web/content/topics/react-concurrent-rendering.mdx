@@ -69,7 +69,7 @@ That asymmetry explains most of the rules further down: anything with a side eff
 
 React yields **between components**, not inside one. If a single component takes 200 milliseconds to render, concurrency cannot help — there is no yield point inside your function body.
 
-This is the most common reason `startTransition` appears to do nothing. Transitions split work across many components; they do not split work inside one expensive component. For that you need memoization, virtualization, or less work — see [web performance](/blog/web-performance).
+This is the most common reason `startTransition` appears to do nothing. Transitions split work across many components; they do not split work inside one expensive component. For that you need memoization, <Term id="virtualisation">virtualisation</Term>, or less work — see [web performance](/blog/web-performance) and [list virtualisation](/blog/virtualisation).
 
 ## Lanes and priority
 
@@ -295,4 +295,4 @@ Most often one of three things. The expensive child is not memoized, so it re-re
 
 ---
 
-Related: [What is concurrent rendering?](/blog/concurrent-rendering) (the short version), [What is tearing in React?](/blog/react-tearing), [React Suspense](/blog/react-suspense), [When React re-renders](/blog/react-rerender-internals), [The event loop](/blog/event-loop), [Web performance](/blog/web-performance) (INP).
+Related: [What is concurrent rendering?](/blog/concurrent-rendering) (the short version), [What is tearing in React?](/blog/react-tearing), [React Suspense](/blog/react-suspense), [When React re-renders](/blog/react-rerender-internals), [The event loop](/blog/event-loop), [Web performance](/blog/web-performance) (INP), [List virtualisation](/blog/virtualisation).

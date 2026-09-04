@@ -232,6 +232,11 @@ export const glossary = {
     explain:
       "A bundler feature: one app (the host) loads JS modules from another app (a remote) at runtime via a remoteEntry file, and can share libraries like React so both trees use one copy.",
   },
+  virtualisation: {
+    slug: "virtualisation",
+    explain:
+      "Rendering only the visible slice of a long list (plus a little overscan) so the DOM stays small while the scrollbar still represents the full dataset.",
+  },
 } as const;
 
 export type GlossaryId = keyof typeof glossary;

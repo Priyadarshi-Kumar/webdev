@@ -411,7 +411,7 @@ const rows = virtualizer
   .map((row) => <Row key={items[row.index].id} offset={row.start} item={items[row.index]} />);
 ```
 
-Thirty rendered rows beat 5,000 perfectly memoized ones.
+Thirty rendered rows beat 5,000 perfectly memoized ones. The model — spacers, overscan, measured heights — is in [list virtualisation](/blog/virtualisation). [React Virtuoso](/blog/react-virtuoso) is the library that measures for you.
 
 ### Context, keys, and selectors
 
@@ -489,3 +489,5 @@ A bundle-size gate with `size-limit` is cheaper to run and catches the most comm
 - [Concurrent rendering](/blog/concurrent-rendering)
 - [Vite vs Webpack](/blog/vite)
 - [Rendering strategies](/blog/rendering-strategies) — CSR, SSR, and SSG change what you are measuring
+- [List virtualisation](/blog/virtualisation)
+- [React Virtuoso](/blog/react-virtuoso)
