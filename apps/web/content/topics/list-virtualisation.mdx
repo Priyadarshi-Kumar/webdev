@@ -1,0 +1,281 @@
+---
+title: List virtualisation — render the window, keep the scrollbar honest
+description: How windowing works — spacers, overscan, fixed vs variable height, prefix sums — and why memoizing 5,000 rows never beats rendering thirty.
+slug: list-virtualisation
+date: 2026-09-04
+subject: react
+tags:
+  - react
+  - javascript
+  - interview
+---
+
+<Term id="virtualisation">Virtualisation</Term> (also called **windowing**) means you keep a dataset of any size in memory, but you only mount the rows that sit in the viewport — plus a small buffer. The scrollbar still represents the full list. The DOM does not.
+
+That split is the whole trick. Everything else in this note is how to keep the scrollbar honest, how to pick which rows are visible, and what breaks when heights are not constant.
+
+## Why a long list is expensive
+
+A React list that maps ten thousand items does three kinds of work, and memoization only helps the first.
+
+### Reconciliation
+
+React calls your row component, diffs the element tree, and decides what to commit. Ten thousand function calls and ten thousand fibre nodes is already a long task. [Concurrent rendering](/blog/react-concurrent-rendering) can slice that work across frames, but it does not reduce the total. It also cannot pause *inside* one fat component.
+
+### The DOM
+
+Each committed row is real nodes: wrappers, text, buttons, images. Layout walks the whole tree. Paint walks whatever is dirty. Composite has more layers to consider. The browser is good at this until it is not — a few thousand complex rows will miss 16ms frames on a mid-range phone even if nothing is changing.
+
+### What stays mounted
+
+Nodes that have left the screen still exist. They still take memory. They still receive layout when a sibling changes width. They still run effects. Virtualisation unmounts them, so their effects clean up and their DOM goes away.
+
+`memo` on each row is the usual first attempt. It skips *re-rendering* a row whose props did not change. It does nothing about the first mount of ten thousand nodes, and nothing about layout of ten thousand nodes. Thirty visible rows beat five thousand perfectly memoized ones. That is the line from the [web performance](/blog/web-performance) note, and it is the reason this technique exists.
+
+## The windowing model
+
+Three numbers describe a virtualised list at any moment:
+
+| Number | Meaning |
+| --- | --- |
+| `scrollTop` | How far the user has scrolled, in pixels |
+| Viewport height | The visible hole, in pixels |
+| Item sizes | Height of each row, known or estimated |
+
+From those you compute a **range**: `startIndex` … `endIndex`. You render that slice. You lie about the rest with empty space so the scrollbar thumb is the right size and sitting in the right place.
+
+### The spacer
+
+The scrollable element must be as tall as the **full** list, not as tall as the visible slice. Otherwise the native scrollbar thinks the content is one screen high and there is nothing to scroll.
+
+```tsx
+const totalHeight = itemCount * itemHeight; // fixed-height case
+
+return (
+  <div ref={parentRef} style={{ height: 400, overflow: "auto" }} onScroll={onScroll}>
+    <div style={{ height: totalHeight, position: "relative" }}>
+      {visibleRows}
+    </div>
+  </div>
+);
+```
+
+The inner `div` is the spacer. It is empty except for the rows currently on screen. Those rows are positioned *inside* it as if the missing rows were still there.
+
+### Offsetting the window
+
+Row `i` in a fixed-height list starts at `i * itemHeight`. You do not render rows `0 … i-1`, so you must still occupy their space. Two equivalent tricks:
+
+```tsx
+// padding-top equal to everything above the window
+<div style={{ paddingTop: startIndex * itemHeight }}>
+  {slice.map(renderRow)}
+</div>
+```
+
+```tsx
+// or absolute / transform, one row at a time
+<div
+  style={{
+    position: "absolute",
+    top: 0,
+    transform: `translateY(${startIndex * itemHeight}px)`,
+    width: "100%",
+  }}
+>
+  {slice.map(renderRow)}
+</div>
+```
+
+Libraries usually store each virtual item as `{ index, start, size }` and set `transform: translateY(start px)` on the row. Same idea: the row’s pixel offset is independent of how many siblings are actually mounted.
+
+### Overscan
+
+If you render *exactly* the visible range, a fast fling shows blank holes at the edges while the next rows mount. **Overscan** renders a few extra rows above and below the viewport — typically 3–10, or a pixel amount like `increaseViewportBy`.
+
+Overscan is a trade: more DOM, less flicker. Too much and you are back to rendering a large list. Too little and fast scrolling looks empty. Measure with a Performance profile on a throttled CPU, not by feel on a desktop.
+
+### Updating the window
+
+On `scroll` (and on resize), recompute the range. In React that usually means storing `scrollTop` in state or in a ref that triggers a render. `scroll` fires often; keep the handler cheap. The expensive part should be rendering the new slice, not the index math.
+
+```ts
+const startIndex = Math.floor(scrollTop / itemHeight);
+const visibleCount = Math.ceil(viewportHeight / itemHeight);
+const endIndex = Math.min(itemCount - 1, startIndex + visibleCount + overscan);
+```
+
+That is the entire algorithm when every row is the same height.
+
+## Fixed height
+
+Fixed height is the interview version, and it is enough for a lot of product UI: settings rows, user pickers, log lines, data-table rows with a locked line height.
+
+Assumptions:
+
+- `itemHeight` is known and constant.
+- The spacer is `itemCount * itemHeight`.
+- Index from pixel offset is division, O(1).
+
+What you must still get right:
+
+- The row’s real height **is** `itemHeight`. Padding, borders, and wrapping text that grows the cell will desync the scrollbar. Overflow hidden, or measure.
+- Use a stable `key` (an id, not the index) so React does not reuse the wrong row state when the window slides.
+- The scroll container needs a **bounded height**. A list that grows with its content never scrolls, so the window is “everything”.
+
+The practice question on this site ([virtualized list](/practice/virtualized-list)) is this case: spacer, `translateY` or padding, overscan.
+
+## Variable height
+
+Chat bubbles, comments, search results with wrapping snippets, accordion rows — heights differ, and they change after mount (images, fonts, expand).
+
+You can no longer divide. You need, for each index, the **pixel offset where that row starts**. That is a prefix sum of heights:
+
+```
+offset[0] = 0
+offset[i] = height[0] + … + height[i - 1]
+totalHeight = sum of all heights
+```
+
+Given `scrollTop`, find the largest `i` such that `offset[i] <= scrollTop`. That is binary search on `offset`, O(log n), if you keep the prefix array. Some engines keep a tree of subtree heights so an insert in the middle is also logarithmic.
+
+You do not know real heights until you render, so the engine **estimates**, then **measures**.
+
+### Estimate, then correct
+
+1. Pick a default (`estimateSize: () => 48`, or Virtuoso’s `defaultItemHeight`).
+2. Render the window using estimates.
+3. After layout, read `getBoundingClientRect()` or a `ResizeObserver` callback.
+4. Write the real size into the table, recompute prefix sums, shift everything below.
+
+The first paint of a row may be wrong by a few pixels. The scrollbar thumb jumps slightly as measurements land. That is normal. It becomes a bug when estimates are wildly off (you guessed 40px, the row is 400px) — then the list jumps under the cursor.
+
+### Why measurement is fiddly
+
+`ResizeObserver` / `contentRect` **does not include margins**. A `p { margin-bottom: 1em }` that sticks out of the row wrapper makes the engine think the row is shorter than the space it actually occupies. The total height is then too small and you cannot scroll to the last items. Collapse margins inside the row, or use padding on the wrapper instead.
+
+Dynamic content that loads later (images without width/height, fonts swapping, async-expanded blocks) fires another measurement. The engine must treat size as live, not as a one-shot.
+
+### Layout shift
+
+Virtualisation is a CLS risk if the thing you measure is also in the document flow of the page (window scroll, images in rows). Give images explicit dimensions. Keep the spacer height from shrinking when the user is in the middle of a fling.
+
+## Infinite scroll is not virtualisation
+
+People mash the two together because both appear on “long feed” tickets.
+
+| | Virtualisation | Infinite scroll |
+| --- | --- | --- |
+| Problem | Too many **mounted** nodes | Too much **data** in memory / on the wire |
+| What you skip | DOM for off-screen rows | Fetching the next page until needed |
+| Scrollbar | Full-list height (if you know the count) | Often “this page plus a sentinel” |
+| Can you use both? | Yes | Yes |
+
+A virtualised list of 10,000 **already loaded** records never hits the network on scroll. An infinite list of 30 records that fetches page 2 at the bottom can still mount all 30, then 60, then 90 — and eventually needs virtualisation too.
+
+If you do not know the total count, the spacer can only represent what you have loaded. The thumb then grows as pages arrive. That is fine; do not fake a million-pixel spacer unless you know the million exists.
+
+## Window scroll vs an inner scroller
+
+Two valid hosts:
+
+**Inner scroller.** A `div` with `overflow: auto` and a fixed height (or a flex child with `min-height: 0`). The library attaches to that element. This is the default in most list libraries. It is the right choice for a pane inside an app chrome.
+
+**Window scroll.** The document itself scrolls. The list is in the page flow. You pass `useWindowScroll` (Virtuoso) or `getScrollElement: () => document.documentElement` (TanStack Virtual). Header height, other page content above the list, and `scroll-padding` all affect where the window starts. Harder to get right; necessary for article-style pages and some marketing layouts.
+
+A classic bug: the list’s parent is `display: flex; flex-direction: column; height: 100%` but the list child is missing `min-height: 0` / `flex: 1`, so it expands to the full content height, never overflows, and virtualisation never windows.
+
+## Grids and tables
+
+**Grid.** Several cards per row. If every cell is the same size, you virtualise **rows of cells** (or a 2D window) and let CSS decide columns. `VirtuosoGrid` does this: you style the list as a CSS grid, it measures one cell, and it infers how many fit. Variable-height masonry is a different, harder problem — most list virtualisers do not do it well.
+
+**Table.** You want `<table>`, sticky `<thead>`, maybe frozen columns. Row virtualisation still works: spacer rows or a translated `<tbody>`. Column virtualisation (hundreds of columns) is rarer and usually a spreadsheet widget. `TableVirtuoso` keeps real table markup so you do not break screen-reader table navigation more than you have to.
+
+## Accessibility
+
+Unmounted rows do not exist for assistive tech. That is the product trade.
+
+What still works:
+
+- A well-named list or table, keyboard focus inside visible rows, `aria-rowcount` / `aria-rowindex` if you are a grid/table and you know the totals.
+- Do not put the only copy of important content solely in unmounted rows.
+
+What breaks if you are careless:
+
+- `Ctrl+F` in the page only searches the DOM. Off-screen rows will not match. For a directory UI, offer a search box that filters the **data**, then virtualise the result.
+- Focus can be trapped on a node that unmounts as you scroll. Restore focus or keep a focused row in the window (some libraries pin it).
+- Nested interactive content in every row (dozens of buttons) was already a problem at 10,000; virtualisation at least caps how many are in the tab order.
+
+## When not to virtualise
+
+Skip it when:
+
+- The list is short (tens of rows, simple cells). The library’s measurement and extra wrappers cost more than they save.
+- You need the full document for print, SEO, or in-page find, and the list is the page.
+- Rows are extremely cheap and the bottleneck is something else (a 3MB image, a lock on the main thread in a click handler). Profile first.
+
+Virtualisation does not help a slow **row**. If one row takes 20ms to render, overscan of 10 rows is 200ms. Split the row, memo the heavy bits, or show a placeholder while scrolling ([scroll seek](/blog/react-virtuoso) in Virtuoso).
+
+## A small fixed-height implementation
+
+Enough to remember in an interview. Not enough for variable height, window scroll, or dynamic data.
+
+```tsx
+function VirtualList({ items, itemHeight, height, overscan = 4 }: Props) {
+  const [scrollTop, setScrollTop] = useState(0);
+  const start = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan);
+  const visible = Math.ceil(height / itemHeight) + overscan * 2;
+  const end = Math.min(items.length, start + visible);
+  const offsetY = start * itemHeight;
+
+  return (
+    <div
+      style={{ height, overflow: "auto" }}
+      onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+    >
+      <div style={{ height: items.length * itemHeight, position: "relative" }}>
+        <div style={{ transform: `translateY(${offsetY}px)` }}>
+          {items.slice(start, end).map((item, i) => (
+            <div key={item.id} style={{ height: itemHeight }}>
+              {item.label}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+Replace `itemHeight * index` with measured prefix sums and you have the core of every library in the next section.
+
+## Libraries
+
+| Library | Stance |
+| --- | --- |
+| [react-virtuoso](/blog/react-virtuoso) | Measures for you, variable height by default, groups / grid / table / chat helpers |
+| `@tanstack/react-virtual` | Headless: you own the markup, it owns the index math |
+| `react-window` | Small, often wants known sizes (`FixedSizeList` / `VariableSizeList`) |
+| `react-virtualized` | Older, larger API surface; `react-window` was the slim rewrite |
+
+TanStack Virtual is what the [web performance](/blog/web-performance) snippet uses: `useVirtualizer`, `getVirtualItems()`, you apply `translateY` yourself. Virtuoso is the opposite trade — less wiring, more opinions, measurement included.
+
+If you are building a chat inbox, a grouped contact list, or a table with a sticky header, start with Virtuoso. If you already have markup you cannot change, start with TanStack Virtual.
+
+## Interview questions
+
+- **What is list virtualisation?** Mount only the visible rows (plus overscan). Keep a spacer so the scrollbar matches the full list height.
+- **Why not `memo` every row?** Memo skips re-renders, not the first mount and not layout of thousands of nodes.
+- **How do you compute the range for equal heights?** `start = floor(scrollTop / itemHeight)`, count = `ceil(viewport / itemHeight)` plus overscan.
+- **How does variable height work?** Prefix sums of measured (or estimated) heights; binary search scroll offset to an index; `ResizeObserver` to correct estimates.
+- **Why do CSS margins on rows break some libraries?** Size measurement often uses content-box and ignores margins, so total height is short.
+- **Is infinite scroll the same thing?** No. One windows the DOM; the other windows the network. Use both on a huge feed.
+- **Why does my virtual list not scroll?** The scroller has no bounded height, so overflow never kicks in and the “window” is the whole list.
+- **What does overscan do?** Extra rows off-screen to hide mount latency during fast scroll.
+
+## Related reading
+
+- [React Virtuoso](/blog/react-virtuoso) — the library that measures for you
+- [Web performance](/blog/web-performance) — where virtualisation sits next to memo and bundle cost
+- [React concurrent rendering](/blog/react-concurrent-rendering) — concurrency does not split work inside one fat list
+- [When React re-renders](/blog/react-rerender-internals)

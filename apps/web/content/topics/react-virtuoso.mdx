@@ -12,7 +12,7 @@ tags:
 
 [react-virtuoso](https://virtuoso.dev/react-virtuoso/) is a React library that implements <Term id="virtualisation">list virtualisation</Term> as four components: a flat list, a grouped list, a CSS grid, and a table. You give it a count (or an array), a viewport with a real height, and an `itemContent` render function. It mounts the window, sizes the scrollbar from measured row heights, and keeps that window in sync as the user scrolls.
 
-The conceptual note — spacers, overscan, prefix sums — lives in [list virtualisation](/blog/virtualisation). This note is how Virtuoso *fits* that model, what it adds on top, and the APIs you actually reach for.
+The conceptual note — spacers, overscan, prefix sums — lives in [list virtualisation](/blog/list-virtualisation). This note is how Virtuoso *fits* that model, what it adds on top, and the APIs you actually reach for.
 
 ## How it fits virtualisation
 
@@ -348,7 +348,7 @@ The [web performance](/blog/web-performance) example uses TanStack’s `useVirtu
 
 ## Related reading
 
-- [List virtualisation](/blog/virtualisation) — the model Virtuoso implements
+- [List virtualisation](/blog/list-virtualisation) — the model Virtuoso implements
 - [Web performance](/blog/web-performance) — INP, list cost, when to virtualise
 - [React concurrent rendering](/blog/react-concurrent-rendering) — a transition will not split one fat row
 - [When React re-renders](/blog/react-rerender-internals)
