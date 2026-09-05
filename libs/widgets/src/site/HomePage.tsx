@@ -49,7 +49,7 @@ export function HomePage({
         }}
       />
 
-      <section className="relative grid items-center gap-6 pb-6 pt-2 sm:gap-8 sm:pb-12 sm:pt-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-8">
+      <section className="relative grid items-stretch gap-6 pb-6 pt-2 sm:gap-8 sm:pb-12 sm:pt-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-8">
         <div className="max-w-2xl">
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
             <span className="font-medium text-emerald-700 dark:text-emerald-300">{profile.availability}</span>
@@ -91,7 +91,7 @@ export function HomePage({
             ))}
           </dl>
         </div>
-        <div className="mx-auto w-full max-w-md lg:mx-0 lg:max-w-none">
+        <div className="flex min-h-[16rem] w-full items-center justify-center sm:min-h-[20rem] lg:min-h-[24rem]">
           <SkillSphere skills={[...profile.stack, ...profile.skillGroups.flatMap((group) => group.skills)]} />
         </div>
       </section>
