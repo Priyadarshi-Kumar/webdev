@@ -6,12 +6,6 @@
   NODE_VERSION = "22"
   PNPM_VERSION = "9.15.0"
 
-[[redirects]]
-  from = "/portfolio"
-  to = "/portfolio/experience"
-  status = 301
-  force = true
-
 [[headers]]
   for = "/assets/*"
   [headers.values]

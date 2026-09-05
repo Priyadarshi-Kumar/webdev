@@ -249,11 +249,11 @@ Typical Vike files:
 | `+title.ts` / `+description.ts` | SEO |
 | `+Head.tsx` | Extra head tags |
 | `+route.ts` | Custom matching |
-| `+guard.ts` | Redirects (e.g. portfolio default section) |
+| `+guard.ts` | Redirects |
 | `+onBeforePrerenderStart.ts` | List of URLs to SSG |
 | `+config.ts` | App-wide Vike config |
 
-Routing is **path-based** (no hash router). Netlify also 301s `/portfolio` → `/portfolio/experience`.
+Routing is **path-based** (no hash router). `/portfolio` is the About landing; section URLs live under `/portfolio/<section>`.
 
 ### Two blog loaders (intentional split)
 

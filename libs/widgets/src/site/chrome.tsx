@@ -5,13 +5,13 @@ import { usePageContext } from "vike-react/usePageContext";
 import { SITE } from "./config";
 
 const nav = [
-  { href: "/portfolio/experience", label: "Portfolio" },
+  { href: "/portfolio", label: "Portfolio" },
   { href: "/blog", label: "Notes" },
   { href: "/practice", label: "Practice" },
 ];
 
 function navItemActive(urlPathname: string, href: string) {
-  if (href === "/portfolio/experience") {
+  if (href === "/portfolio") {
     return urlPathname === "/portfolio" || urlPathname.startsWith("/portfolio/");
   }
   return urlPathname.startsWith(href);

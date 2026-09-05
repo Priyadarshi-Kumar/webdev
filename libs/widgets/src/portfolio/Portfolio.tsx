@@ -1,18 +1,20 @@
 import { useState, type ReactNode } from "react";
 import {
+  ArrowRight,
   Briefcase,
   Download,
   FolderKanban,
   Globe,
   GraduationCap,
   Linkedin,
+  Mail,
   Sparkles,
   UserRound,
 } from "lucide-react";
 import { Card, Eyebrow } from "@webdev/components";
 import type { Project } from "@webdev/types";
 import { SITE } from "../site/config";
-import { profile, projects } from "./data";
+import { aboutStats, aboutWins, profile, projects } from "./data";
 import { downloadResume } from "./resume-download";
 import { SkillsGrid } from "../site/SkillsGrid";
 
@@ -85,40 +87,96 @@ const nameLinks = [
 
 function AboutPanel() {
   return (
-    <div className="relative flex flex-col items-center gap-7 overflow-visible sm:flex-row-reverse sm:items-center sm:justify-between sm:gap-10">
-      <AboutPhoto />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <h1 className="font-display text-3xl font-semibold tracking-tight text-zinc-950 sm:text-5xl dark:text-white">
-            {profile.name}
-          </h1>
-          <ul className="flex items-center gap-2.5">
-            {nameLinks.map((item) => (
-              <li key={item.label}>
-                <a
-                  href={item.href}
-                  className="inline-flex h-7 w-7 items-center justify-center text-zinc-800 transition hover:text-sky-600 dark:text-zinc-100 dark:hover:text-sky-300"
-                  aria-label={item.label}
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  <item.Icon size={14} fill="currentColor" strokeWidth={0} aria-hidden />
-                </a>
-              </li>
-            ))}
-          </ul>
+    <div className="space-y-8">
+      <div className="relative flex flex-col items-center gap-7 overflow-visible sm:flex-row-reverse sm:items-center sm:justify-between sm:gap-10">
+        <AboutPhoto />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">
+            {profile.availability}
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h1 className="font-display text-3xl font-semibold tracking-tight text-zinc-950 sm:text-5xl dark:text-white">
+              {profile.name}
+            </h1>
+            <ul className="flex items-center gap-2.5">
+              {nameLinks.map((item) => (
+                <li key={item.label}>
+                  <a
+                    href={item.href}
+                    className="inline-flex h-7 w-7 items-center justify-center text-zinc-800 transition hover:text-sky-600 dark:text-zinc-100 dark:hover:text-sky-300"
+                    aria-label={item.label}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    <item.Icon size={14} fill="currentColor" strokeWidth={0} aria-hidden />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <p className="mt-2 text-lg font-medium text-zinc-700 dark:text-zinc-200">{profile.headline}</p>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{profile.location}</p>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            <a href={`tel:+91${profile.phone}`} className="transition hover:text-sky-600 dark:hover:text-sky-300">
+              {profile.phone}
+            </a>
+            <span aria-hidden> · </span>
+            <a href={`mailto:${SITE.email}`} className="transition hover:text-sky-600 dark:hover:text-sky-300">
+              {SITE.email}
+            </a>
+          </p>
         </div>
-        <p className="mt-2 text-lg font-medium text-zinc-700 dark:text-zinc-200">{profile.headline}</p>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          <a href={`tel:+91${profile.phone}`} className="transition hover:text-sky-600 dark:hover:text-sky-300">
-            {profile.phone}
-          </a>
-          <span aria-hidden> · </span>
-          <a href={`mailto:${SITE.email}`} className="transition hover:text-sky-600 dark:hover:text-sky-300">
-            {SITE.email}
-          </a>
-        </p>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{profile.location}</p>
+      </div>
+
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {aboutStats.map((item) => (
+          <div
+            key={item.label}
+            className="rounded-2xl border border-zinc-200/80 bg-white/60 px-3 py-3 dark:border-white/10 dark:bg-zinc-950/40"
+          >
+            <dt className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500 dark:text-zinc-400">
+              {item.label}
+            </dt>
+            <dd className="mt-1 font-display text-2xl font-semibold tracking-tight text-zinc-950 dark:text-white">
+              {item.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      <div className="space-y-3 text-sm leading-relaxed text-zinc-600 sm:text-base dark:text-zinc-400">
+        {profile.bio.map((paragraph) => (
+          <p key={paragraph}>{paragraph}</p>
+        ))}
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold tracking-tight text-zinc-950 dark:text-white">Selected outcomes</h3>
+        <ul className="mt-3 grid gap-3 sm:grid-cols-2">
+          {aboutWins.map((win) => (
+            <li
+              key={win.title}
+              className="rounded-2xl border border-zinc-200/80 bg-white/50 px-4 py-3.5 dark:border-white/10 dark:bg-zinc-950/40"
+            >
+              <p className="text-sm font-semibold text-zinc-950 dark:text-white">{win.title}</p>
+              <p className="mt-1.5 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{win.detail}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="flex flex-col gap-3 border-t border-zinc-200/80 pt-5 sm:flex-row sm:flex-wrap dark:border-white/10">
+        <a href={`mailto:${SITE.email}`} className="btn-primary inline-flex items-center justify-center gap-2">
+          <Mail size={16} aria-hidden />
+          Email me
+        </a>
+        <a href="/portfolio/experience" className="btn-ghost inline-flex items-center justify-center gap-2">
+          Full experience
+          <ArrowRight size={15} aria-hidden />
+        </a>
+        <a href={SITE.socials.linkedin} className="btn-ghost inline-flex items-center justify-center gap-2">
+          LinkedIn
+        </a>
       </div>
     </div>
   );
@@ -211,7 +269,7 @@ export function PortfolioPage({ section }: { section: PortfolioSectionId }) {
     <div className="flex min-h-full min-w-0 flex-col gap-6 lg:flex-row lg:items-start lg:gap-10">
       <aside className="sticky top-0 z-20 -mx-3 min-w-0 bg-slate-50/90 px-3 py-2 pr-14 backdrop-blur-md dark:bg-[#07080c]/90 sm:-mx-0 sm:px-0 sm:pr-0 lg:top-10 lg:w-56 lg:shrink-0 lg:self-start lg:bg-transparent lg:px-0 lg:py-0 lg:pr-0 lg:backdrop-blur-none">
         <p className="eyebrow hidden lg:block">Portfolio</p>
-        <h1 className="section-title hidden text-2xl lg:mt-1 lg:block lg:text-xl">Resume</h1>
+        <h1 className="section-title hidden text-2xl lg:mt-1 lg:block lg:text-xl">About & resume</h1>
         <nav
           aria-label="Portfolio sections"
           className="mt-3 flex gap-1 overflow-x-auto rounded-2xl border border-zinc-200/80 bg-white/70 p-1.5 shadow-[0_8px_30px_-18px_rgba(15,23,42,0.35)] backdrop-blur-xl lg:mt-6 lg:flex-col lg:gap-1 lg:overflow-visible lg:p-2 dark:border-white/10 dark:bg-zinc-950/55"

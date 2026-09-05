@@ -3,7 +3,7 @@ import { usePageContext } from "vike-react/usePageContext";
 
 const shortcuts = [
   { href: "/", label: "Home", hint: "Start here", icon: Home },
-  { href: "/portfolio/experience", label: "Portfolio", hint: "Resume and work", icon: Sparkles },
+  { href: "/portfolio", label: "Portfolio", hint: "About, resume, and work", icon: Sparkles },
   { href: "/blog", label: "Notes", hint: "Articles, jargon, and links", icon: BookOpen },
   { href: "/practice", label: "Practice", hint: "JavaScript katas in the browser", icon: Code2 },
 ];

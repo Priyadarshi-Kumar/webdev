@@ -9,8 +9,8 @@ export const profile: Profile = {
   availability: "Open to full-time & contract",
   photo: "/portrait.jpg",
   bio: [
-    "Full-stack engineer with 6+ years shipping products at scale — React and TypeScript on the client, Node.js, Python, and FastAPI on the server, plus MCP for AI-assisted tooling, across analytics dashboards, fintech onboarding, mobility platforms, and EDA workflows.",
-    "I own features end to end: design, implementation, performance, release, and the docs that help the next engineer move faster.",
+    "Lead full-stack engineer in Bangalore. I take product surfaces from sketch to production — React and TypeScript on the client, Node.js and Python on the server — and I stay on them after ship: performance, tests, and the docs the next engineer actually uses.",
+    "Hiring for a senior or lead web seat? I have shipped dealer analytics at Tekion, bank onboarding at Setu, consumer mobility at Yulu, and EDA tooling at Maieutic. I am open to full-time and contract, Bangalore or remote.",
   ],
   highlights: [
     "Ship EDA tooling today: multi-tab schematics, xterm.js terminals, and mai-ai chat over server-sent events and MCP.",
@@ -153,6 +153,36 @@ export const profile: Profile = {
     },
   ],
 };
+
+export const aboutStats = [
+  { value: "7", label: "Years shipping" },
+  { value: "10×", label: "Tenant scale" },
+  { value: "35K+", label: "Browser journeys" },
+  { value: "20%", label: "Dashboard traffic" },
+] as const;
+
+export const aboutWins = [
+  {
+    title: "Scale that shows up in capacity",
+    detail:
+      "Virtualization, infinite scroll, and pagination took Tekion tenants from ~15 dealers to ~200 — a 10× lift without a rewrite.",
+  },
+  {
+    title: "Dashboards people actually open",
+    detail:
+      "Led analytics used by dealer partners. The Teams dashboard alone drove 20% of visits; support tickets dropped from 8–10 a month to near zero.",
+  },
+  {
+    title: "Consumer web with a rating attached",
+    detail:
+      "Shipped Yulu’s browser app — booking, nearby bikes, ride viz, billing. 35K+ journeys, 4.4/5 average rating.",
+  },
+  {
+    title: "Partners live, not just integrated",
+    detail:
+      "At Setu, onboarded banking partners on a Fixed Deposits web app and SDK, with Playwright gates and AWS/Terraform deploys.",
+  },
+] as const;
 
 export const projects: Project[] = [];
 

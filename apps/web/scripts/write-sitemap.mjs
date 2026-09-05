@@ -35,6 +35,7 @@ function practiceSlugs() {
 
 const paths = [
   "/",
+  "/portfolio",
   "/portfolio/about",
   "/portfolio/experience",
   "/portfolio/skills",
