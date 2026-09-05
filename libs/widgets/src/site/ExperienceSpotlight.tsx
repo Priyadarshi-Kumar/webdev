@@ -1,7 +1,15 @@
 import { ArrowRight, Briefcase, MapPin } from "lucide-react";
 import type { Experience } from "@webdev/types";
 
-export function ExperienceSpotlight({ role, href = "/portfolio/experience" }: { role: Experience; href?: string }) {
+export function ExperienceSpotlight({
+  role,
+  href = "/portfolio/experience",
+  maxHighlights = 3,
+}: {
+  role: Experience;
+  href?: string;
+  maxHighlights?: number;
+}) {
   return (
     <article className="home-spotlight home-spotlight-experience flex h-full flex-col">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -22,7 +30,7 @@ export function ExperienceSpotlight({ role, href = "/portfolio/experience" }: { 
       </p>
 
       <ul className="mt-5 flex-1 space-y-3 border-t border-zinc-200/80 pt-5 dark:border-white/10">
-        {role.highlights.slice(0, 3).map((item) => (
+        {role.highlights.slice(0, maxHighlights).map((item) => (
           <li key={item} className="flex gap-3 text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
             <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500 dark:bg-sky-400" aria-hidden />
             <span>{item}</span>

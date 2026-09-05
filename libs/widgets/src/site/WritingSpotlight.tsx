@@ -5,9 +5,11 @@ import { Tag } from "@webdev/components";
 export function WritingSpotlight({
   posts,
   href = "/blog",
+  compact = false,
 }: {
   posts: PostFrontmatter[];
   href?: string;
+  compact?: boolean;
 }) {
   if (posts.length === 0) return null;
 
@@ -32,7 +34,7 @@ export function WritingSpotlight({
           <h3 className="mt-1 font-display text-lg font-semibold leading-snug tracking-tight text-zinc-950 group-hover:text-sky-800 sm:text-xl dark:text-white dark:group-hover:text-sky-200">
             {featured.title}
           </h3>
-          <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+          <p className={`mt-2 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400 ${compact ? "line-clamp-2" : "line-clamp-3"}`}>
             {featured.description}
           </p>
           {featured.tags.length > 0 ? (
@@ -60,9 +62,11 @@ export function WritingSpotlight({
                   <span className="mt-1 block text-sm font-semibold leading-snug tracking-tight text-zinc-900 group-hover:text-sky-800 dark:text-zinc-100 dark:group-hover:text-sky-200">
                     {post.title}
                   </span>
-                  <span className="mt-1 line-clamp-2 text-xs leading-relaxed text-zinc-600 sm:text-sm dark:text-zinc-400">
-                    {post.description}
-                  </span>
+                  {compact ? null : (
+                    <span className="mt-1 line-clamp-2 text-xs leading-relaxed text-zinc-600 sm:text-sm dark:text-zinc-400">
+                      {post.description}
+                    </span>
+                  )}
                 </span>
                 <ArrowUpRight
                   size={15}
@@ -75,13 +79,15 @@ export function WritingSpotlight({
         </ul>
       ) : null}
 
-      <a
-        href={href}
-        className="home-spotlight-link mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-zinc-200/90 bg-white/60 px-4 py-2.5 text-sm font-semibold text-zinc-800 transition hover:border-sky-400/60 hover:text-sky-700 sm:w-auto sm:justify-start dark:border-white/10 dark:bg-white/5 dark:text-zinc-100 dark:hover:text-sky-300"
-      >
-        Browse all articles
-        <ArrowRight size={15} aria-hidden />
-      </a>
+      {compact ? null : (
+        <a
+          href={href}
+          className="home-spotlight-link mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-zinc-200/90 bg-white/60 px-4 py-2.5 text-sm font-semibold text-zinc-800 transition hover:border-sky-400/60 hover:text-sky-700 sm:w-auto sm:justify-start dark:border-white/10 dark:bg-white/5 dark:text-zinc-100 dark:hover:text-sky-300"
+        >
+          Browse all articles
+          <ArrowRight size={15} aria-hidden />
+        </a>
+      )}
     </div>
   );
 }

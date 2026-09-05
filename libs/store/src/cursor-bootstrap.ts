@@ -25,7 +25,7 @@ export const CURSOR_BOOTSTRAP = `(function(){
 
     var target = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
     var glowPos = { x: target.x, y: target.y };
-    var shadowPos = { x: target.x + 6, y: target.y + 10 };
+    var shadowPos = { x: target.x, y: target.y };
     var hovering = false;
     var pressing = false;
     var visible = true;
@@ -48,15 +48,13 @@ export const CURSOR_BOOTSTRAP = `(function(){
     }
 
     function tick() {
-      var glowLerp = reduced ? 1 : hovering ? 0.3 : 0.24;
-      var shadowLerp = reduced ? 1 : 0.12;
-      var offsetX = pressing ? 2 : 6;
-      var offsetY = pressing ? 3 : 10;
+      var glowLerp = reduced ? 1 : hovering ? 0.42 : 0.32;
+      var shadowLerp = reduced ? 1 : hovering ? 0.22 : 0.16;
 
       glowPos.x += (target.x - glowPos.x) * glowLerp;
       glowPos.y += (target.y - glowPos.y) * glowLerp;
-      shadowPos.x += (target.x + offsetX - shadowPos.x) * shadowLerp;
-      shadowPos.y += (target.y + offsetY - shadowPos.y) * shadowLerp;
+      shadowPos.x += (target.x - shadowPos.x) * shadowLerp;
+      shadowPos.y += (target.y - shadowPos.y) * shadowLerp;
 
       glow.style.transform = "translate3d(" + glowPos.x + "px," + glowPos.y + "px,0) translate(-50%,-50%)";
       shadow.style.transform = "translate3d(" + shadowPos.x + "px," + shadowPos.y + "px,0) translate(-50%,-50%)";

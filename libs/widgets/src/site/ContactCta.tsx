@@ -10,12 +10,10 @@ export function ContactCta() {
         <div className="min-w-0">
           <Eyebrow>Let&apos;s talk</Eyebrow>
           <h2 className="mt-3 font-display text-2xl font-semibold leading-tight tracking-tight text-zinc-950 sm:text-4xl dark:text-white">
-            Ready to add a full-stack engineer who{" "}
-            <span className="text-gradient">ships</span>?
+            Building something that has to <span className="text-gradient">ship</span>?
           </h2>
-          <p className="mt-4 max-w-xl text-sm leading-relaxed text-zinc-600 sm:text-base dark:text-zinc-300">
-            I work best with teams that care about clear code, fast iteration, and documentation that helps the next
-            engineer move faster. Tell me what you are building — I typically reply within a day.
+          <p className="mt-4 max-w-lg text-sm leading-relaxed text-zinc-600 sm:text-base dark:text-zinc-300">
+            I take features from design to release. Reply usually within a day.
           </p>
           <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-xs font-medium text-emerald-800 dark:text-emerald-300">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
