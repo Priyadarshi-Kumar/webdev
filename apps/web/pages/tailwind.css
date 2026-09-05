@@ -528,38 +528,38 @@ html {
   }
 
   .site-cursor-shadow {
-    width: 2rem;
-    height: 2rem;
+    width: 1.05rem;
+    height: 1.05rem;
     background: transparent;
-    box-shadow: inset 0 0 0 1.5px #fff;
+    box-shadow: inset 0 0 0 1.25px #fff;
   }
 
   .site-cursor-shadow[data-state="hover"] {
-    width: 2.75rem;
-    height: 2.75rem;
+    width: 1.4rem;
+    height: 1.4rem;
     background: rgb(255 255 255 / 0.12);
   }
 
   .site-cursor-shadow[data-state="press"] {
-    width: 1.25rem;
-    height: 1.25rem;
+    width: 0.7rem;
+    height: 0.7rem;
   }
 
   .site-cursor-glow {
     z-index: 2147483647;
-    width: 0.4rem;
-    height: 0.4rem;
+    width: 0.28rem;
+    height: 0.28rem;
     background: #fff;
   }
 
   .site-cursor-glow[data-state="hover"] {
-    width: 0.5rem;
-    height: 0.5rem;
+    width: 0.34rem;
+    height: 0.34rem;
   }
 
   .site-cursor-glow[data-state="press"] {
-    width: 0.28rem;
-    height: 0.28rem;
+    width: 0.2rem;
+    height: 0.2rem;
   }
 }
 
