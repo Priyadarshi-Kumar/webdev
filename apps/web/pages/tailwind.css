@@ -528,7 +528,9 @@ html {
   .site-cursor-shadow {
     width: 1.05rem;
     height: 1.05rem;
+    border-radius: 9999px;
     background: transparent;
+    mix-blend-mode: difference;
     box-shadow: inset 0 0 0 1.25px #fff;
   }
 
@@ -545,19 +547,22 @@ html {
 
   .site-cursor-glow {
     z-index: 2147483647;
-    width: 0.28rem;
-    height: 0.28rem;
-    background: #fff;
+    width: 0.42rem;
+    height: 0.42rem;
+    border-radius: 0;
+    background: var(--theme-accent);
+    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+    box-shadow: 0 0 8px 1px rgb(var(--theme-accent-rgb) / 0.65);
   }
 
   .site-cursor-glow[data-state="hover"] {
-    width: 0.34rem;
-    height: 0.34rem;
+    width: 0.5rem;
+    height: 0.5rem;
   }
 
   .site-cursor-glow[data-state="press"] {
-    width: 0.2rem;
-    height: 0.2rem;
+    width: 0.32rem;
+    height: 0.32rem;
   }
 }
 
