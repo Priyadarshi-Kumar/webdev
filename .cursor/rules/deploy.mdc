@@ -12,4 +12,4 @@ Whenever the user asks to **deploy** (or “build and deploy”, “send to Netl
 3. **Push to `main`** — `git push origin main` (or push the branch and merge, then ensure `origin/main` is updated).
 4. **Build and publish to Netlify** — from repo root run `pnpm deploy:site` (builds `web` with cache skipped, then `scripts/netlify-publish.mjs`). Report the Live and Draft URLs when done.
 
-Do not stop after a local build alone when the user asked to deploy. Do not leave uncommitted deployable work behind unless they explicitly exclude it.
+Do not stop after a local build alone when the user asked to deploy. Do not leave uncommitted deployable work behind unless they explicitly exclude it. Do not browser-test or screenshot before deploy unless the user asks.

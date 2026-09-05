@@ -515,7 +515,8 @@ html {
     will-change: transform;
     z-index: 2147483646;
     border-radius: 9999px;
-    transition: opacity 0.15s ease, width 0.18s ease, height 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+    mix-blend-mode: difference;
+    transition: opacity 0.12s ease, width 0.16s ease, height 0.16s ease;
   }
 
   #site-cursor-root {
@@ -527,59 +528,38 @@ html {
   }
 
   .site-cursor-shadow {
-    width: 2.25rem;
-    height: 2.25rem;
-    background: rgb(var(--theme-accent-rgb) / 0.12);
-    box-shadow:
-      0 0 0 2px rgb(var(--theme-accent-rgb) / 0.95),
-      0 0 18px 2px rgb(var(--theme-accent-rgb) / 0.35);
-  }
-
-  :where(.dark) .site-cursor-shadow {
-    background: rgb(var(--theme-accent-rgb) / 0.16);
-    box-shadow:
-      0 0 0 2px rgb(255 255 255 / 0.88),
-      0 0 0 3px rgb(var(--theme-accent-rgb) / 0.7),
-      0 0 22px 4px rgb(var(--theme-accent-rgb) / 0.4);
+    width: 2rem;
+    height: 2rem;
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px #fff;
   }
 
   .site-cursor-shadow[data-state="hover"] {
-    width: 2.85rem;
-    height: 2.85rem;
-    background: rgb(var(--theme-accent-rgb) / 0.2);
+    width: 2.75rem;
+    height: 2.75rem;
+    background: rgb(255 255 255 / 0.12);
   }
 
   .site-cursor-shadow[data-state="press"] {
-    width: 1.5rem;
-    height: 1.5rem;
-    background: rgb(var(--theme-accent-rgb) / 0.28);
+    width: 1.25rem;
+    height: 1.25rem;
   }
 
   .site-cursor-glow {
     z-index: 2147483647;
-    width: 0.55rem;
-    height: 0.55rem;
+    width: 0.4rem;
+    height: 0.4rem;
     background: #fff;
-    box-shadow:
-      0 0 0 2px rgb(var(--theme-accent-rgb) / 0.95),
-      0 0 12px 3px rgb(var(--theme-accent-rgb) / 0.7);
-  }
-
-  :where(.dark) .site-cursor-glow {
-    background: #fff;
-    box-shadow:
-      0 0 0 2px var(--theme-accent),
-      0 0 14px 4px rgb(var(--theme-accent-rgb) / 0.75);
   }
 
   .site-cursor-glow[data-state="hover"] {
-    width: 0.7rem;
-    height: 0.7rem;
+    width: 0.5rem;
+    height: 0.5rem;
   }
 
   .site-cursor-glow[data-state="press"] {
-    width: 0.4rem;
-    height: 0.4rem;
+    width: 0.28rem;
+    height: 0.28rem;
   }
 }
 

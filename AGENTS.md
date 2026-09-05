@@ -11,3 +11,4 @@ Nx monorepo: apps in `apps/`, libraries in `libs/`.
 - Glossary: every `<Term>` needs `glossary.ts` **and** a `content/topics/<slug>.mdx` page
 - Deploy: push `main` → Netlify (`pnpm nx build web`, publish `apps/web/dist/client`)
 - Do not write, update, or run tests unless the user explicitly asks
+- Do not browser-test, screenshot, or record the UI unless the user explicitly asks. Make the change, merge to main, push, build, and deploy when asked.

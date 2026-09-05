@@ -40,3 +40,4 @@ Apps live in `apps/`. Libraries live in `libs/`. Pages import widgets directly. 
 - Use a hash router
 - Make light the default theme
 - Write, update, or run tests unless the user explicitly asks
+- Browser-test, screenshot, record, or walkthrough the UI unless the user explicitly asks

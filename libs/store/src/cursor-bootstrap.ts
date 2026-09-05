@@ -48,8 +48,8 @@ export const CURSOR_BOOTSTRAP = `(function(){
     }
 
     function tick() {
-      var glowLerp = reduced ? 1 : hovering ? 0.42 : 0.32;
-      var shadowLerp = reduced ? 1 : hovering ? 0.22 : 0.16;
+      var glowLerp = reduced ? 1 : hovering ? 0.65 : 0.5;
+      var shadowLerp = reduced ? 1 : hovering ? 0.28 : 0.2;
 
       glowPos.x += (target.x - glowPos.x) * glowLerp;
       glowPos.y += (target.y - glowPos.y) * glowLerp;

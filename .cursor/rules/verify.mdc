@@ -1,0 +1,10 @@
+---
+description: Do not browser-test or take screenshots unless the user asks
+alwaysApply: true
+---
+
+# Verification
+
+Do **not** open a browser, click through the app, take screenshots, record the screen, or create walkthrough artifacts unless the user explicitly asks.
+
+Ship the change: implement, commit, merge to `main`, push, then build and deploy when they asked to deploy. Do not block on visual QA.

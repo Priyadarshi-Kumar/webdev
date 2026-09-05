@@ -8,7 +8,6 @@ const nav = [
   { href: "/portfolio/experience", label: "Portfolio" },
   { href: "/blog", label: "Notes" },
   { href: "/practice", label: "Practice" },
-  { href: "/tools", label: "Tools" },
 ];
 
 function navItemActive(urlPathname: string, href: string) {
@@ -36,8 +35,8 @@ export function Header() {
             active={urlPathname === "/"}
             className="group flex min-w-0 shrink items-center gap-2.5 sm:gap-3"
           >
-            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-zinc-950 to-zinc-800 font-display text-[13px] font-bold tracking-tight text-sky-300 shadow-[0_0_0_1px_rgba(56,189,248,0.35),0_8px_20px_-10px_rgba(56,189,248,0.8)] transition group-hover:shadow-[0_0_0_1px_rgba(56,189,248,0.7)] dark:from-sky-400 dark:to-cyan-300 dark:text-zinc-950 dark:shadow-none">
-              {SITE.shortName}
+            <span className="inline-flex h-9 min-w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-zinc-950 to-zinc-800 px-1.5 font-mono text-[13px] font-bold tracking-tight text-sky-300 shadow-[0_0_0_1px_rgba(56,189,248,0.35),0_8px_20px_-10px_rgba(56,189,248,0.8)] transition group-hover:shadow-[0_0_0_1px_rgba(56,189,248,0.7)] dark:from-sky-400 dark:to-cyan-300 dark:text-zinc-950 dark:shadow-none">
+              {"</>"}
             </span>
             <span className="hidden min-w-0 sm:block">
               <span className="block truncate font-display text-[15px] font-semibold leading-tight tracking-tight text-zinc-950 sm:text-base dark:text-white">
@@ -154,8 +153,8 @@ function MobileNavFab({ urlPathname }: { urlPathname: string }) {
                 active={false}
                 className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 transition hover:bg-zinc-100/80 dark:hover:bg-white/5"
               >
-                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-zinc-950 to-zinc-800 font-display text-[13px] font-bold tracking-tight text-sky-300 dark:from-sky-400 dark:to-cyan-300 dark:text-zinc-950">
-                  {SITE.shortName}
+                <span className="inline-flex h-9 min-w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-zinc-950 to-zinc-800 px-1.5 font-mono text-[13px] font-bold tracking-tight text-sky-300 dark:from-sky-400 dark:to-cyan-300 dark:text-zinc-950">
+                  {"</>"}
                 </span>
                 <span className="min-w-0">
                   <span className="block truncate font-display text-sm font-semibold text-zinc-950 dark:text-white">
