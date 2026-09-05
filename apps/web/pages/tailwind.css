@@ -514,8 +514,6 @@ html {
     opacity: 1;
     will-change: transform;
     z-index: 2147483646;
-    border-radius: 9999px;
-    mix-blend-mode: difference;
     transition: opacity 0.12s ease, width 0.16s ease, height 0.16s ease;
   }
 
