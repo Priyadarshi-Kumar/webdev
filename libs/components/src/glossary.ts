@@ -237,6 +237,11 @@ export const glossary = {
     explain:
       "Rendering only the visible slice of a long list (plus a little overscan) so the DOM stays small while the scrollbar still represents the full dataset.",
   },
+  oauth: {
+    slug: "oauth",
+    explain:
+      "OAuth 2.0 is delegated authorization: an app gets a scoped, revocable access token for a user's data on another service, without ever seeing the user's password.",
+  },
 } as const;
 
 export type GlossaryId = keyof typeof glossary;

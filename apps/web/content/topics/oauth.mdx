@@ -1,0 +1,35 @@
+---
+title: What is OAuth 2.0?
+description: Delegated authorization — a scoped, revocable access token for another service, without handing that service the user's password.
+slug: oauth
+date: 2026-09-07
+tags:
+  - glossary
+  - api
+  - security
+---
+
+<Term id="oauth">OAuth 2.0</Term> answers one question: how does an app get **limited access** to a user's data on another service without the user typing their password into that app?
+
+It is **authorization**, not login. The consent screen along the way is incidental. For "who is this person?" you want [OpenID Connect](/blog/auth-sessions-oauth#openid-connect), which sits on the same endpoints.
+
+```txt
+Ada  →  PrintShop (client)  →  accounts.example (authorization server)
+                │
+                └── Bearer access token → files.example (resource server)
+```
+
+The current default for user-facing apps is **Authorization Code + PKCE**: the user returns with a short-lived code, the client proves it started the flow, and tokens travel on a back-channel POST — never in a URL.
+
+```txt
+https://accounts.example/oauth/authorize
+  ?response_type=code
+  &client_id=printshop
+  &redirect_uri=https%3A%2F%2Fprintshop.example%2Fcallback
+  &scope=files%3Aread
+  &state=...
+  &code_challenge=...
+  &code_challenge_method=S256
+```
+
+The full protocol — roles, grant types, HTTP traces, a TypeScript BFF, JWT vs introspection, and OAuth 2.1 — is in [OAuth 2.0](/blog/oauth-2). Sessions, JWT verification, and OIDC login are in [Web authentication](/blog/auth-sessions-oauth).

@@ -1,0 +1,533 @@
+---
+title: OAuth 2.0 — delegated access without handing over the password
+description: Roles, tokens, grant types, Authorization Code + PKCE with real HTTP, a TypeScript BFF, JWT vs introspection, scopes, and OAuth 2.1 — through one PrintShop example.
+slug: oauth-2
+date: 2026-09-07
+subject: backend
+tags:
+  - api
+  - security
+  - interview
+---
+
+<Term id="oauth">OAuth 2.0</Term> replaced "type your Gmail password into this contacts importer." The importer never sees the password. It gets a **scoped, revocable token** after the user consents at the service that actually owns the data.
+
+That is **authorization**: what may this app do, on whose behalf? It is not a login protocol. The sign-in screen along the way authenticates the user to the *authorization server*. It does not tell PrintShop who Ada is in a verifiable way. For login you add [OpenID Connect](/blog/auth-sessions-oauth#openid-connect).
+
+This note walks the protocol with one story. **Ada** wants **PrintShop** (`printshop.example`) to print PDFs from **Files** (`files.example`). Files trusts tokens from **Accounts** (`accounts.example`). PrintShop never learns Ada's Accounts password.
+
+Examples use those three hosts. Sessions, password hashing, and JWT pitfalls live in [Web authentication](/blog/auth-sessions-oauth). Cookie flags and CSRF live in [Web security](/blog/web-security) and [CORS and cookies](/blog/cors-and-cookies).
+
+## The problem it solves
+
+Without OAuth, PrintShop would store Ada's Files password, or Files would ship a custom "partner API key" for every app. Both scale badly: passwords leak, MFA breaks, and Ada cannot revoke PrintShop without changing her password everywhere.
+
+OAuth inserts a broker. Accounts authenticates Ada, shows consent ("PrintShop wants to read your files"), and issues an **access token** PrintShop can present to Files. Ada can revoke PrintShop later. Files never sees a password from PrintShop.
+
+### What it does not solve
+
+- **Who Ada is**, for PrintShop's own user table. That is OIDC (`id_token`).
+- **Whether Ada owns file 883.** Scopes are coarse. Files still checks ownership.
+- **Browser session security on PrintShop.** After the token arrives, you still need your own session, cookies, CSRF, and XSS defenses.
+
+## Roles
+
+| Role | Who in the story | Job |
+| --- | --- | --- |
+| Resource owner | Ada | Owns the files; consents |
+| Client | PrintShop | Wants `files:read` |
+| Authorization server | `accounts.example` | Authenticates Ada, issues tokens |
+| Resource server | `files.example` | Serves PDFs if the token is valid |
+
+The client is **confidential** if it can keep a secret (a server, a BFF) or **public** if it cannot (SPA bundle, mobile app, CLI). That split decides whether you send a client secret, and it is why **PKCE** exists: public clients have nothing else to prove they started the flow. Confidential clients should use PKCE anyway — a code in a log should be useless.
+
+Register the client at Accounts before any of this works: a `client_id`, optional `client_secret`, allowed `redirect_uri` values, and allowed scopes.
+
+## Tokens
+
+### Access token
+
+A credential Files will accept. PrintShop sends it as:
+
+```http
+GET /v1/files/invoice-2026.pdf HTTP/1.1
+Host: files.example
+Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
+```
+
+Two shapes exist:
+
+| Shape | Files verifies by | Revoke |
+| --- | --- | --- |
+| **JWT** (self-contained) | Signature, `iss`, `aud`, `exp`, scopes | Hard — wait for `exp`, or keep a denylist |
+| **Opaque** (random string) | Introspection or a shared store | Instant — delete the row |
+
+Keep access tokens **short** (5–15 minutes). They are bearer credentials: whoever holds the bytes acts as Ada at Files, within the granted scopes.
+
+### Refresh token
+
+A longer-lived credential that is sent only to Accounts, never to Files:
+
+```http
+POST /oauth/token HTTP/1.1
+Host: accounts.example
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=refresh_token
+&refresh_token=v1.MRq7Fw2x
+&client_id=printshop
+```
+
+The response is a new access token, often a **new** refresh token. Rotate: treat reuse of an old refresh token as theft and revoke the whole family.
+
+### ID token
+
+Not an OAuth access credential. If `scope` includes `openid`, Accounts also returns a signed JWT describing the *authentication event*. PrintShop verifies it once, creates its own session, and does **not** send it to Files. [Web authentication](/blog/auth-sessions-oauth) covers the verify checklist.
+
+## Endpoints
+
+A typical authorization server exposes:
+
+| Endpoint | Method | Who calls it |
+| --- | --- | --- |
+| `/oauth/authorize` | GET (browser redirect) | Ada's browser |
+| `/oauth/token` | POST, `application/x-www-form-urlencoded` | PrintShop's backend |
+| `/oauth/revoke` | POST | PrintShop on logout |
+| `/oauth/introspect` | POST | Files, if tokens are opaque |
+| `/.well-known/oauth-authorization-server` | GET | PrintShop at startup |
+
+Always TLS. Confidential clients authenticate at the token endpoint with HTTP Basic (`client_id:client_secret`) or a private-key JWT. Never put a client secret in a SPA.
+
+Discovery (RFC 8414) looks like OIDC's document with a different well-known path. Cache it. Read `jwks_uri` from it instead of hardcoding keys.
+
+## Grant types
+
+Every grant ends at `POST /oauth/token`. The grant type is *how you prove you deserve tokens*.
+
+### Authorization Code with PKCE
+
+The right choice for almost every user-facing app: server-rendered sites, SPAs behind a BFF, mobile, desktop, CLIs with a loopback redirect. Ada authenticates at Accounts and returns with a **code**. PrintShop exchanges that code on a back channel. Tokens never appear in a URL.
+
+**PKCE** (Proof Key for Code Exchange) binds the code to the client instance that started the request. Without it, a stolen code is redeemable by anyone.
+
+### Client credentials
+
+No user. PrintShop's nightly billing job authenticates as itself:
+
+```http
+POST /oauth/token HTTP/1.1
+Host: accounts.example
+Authorization: Basic cHJpbnRzaG9wOnN1cGVyLXNlY3JldA==
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&scope=files:internal
+```
+
+Use it for cron, service-to-service, CI. There is no refresh token — request a new access token when it expires. The token has no `sub` for Ada. Do not use this grant to "act as the user."
+
+### Device authorization
+
+TVs, consoles, headless CLIs. The device shows a short code; Ada approves on her phone.
+
+```http
+POST /oauth/device_authorization HTTP/1.1
+Host: accounts.example
+Content-Type: application/x-www-form-urlencoded
+
+client_id=printshop-tv&scope=files:read
+```
+
+```json
+{
+  "device_code": "GmRhmhcxhwEzkoEqiMEg",
+  "user_code": "WDJB-MJHT",
+  "verification_uri": "https://accounts.example/device",
+  "expires_in": 1800,
+  "interval": 5
+}
+```
+
+The TV polls `grant_type=urn:ietf:params:oauth:grant-type:device_code` until Accounts returns tokens or `authorization_pending`. Honor `interval`. On `slow_down`, back off.
+
+### Refresh token
+
+Not a first login. It is how you stay in without sending Ada through consent again. Same token endpoint, `grant_type=refresh_token`.
+
+### Do not use
+
+**Implicit** (`response_type=token`) put the access token in the URL fragment. History, referrers, logs. Dead.
+
+**Resource Owner Password Credentials** (`grant_type=password`) had PrintShop collect Ada's Accounts password. That is the anti-pattern OAuth exists to kill. Dead.
+
+Both are removed in OAuth 2.1. A vendor tutorial that still recommends them is a signal about the vendor.
+
+## Walkthrough: PrintShop prints Ada's files
+
+PrintShop runs a small BFF on `printshop.example`. The browser never holds an access token — only an `HttpOnly` session cookie. That is the [BFF pattern](/blog/auth-sessions-oauth#the-bff-pattern).
+
+### 1. Verifier, challenge, state
+
+```ts
+const b64url = (bytes: Uint8Array) =>
+  btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+
+export async function startPkce() {
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  const challenge = b64url(new Uint8Array(digest));
+  const state = b64url(crypto.getRandomValues(new Uint8Array(16)));
+  return { verifier, challenge, state };
+}
+```
+
+Store `verifier` and `state` in the **server session** for this browser, not in the URL. `code_challenge_method` is always `S256`. `plain` is not protection.
+
+### 2. Redirect Ada to Accounts
+
+```txt
+https://accounts.example/oauth/authorize
+  ?response_type=code
+  &client_id=printshop
+  &redirect_uri=https%3A%2F%2Fprintshop.example%2Fcallback
+  &scope=files%3Aread
+  &state=Xt7pQ2mK9vL4nR8s
+  &code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
+  &code_challenge_method=S256
+```
+
+| Parameter | Job |
+| --- | --- |
+| `response_type=code` | Ask for a code, never `token` |
+| `redirect_uri` | Exact match of a pre-registered URI |
+| `scope` | `files:read` — the consent screen text |
+| `state` | CSRF defense; compare on return |
+| `code_challenge` | SHA-256 of the verifier, base64url |
+
+Ada signs in at Accounts (password, passkey, existing session). Accounts shows: "PrintShop wants to read your files." She allows it.
+
+### 3. Callback
+
+```http
+GET /callback?code=SplxlOBeZQQYbYS6WxSbIA&state=Xt7pQ2mK9vL4nR8s HTTP/1.1
+Host: printshop.example
+```
+
+Compare `state` to the stored value **before** exchanging the code. Then delete it so it cannot be replayed. A mismatch means another site is injecting a code into Ada's PrintShop session.
+
+Errors use the same redirect:
+
+```http
+GET /callback?error=access_denied&error_description=User%20declined&state=Xt7pQ2mK9vL4nR8s HTTP/1.1
+Host: printshop.example
+```
+
+Do not exchange anything. Show Ada a "you declined" page.
+
+### 4. Exchange the code
+
+```http
+POST /oauth/token HTTP/1.1
+Host: accounts.example
+Authorization: Basic cHJpbnRzaG9wOnN1cGVyLXNlY3JldA==
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code
+&code=SplxlOBeZQQYbYS6WxSbIA
+&redirect_uri=https%3A%2F%2Fprintshop.example%2Fcallback
+&code_verifier=dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk
+```
+
+`redirect_uri` here must be the same string as in step 2. Accounts hashes `code_verifier`, compares it to the stored challenge, and checks the code is unused and unexpired.
+
+```json
+{
+  "access_token": "eyJhbGciOiJSUzI1NiIs...",
+  "token_type": "Bearer",
+  "expires_in": 900,
+  "refresh_token": "v1.MRq7Fw2x",
+  "scope": "files:read"
+}
+```
+
+Codes live about a minute and are **single-use**. Presenting one twice should revoke tokens issued from it.
+
+Store both tokens in the BFF session. Set Ada a PrintShop session cookie. Do not put the access token in `localStorage`.
+
+### 5. Call Files
+
+```http
+GET /v1/files HTTP/1.1
+Host: files.example
+Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
+```
+
+Files checks the token (next section) and that the `sub` owns those files. PrintShop's UI only sees JSON from its own origin:
+
+```http
+GET /api/files HTTP/1.1
+Host: printshop.example
+Cookie: __Host-sid=...
+```
+
+The BFF attaches the Bearer header. XSS on PrintShop can still act *as Ada on PrintShop*; it cannot copy a portable Files token off the machine.
+
+### 6. Refresh once, share in-flight work
+
+On `401` with `invalid_token`, the BFF refreshes, stores the rotated refresh token, retries Files **once**. Ten parallel 401s must share one in-flight refresh. Ten refreshes look like reuse and Accounts will kill the family.
+
+```ts
+let inflight: Promise<string> | null = null;
+
+export function getAccessToken(session: Session): Promise<string> {
+  if (session.accessExp - 30_000 > Date.now()) return Promise.resolve(session.accessToken);
+  inflight ??= refresh(session).finally(() => {
+    inflight = null;
+  });
+  return inflight;
+}
+```
+
+## A small BFF in TypeScript
+
+Sketch of the two routes. Cookie and CSRF details are in the [auth note](/blog/auth-sessions-oauth).
+
+```ts
+import express from 'express';
+
+const app = express();
+const AUTH = 'https://accounts.example';
+const TOKEN = `${AUTH}/oauth/token`;
+const redirectUri = 'https://printshop.example/callback';
+
+app.get('/login', async (req, res) => {
+  const { verifier, challenge, state } = await startPkce();
+  req.session.oauth = { verifier, state };
+  const url = new URL(`${AUTH}/oauth/authorize`);
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('client_id', process.env.OAUTH_CLIENT_ID!);
+  url.searchParams.set('redirect_uri', redirectUri);
+  url.searchParams.set('scope', 'files:read');
+  url.searchParams.set('state', state);
+  url.searchParams.set('code_challenge', challenge);
+  url.searchParams.set('code_challenge_method', 'S256');
+  res.redirect(url.toString());
+});
+
+app.get('/callback', async (req, res) => {
+  const { code, state, error } = req.query;
+  const saved = req.session.oauth;
+  delete req.session.oauth;
+  if (error || !saved || state !== saved.state || typeof code !== 'string') {
+    res.status(400).send('oauth failed');
+    return;
+  }
+
+  const body = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: redirectUri,
+    code_verifier: saved.verifier,
+  });
+
+  const tokenRes = await fetch(TOKEN, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${Buffer.from(
+        `${process.env.OAUTH_CLIENT_ID}:${process.env.OAUTH_CLIENT_SECRET}`,
+      ).toString('base64')}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body,
+  });
+  if (!tokenRes.ok) {
+    res.status(502).send('token endpoint failed');
+    return;
+  }
+
+  const tokens = (await tokenRes.json()) as {
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+  };
+  req.session.tokens = {
+    accessToken: tokens.access_token,
+    refreshToken: tokens.refresh_token,
+    accessExp: Date.now() + tokens.expires_in * 1000,
+  };
+  res.redirect('/');
+});
+```
+
+Public SPAs without a BFF can still run PKCE in the browser and keep the access token **in memory**. That is weaker: any XSS can read it. Prefer the BFF when you control the site.
+
+## How Files checks the token
+
+### JWT access token
+
+Accounts signs a JWT. Files verifies **offline** with Accounts' JWKS.
+
+```json
+{
+  "iss": "https://accounts.example",
+  "aud": "https://files.example",
+  "sub": "ada-19",
+  "scope": "files:read",
+  "exp": 1772007200,
+  "iat": 1772006300,
+  "jti": "3c7d2e1a"
+}
+```
+
+```ts
+import { createRemoteJWKSet, jwtVerify } from 'jose';
+
+const JWKS = createRemoteJWKSet(new URL('https://accounts.example/.well-known/jwks.json'));
+
+export async function requireFilesAccess(authorization: string | undefined) {
+  const token = authorization?.match(/^Bearer (.+)$/)?.[1];
+  if (!token) throw new Error('missing');
+
+  const { payload } = await jwtVerify(token, JWKS, {
+    issuer: 'https://accounts.example',
+    audience: 'https://files.example',
+    algorithms: ['RS256', 'ES256'],
+  });
+
+  const scopes = String(payload.scope ?? '').split(' ');
+  if (!scopes.includes('files:read')) throw new Error('scope');
+  return { userId: String(payload.sub) };
+}
+```
+
+Check `iss`, `aud`, `exp`, algorithm allowlist, then scope, then **your** authorization: does `userId` own this file? `aud` must be Files, not PrintShop. Accepting a token minted for another API is a confused-deputy hole.
+
+### Opaque token and introspection
+
+Files cannot parse the token. It asks Accounts:
+
+```http
+POST /oauth/introspect HTTP/1.1
+Host: accounts.example
+Authorization: Basic ZmlsZXM6ZmlsZXMtc2VjcmV0
+Content-Type: application/x-www-form-urlencoded
+
+token=nYxR7...
+```
+
+```json
+{
+  "active": true,
+  "sub": "ada-19",
+  "aud": "https://files.example",
+  "scope": "files:read",
+  "exp": 1772007200
+}
+```
+
+If `active` is false, reject. Cache positive results for a few seconds; never cache longer than you can tolerate after revoke.
+
+Introspection costs a network hop on every (uncached) call. JWTs cost CPU and make revoke slow. Pick the constraint you actually have.
+
+### Sender-constrained tokens
+
+Bearer tokens are stealable. DPoP and mTLS bind the token to a key the client holds, so a copied header is not enough. Use them when the threat model includes token theft in transit or from logs. Most product apps still ship bearer + short TTL + BFF.
+
+## Scopes are not your permission model
+
+`scope=files:read` means PrintShop may *attempt* reads. It does not mean "Ada's file 883" or "every file in the company."
+
+Keep scopes **action-shaped** (`files:read`, `files:write`) rather than role-shaped (`admin`). Request the minimum for the current feature. Incremental consent beats a wall of permissions at first login.
+
+Accounts enforces what PrintShop asked for. Files enforces what Ada is allowed to see.
+
+## Redirect URIs
+
+Accounts must compare `redirect_uri` with an **exact string match**. No prefixes, no wildcards, no "any path on this host."
+
+A loose pattern like `https://printshop.example/*` plus any open redirect on PrintShop lets an attacker receive Ada's code. Register full callback URLs, one per environment (`localhost` vs production). Custom schemes on mobile (`printshop://callback`) need PKCE and claimed HTTPS app links where the OS supports them.
+
+`state` is the CSRF defense for this redirect. Generate it per flow, store it server-side, compare, delete.
+
+## OAuth 2.1
+
+OAuth 2.1 is the 2.0 profile everyone already wanted:
+
+- Authorization Code + PKCE for browser and native apps
+- PKCE for confidential clients too
+- Implicit and password grants gone
+- Redirect URIs exact-match
+- Refresh rotation with reuse detection, recommended
+- Bearer tokens in the `Authorization` header, not query strings
+
+If you implement 2.0 the way this note describes, you are already on the 2.1 path.
+
+## OpenID Connect, in one screen
+
+Add `openid` (and usually `profile email`) to `scope`. The token response includes `id_token`. Verify signature, `iss`, `aud` (your **client_id**), `exp`, and `nonce`. Key users on `(iss, sub)`, not email. Then create **your** session.
+
+That flow is still Authorization Code + PKCE. OIDC is an identity layer on OAuth, not a replacement. The long form is in [Web authentication](/blog/auth-sessions-oauth).
+
+"Sign in with Google" is OIDC. "PrintShop can read my Drive" is OAuth. Many products do both in one consent: login *and* API access. Still issue your own session cookie. Google's access token is for Google's APIs.
+
+## Failure modes worth memorizing
+
+### Missing `state`
+
+An attacker finishes a flow with their own Files account, then tricks Ada's browser into hitting PrintShop's callback with *their* code. PrintShop links Ada's session to the attacker's Files. Generate, store, compare, delete `state`.
+
+### Code interception without PKCE
+
+A malicious app on a phone registers the same custom URL scheme and catches the redirect. PKCE means the thief has the code but not the verifier.
+
+### Tokens in URLs and logs
+
+Query-string credentials land in access logs, history, analytics, and `Referer`. That is why implicit died. Use headers or `HttpOnly` cookies. Redact `Authorization` in your own logs.
+
+### Mix-up
+
+PrintShop talks to Accounts A, but an attacker starts the flow at Accounts B and returns a code PrintShop naively redeems at A — or worse, accepts B's tokens for A's APIs. Bind the flow to a specific issuer. On the callback, redeem at the issuer you started with. Check `iss` / `aud` on every JWT.
+
+### Over-broad tokens at Files
+
+A token with `aud=printshop` must not work at `files.example`. Files checks `aud` and scope, then row-level ownership.
+
+## Interview questions
+
+### How does OAuth 2.0 differ from OpenID Connect?
+
+OAuth issues access tokens so a client can call an API. It does not define a verifiable identity assertion. OIDC adds `id_token`, standard claims, userinfo, and discovery. Treating an access token as proof of who the user is — especially one minted for a different `aud` — is the classic mistake.
+
+### What does PKCE protect, and why do confidential clients still want it?
+
+It binds the authorization code to the client instance that created the challenge. Public clients have no secret, so a stolen code is otherwise enough. Confidential clients still leak codes into logs and referrers; without the verifier those codes are worthless.
+
+### Why is the access token not in the redirect URL?
+
+Anything in a URL is copied into history, server logs, and often `Referer`. Authorization codes are short-lived and single-use, which is still a leak but a smaller one; PKCE shrinks it further. Access tokens stay on `POST /oauth/token`.
+
+### JWT access token or opaque?
+
+JWT: Files verifies without calling Accounts; revoke is slow. Opaque: revoke is instant; Files must introspect or share a store. Short JWT access tokens plus a revocable refresh token is the usual compromise.
+
+### Why not the password grant for a first-party mobile app?
+
+The app would collect the IdP password, so MFA, federation, and "revoke this app" all break, and a compromised binary harvests credentials. Authorization Code + PKCE with a system browser (or in-app browser tab) keeps the password on Accounts.
+
+### What is `state` for?
+
+A per-flow unguessable value. On callback you prove the response belongs to the request you started. Without it, login CSRF / account linking attacks succeed.
+
+### Client credentials for a user-facing "login"?
+
+No. That grant authenticates the *app*, not Ada. There is no consent and no `sub`. User-facing login is Authorization Code + PKCE, plus OIDC if you need identity.
+
+## Related reading
+
+- [What is OAuth 2.0?](/blog/oauth) — the short glossary
+- [Web authentication](/blog/auth-sessions-oauth) — sessions, JWT verification, OIDC, BFF
+- [Web security](/blog/web-security) — XSS, CSRF, CSP
+- [CORS and cookies](/blog/cors-and-cookies) — why the callback cookie may not attach
+- [FastAPI](/blog/fastapi) — dependency injection around a bearer verifier

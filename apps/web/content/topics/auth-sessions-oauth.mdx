@@ -340,7 +340,7 @@ Reach for JWTs when the constraint is real: service-to-service calls, third-part
 
 OAuth 2.0 answers one question: how does an app get limited access to a user's data on another service without the user handing over their password? It replaced "type your Gmail password into this contacts importer" with a redirect, a consent screen, and a scoped, revocable token.
 
-That is authorization. It says nothing verifiable about who the user is — the login screen along the way is incidental. "Log in with OAuth" is the phrase behind a generation of broken implementations. For login you need OpenID Connect.
+That is authorization. It says nothing verifiable about who the user is — the login screen along the way is incidental. "Log in with OAuth" is the phrase behind a generation of broken implementations. For login you need OpenID Connect. The full protocol walkthrough — PrintShop, PKCE, a TypeScript BFF, JWT vs introspection — is [OAuth 2.0](/blog/oauth-2).
 
 ### Roles
 
@@ -891,6 +891,8 @@ TOTP produces a code the user reads and types, so a proxy phishing page collects
 
 ## Related reading
 
+- [OAuth 2.0](/blog/oauth-2) — grants, PKCE, a BFF, and how the resource server checks the token
+- [What is OAuth 2.0?](/blog/oauth) — the short glossary
 - [Web security](/blog/web-security) — XSS, CSRF, CSP, and the cookie flags this note relies on
 - [FastAPI](/blog/fastapi) — the dependency system behind the JWT verifier above
 - [What is JSON-RPC?](/blog/json-rpc) — how another protocol carries credentials over HTTP
