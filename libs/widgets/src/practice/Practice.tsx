@@ -9,10 +9,12 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { readDoneSlugs, setDone } from "@webdev/store";
-import type { PracticeDifficulty, PracticeGroup, PracticeQuestion } from "@webdev/types";
+import type { PracticeCompany, PracticeDifficulty, PracticeGroup, PracticeQuestion } from "@webdev/types";
 import {
+  companyOrder,
   difficultyOrder,
   getPracticeQuestion,
+  practiceCompanies,
   practiceDifficulties,
   practiceGroups,
   practiceQuestions,
@@ -20,7 +22,8 @@ import {
 
 type TopicFilter = PracticeGroup | "all";
 type DifficultyFilter = PracticeDifficulty | "all";
-type GroupBy = "subject" | "level";
+type CompanyFilter = PracticeCompany | "all";
+type GroupBy = "subject" | "level" | "company";
 
 function difficultyClass(level: PracticeDifficulty) {
   if (level === "easy") return "text-emerald-700 dark:text-emerald-300";
@@ -34,6 +37,10 @@ function groupLabel(id: PracticeGroup) {
 
 function difficultyLabel(id: PracticeDifficulty) {
   return practiceDifficulties.find((item) => item.id === id)?.label ?? id;
+}
+
+function companyLabel(id: PracticeCompany) {
+  return practiceCompanies.find((company) => company.id === id)?.label ?? id;
 }
 
 export function PracticeWorkspace({ selectedSlug }: { selectedSlug?: string }) {
@@ -66,12 +73,17 @@ function PracticeHub({ done, doneCount, ready }: { done: string[]; doneCount: nu
   const [query, setQuery] = useState("");
   const [topic, setTopic] = useState<TopicFilter>("all");
   const [difficulty, setDifficulty] = useState<DifficultyFilter>("all");
+  const [company, setCompany] = useState<CompanyFilter>("all");
   const [groupBy, setGroupBy] = useState<GroupBy>("subject");
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   useEffect(() => {
     const hash = window.location.hash.replace(/^#/, "");
     if (practiceGroups.some((group) => group.id === hash)) setTopic(hash as PracticeGroup);
+    if (practiceCompanies.some((item) => item.id === hash)) {
+      setCompany(hash as PracticeCompany);
+      setGroupBy("company");
+    }
   }, []);
 
   useEffect(() => {
@@ -92,16 +104,21 @@ function PracticeHub({ done, doneCount, ready }: { done: string[]; doneCount: nu
     const byTopic = topic === "all" ? practiceQuestions : practiceQuestions.filter((item) => item.group === topic);
     const byDifficulty =
       difficulty === "all" ? byTopic : byTopic.filter((item) => item.difficulty === difficulty);
-    if (!needle) return byDifficulty;
-    return byDifficulty.filter(
-      (item) =>
+    const byCompany =
+      company === "all" ? byDifficulty : byDifficulty.filter((item) => item.companies.includes(company));
+    if (!needle) return byCompany;
+    return byCompany.filter((item) => {
+      const companies = item.companies.map(companyLabel).join(" ");
+      return (
         item.title.toLowerCase().includes(needle) ||
         item.description.toLowerCase().includes(needle) ||
         item.slug.includes(needle) ||
         item.fnName.toLowerCase().includes(needle) ||
-        item.group.includes(needle),
-    );
-  }, [needle, topic, difficulty]);
+        item.group.includes(needle) ||
+        companies.toLowerCase().includes(needle)
+      );
+    });
+  }, [needle, topic, difficulty, company]);
 
   const sections = useMemo(() => {
     if (groupBy === "level") {
@@ -112,6 +129,16 @@ function PracticeHub({ done, doneCount, ready }: { done: string[]; doneCount: nu
           items: visible.filter((item) => item.difficulty === level.id),
         }))
         .filter((section) => section.items.length > 0);
+    }
+    if (groupBy === "company") {
+      return practiceCompanies
+        .map((item) => ({
+          id: item.id as string,
+          label: item.label,
+          items: visible.filter((question) => question.companies.includes(item.id)),
+        }))
+        .filter((section) => section.items.length > 0)
+        .sort((a, b) => companyOrder[a.id as PracticeCompany] - companyOrder[b.id as PracticeCompany]);
     }
     return practiceGroups
       .map((group) => ({
@@ -124,11 +151,22 @@ function PracticeHub({ done, doneCount, ready }: { done: string[]; doneCount: nu
 
   function selectTopic(next: TopicFilter) {
     setTopic(next);
+    if (next !== "all") setCompany("all");
     const hash = next === "all" ? "" : `#${next}`;
     window.history.replaceState(null, "", `${window.location.pathname}${hash}`);
   }
 
-  const filtersActive = topic !== "all" || difficulty !== "all";
+  function selectCompany(next: CompanyFilter) {
+    setCompany(next);
+    if (next !== "all") {
+      setTopic("all");
+      setGroupBy("company");
+    }
+    const hash = next === "all" ? "" : `#${next}`;
+    window.history.replaceState(null, "", `${window.location.pathname}${hash}`);
+  }
+
+  const filtersActive = topic !== "all" || difficulty !== "all" || company !== "all";
 
   return (
     <div className="pb-[max(0.5rem,env(safe-area-inset-bottom))]">
@@ -159,14 +197,16 @@ function PracticeHub({ done, doneCount, ready }: { done: string[]; doneCount: nu
       </div>
 
       <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-        Interview-style questions with a worked problem statement and sample inputs and outputs. Solve them in your own
-        editor — group by subject or by level to plan a session.
+        Interview-style questions with a worked problem statement and sample inputs and outputs. Tagged from public
+        Google, Microsoft, Amazon, Meta, Netflix, Uber, Flipkart, Swiggy, Zomato, and Arcana loops — group by subject,
+        level, or company.
       </p>
 
       <div className="mt-4 hidden md:block">
         <GroupByToggle value={groupBy} onChange={setGroupBy} />
         <TopicChips className="mt-3" topic={topic} done={done} onChange={selectTopic} />
         <DifficultyChips className="mt-2" difficulty={difficulty} onChange={setDifficulty} />
+        <CompanyChips className="mt-2" company={company} done={done} onChange={selectCompany} />
       </div>
 
       <PracticeMobileFilters
@@ -177,14 +217,18 @@ function PracticeHub({ done, doneCount, ready }: { done: string[]; doneCount: nu
         onGroupByChange={setGroupBy}
         topic={topic}
         difficulty={difficulty}
+        company={company}
         done={done}
         onTopicChange={selectTopic}
         onDifficultyChange={setDifficulty}
+        onCompanyChange={selectCompany}
       />
 
       {sections.length === 0 ? (
         <p className="mt-8 text-sm text-zinc-500 dark:text-zinc-400">
-          Nothing matches “{query.trim()}”. Clear search or pick another filter.
+          {query.trim()
+            ? `Nothing matches “${query.trim()}”. Clear search or pick another filter.`
+            : "Nothing in this filter. Group by subject to see every kata, or pick another company."}
         </p>
       ) : (
         <div className="mt-8 space-y-10">
@@ -205,8 +249,13 @@ function PracticeHub({ done, doneCount, ready }: { done: string[]; doneCount: nu
                 </div>
                 <ul className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {sorted.map((item) => (
-                    <li key={item.slug}>
-                      <QuestionCard question={item} done={done.includes(item.slug)} showSubject={groupBy === "level"} />
+                    <li key={`${section.id}-${item.slug}`}>
+                      <QuestionCard
+                        question={item}
+                        done={done.includes(item.slug)}
+                        showSubject={groupBy !== "subject"}
+                        showCompanies={groupBy !== "company"}
+                      />
                     </li>
                   ))}
                 </ul>
@@ -223,6 +272,7 @@ function GroupByToggle({ value, onChange }: { value: GroupBy; onChange: (next: G
   const options: { id: GroupBy; label: string }[] = [
     { id: "subject", label: "Subject" },
     { id: "level", label: "Level" },
+    { id: "company", label: "Company" },
   ];
 
   return (
@@ -266,9 +316,11 @@ function PracticeMobileFilters({
   onGroupByChange,
   topic,
   difficulty,
+  company,
   done,
   onTopicChange,
   onDifficultyChange,
+  onCompanyChange,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -277,9 +329,11 @@ function PracticeMobileFilters({
   onGroupByChange: (next: GroupBy) => void;
   topic: TopicFilter;
   difficulty: DifficultyFilter;
+  company: CompanyFilter;
   done: string[];
   onTopicChange: (id: TopicFilter) => void;
   onDifficultyChange: (id: DifficultyFilter) => void;
+  onCompanyChange: (id: CompanyFilter) => void;
 }) {
   return (
     <>
@@ -334,6 +388,7 @@ function PracticeMobileFilters({
             <GroupByToggle value={groupBy} onChange={onGroupByChange} />
             <TopicChips className="mt-4" topic={topic} done={done} onChange={onTopicChange} />
             <DifficultyChips className="mt-3" difficulty={difficulty} onChange={onDifficultyChange} />
+            <CompanyChips className="mt-3" company={company} done={done} onChange={onCompanyChange} />
           </div>
         </div>
       ) : null}
@@ -440,14 +495,73 @@ function DifficultyChips({
   );
 }
 
+function CompanyChips({
+  company,
+  done,
+  onChange,
+  className = "",
+}: {
+  company: CompanyFilter;
+  done: string[];
+  onChange: (id: CompanyFilter) => void;
+  className?: string;
+}) {
+  const tagged = practiceQuestions.filter((question) => question.companies.length > 0);
+  const chips: { id: CompanyFilter; label: string; count: number; finished: number }[] = [
+    {
+      id: "all",
+      label: "All companies",
+      count: tagged.length,
+      finished: tagged.filter((question) => done.includes(question.slug)).length,
+    },
+    ...practiceCompanies.map((item) => {
+      const items = practiceQuestions.filter((question) => question.companies.includes(item.id));
+      return {
+        id: item.id as CompanyFilter,
+        label: item.label,
+        count: items.length,
+        finished: items.filter((question) => done.includes(question.slug)).length,
+      };
+    }),
+  ];
+
+  return (
+    <div className={`flex flex-wrap gap-2 ${className}`.trim()} role="group" aria-label="Filter by company">
+      {chips.map((chip) => {
+        const selected = company === chip.id;
+        return (
+          <button
+            key={chip.id}
+            type="button"
+            onClick={() => onChange(chip.id)}
+            aria-pressed={selected}
+            className={`inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+              selected
+                ? "border-sky-400/70 bg-sky-400/15 text-sky-800 dark:text-sky-200"
+                : "border-zinc-200/90 bg-white/70 text-zinc-600 hover:border-sky-400/50 hover:text-sky-700 dark:border-white/10 dark:bg-zinc-950/40 dark:text-zinc-300 dark:hover:text-sky-300"
+            }`}
+          >
+            {chip.label}
+            <span className="tabular-nums opacity-70">
+              {chip.finished}/{chip.count}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function QuestionCard({
   question,
   done,
   showSubject,
+  showCompanies,
 }: {
   question: PracticeQuestion;
   done: boolean;
   showSubject: boolean;
+  showCompanies: boolean;
 }) {
   return (
     <a href={`/practice/${question.slug}`} className="card block h-full p-4 sm:p-5">
@@ -470,6 +584,11 @@ function QuestionCard({
       <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
         {question.description}
       </p>
+      {showCompanies && question.companies.length > 0 ? (
+        <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+          {question.companies.map(companyLabel).join(" · ")}
+        </p>
+      ) : null}
     </a>
   );
 }
@@ -518,6 +637,14 @@ function PracticeDetail({
         {groupLabel(question.group)}
         <span className="mx-1.5 text-zinc-300 dark:text-zinc-600">·</span>
         <span className={difficultyClass(question.difficulty)}>{difficultyLabel(question.difficulty)}</span>
+        {question.companies.length > 0 ? (
+          <>
+            <span className="mx-1.5 text-zinc-300 dark:text-zinc-600">·</span>
+            <span className="font-medium normal-case tracking-normal text-zinc-500 dark:text-zinc-400">
+              {question.companies.map(companyLabel).join(" · ")}
+            </span>
+          </>
+        ) : null}
       </p>
 
       <h1 className="mt-2 font-display text-2xl font-semibold tracking-tight text-zinc-950 sm:text-3xl dark:text-white">

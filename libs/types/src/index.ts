@@ -69,6 +69,18 @@ export type PracticeGroup =
 
 export type PracticeDifficulty = "easy" | "medium" | "hard";
 
+export type PracticeCompany =
+  | "google"
+  | "microsoft"
+  | "amazon"
+  | "meta"
+  | "netflix"
+  | "uber"
+  | "flipkart"
+  | "swiggy"
+  | "zomato"
+  | "arcana";
+
 export type PracticeExample = {
   call: string;
   result: string;
@@ -80,6 +92,8 @@ export type PracticeQuestion = {
   description: string;
   group: PracticeGroup;
   difficulty: PracticeDifficulty;
+  /** Product companies that have publicly asked this shape of question. */
+  companies: PracticeCompany[];
   fnName: string;
   signature: string;
   prompt: string;

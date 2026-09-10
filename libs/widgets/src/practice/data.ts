@@ -1,5 +1,9 @@
 import type { PracticeDifficulty, PracticeGroup, PracticeQuestion } from "@webdev/types";
 import { findBySlug } from "@webdev/utils";
+import { companiesFor } from "./company-tags";
+import { interviewQuestions } from "./interview-questions";
+
+export { practiceCompanies, companyOrder } from "./company-tags";
 
 export const practiceDifficulties: { id: PracticeDifficulty; label: string }[] = [
   { id: "easy", label: "Easy" },
@@ -21,7 +25,7 @@ export const practiceGroups: { id: PracticeGroup; label: string; description: st
   { id: "react", label: "React", description: "Custom hooks and machine-coding UI components." },
 ];
 
-export const practiceQuestions: PracticeQuestion[] = [
+const practiceCatalog: Omit<PracticeQuestion, "companies">[] = [
   {
     slug: "sum",
     title: "Add two numbers",
@@ -2702,6 +2706,11 @@ export const practiceQuestions: PracticeQuestion[] = [
     hint: "useMemo(() => paginate(sort(filter(rows))), [rows, query, sortKey, sortDir, page]).",
   },
 ];
+
+export const practiceQuestions: PracticeQuestion[] = [...practiceCatalog, ...interviewQuestions].map((question) => ({
+  ...question,
+  companies: companiesFor(question.slug),
+}));
 
 export function getPracticeQuestion(slug: string): PracticeQuestion | undefined {
   return findBySlug(practiceQuestions, slug);

@@ -17,4 +17,9 @@ export {
 export type { PortfolioSectionId } from "./portfolio/Portfolio";
 
 export { PracticeWorkspace } from "./practice/Practice";
-export { practiceQuestions, getPracticeQuestion, practiceGroups } from "./practice/data";
+export {
+  practiceQuestions,
+  getPracticeQuestion,
+  practiceGroups,
+  practiceCompanies,
+} from "./practice/data";
