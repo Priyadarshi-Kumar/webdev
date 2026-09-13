@@ -1,8 +1,9 @@
-import { Github, Linkedin, Mail, Menu, Settings, X } from "lucide-react";
+import { Github, Linkedin, Mail, Menu, Search, Settings, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { NavLink, ThemeToggle } from "@webdev/components";
 import { usePageContext } from "vike-react/usePageContext";
 import { SITE } from "./config";
+import { SearchTrigger } from "./global-search";
 
 const nav = [
   { href: "/portfolio", label: "Portfolio" },
@@ -65,6 +66,13 @@ export function Header() {
                 </NavLink>
               );
             })}
+            <SearchTrigger className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-zinc-200/80 bg-white/70 px-2.5 text-zinc-600 transition hover:border-sky-400/70 hover:text-sky-600 sm:min-h-9 sm:px-2.5 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300 dark:hover:text-sky-300">
+              <Search size={16} aria-hidden />
+              <span className="sr-only">Search the site</span>
+              <kbd className="hidden rounded-md border border-zinc-200/80 px-1.5 py-0.5 font-mono text-[10px] font-medium text-zinc-500 sm:inline dark:border-white/15 dark:text-zinc-400">
+                ⌘K
+              </kbd>
+            </SearchTrigger>
             <NavLink
               href="/settings"
               active={settingsActive}
@@ -117,7 +125,11 @@ function MobileNavFab({ urlPathname }: { urlPathname: string }) {
   }, [open]);
 
   return (
-    <div className="site-mobile-nav pointer-events-none fixed inset-x-0 top-0 z-40 flex justify-end p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pr-[max(0.75rem,env(safe-area-inset-right))] lg:hidden">
+    <div className="site-mobile-nav pointer-events-none fixed inset-x-0 top-0 z-40 flex justify-end gap-2 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pr-[max(0.75rem,env(safe-area-inset-right))] lg:hidden">
+      <SearchTrigger className="pointer-events-auto relative z-50 inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-sky-400 bg-white/90 text-zinc-700 shadow-[0_8px_24px_-12px_rgba(15,23,42,0.45)] backdrop-blur-md transition hover:border-sky-300 hover:text-sky-700 dark:border-sky-400 dark:bg-zinc-950/80 dark:text-zinc-200 dark:hover:border-sky-300 dark:hover:text-sky-300">
+        <Search size={18} aria-hidden />
+        <span className="sr-only">Search the site</span>
+      </SearchTrigger>
       <button
         ref={buttonRef}
         type="button"
@@ -165,6 +177,13 @@ function MobileNavFab({ urlPathname }: { urlPathname: string }) {
               </NavLink>
             </div>
             <nav className="flex flex-col gap-0.5 p-2">
+              <SearchTrigger
+                className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-zinc-700 transition hover:bg-zinc-100/80 dark:text-zinc-200 dark:hover:bg-white/5"
+                onOpen={() => setOpen(false)}
+              >
+                <Search size={16} aria-hidden />
+                Search
+              </SearchTrigger>
               {nav.map((item) => {
                 const active = navItemActive(urlPathname, item.href);
                 return (

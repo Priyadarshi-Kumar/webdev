@@ -1,5 +1,6 @@
 export { SITE, getSiteUrl } from "./site/config";
 export { Header, Footer, ReadProgress } from "./site/chrome";
+export { SiteSearch, SearchTrigger, useSiteSearch } from "./site/global-search";
 export { HomePage } from "./site/HomePage";
 export { SettingsPage } from "./site/SettingsPage";
 export { ErrorPage } from "./site/ErrorPage";

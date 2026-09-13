@@ -112,6 +112,17 @@ export type ToolMeta = {
   featured?: boolean;
 };
 
+export type SearchKind = "page" | "note" | "jargon" | "practice" | "tool" | "portfolio";
+
+export type SearchEntry = {
+  id: string;
+  kind: SearchKind;
+  title: string;
+  description: string;
+  href: string;
+  keywords?: string[];
+};
+
 export type Theme = "dark" | "light";
 
 export type Site = {
