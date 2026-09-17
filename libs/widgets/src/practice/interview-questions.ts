@@ -946,4 +946,29 @@ export const interviewQuestions: Omit<PracticeQuestion, "companies">[] = [
     ],
     hint: "if (open.length === 1 && sameFace) matched.add both; if different, setTimeout(() => setOpen([]), 800).",
   },
+  {
+    slug: "drag-select-grid",
+    title: "Drag-select grid",
+    description: "Pointer-drag a marquee; every cell under the box is selected.",
+    group: "react",
+    difficulty: "hard",
+    fnName: "DragSelectGrid",
+    signature: "<DragSelectGrid rows cols /> → marquee cell selection",
+    prompt:
+      "DragSelectGrid({ rows, cols }) renders a rows×cols grid of cells. On pointer down, start a selection rectangle from that point. While dragging, draw the marquee and select every cell whose box intersects the rectangle (not only the cell you started on). Pointer up commits. A click with no drag selects that one cell. Escape or a click on empty chrome clears. Prevent native text selection while dragging. Rubrik’s UI round used this: drag across the grid, and every square under the drag area lights up.",
+    examples: [
+      { call: "click cell (1,2) with no move", result: "only (1,2) selected" },
+      { call: "drag from (0,0) to (2,3)", result: "all cells in that inclusive rectangle selected" },
+      { call: "drag through a L-shaped path", result: "the axis-aligned bounding box of the drag, not the path" },
+      { call: "Escape", result: "selection empty" },
+    ],
+    notes: [
+      "Store start and current client coordinates. Marquee = { left: min(x0,x1), top: min(y0,y1), width: abs(dx), height: abs(dy) }.",
+      "Hit-test with getBoundingClientRect on each cell (or compute cell index from size + offsets). Intersection, not “center inside”, matches what they graded.",
+      "Use pointer events (setPointerCapture) so leaving the grid does not drop the drag. Listen on window/up if you skip capture.",
+      "css user-select: none on the grid while dragging. The overlay is pointer-events: none so it does not steal hits.",
+      "Follow-up they like: Shift-drag adds to the previous Set instead of replacing it.",
+    ],
+    hint: "onPointerDown save origin; onPointerMove set current; selected = cells.filter(rectIntersects(marquee, cell.getBoundingClientRect())).",
+  },
 ];

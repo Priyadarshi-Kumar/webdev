@@ -146,6 +146,7 @@ export const companyBySlug: Record<string, PracticeCompany[]> = {
   "mini-store": ["flipkart", "uber"],
   "quantity-stepper": ["amazon", "swiggy"],
   "memory-pairs": ["amazon"],
+  "drag-select-grid": ["rubrik"],
 };
 
 export function companiesFor(slug: string): PracticeCompany[] {
