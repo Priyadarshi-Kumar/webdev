@@ -79,7 +79,8 @@ export type PracticeCompany =
   | "flipkart"
   | "swiggy"
   | "zomato"
-  | "arcana";
+  | "arcana"
+  | "rubrik";
 
 export type PracticeExample = {
   call: string;

@@ -11,6 +11,7 @@ export const practiceCompanies: { id: PracticeCompany; label: string }[] = [
   { id: "swiggy", label: "Swiggy" },
   { id: "zomato", label: "Zomato" },
   { id: "arcana", label: "Arcana" },
+  { id: "rubrik", label: "Rubrik" },
 ];
 
 export const companyOrder: Record<PracticeCompany, number> = Object.fromEntries(
@@ -42,7 +43,7 @@ export const companyBySlug: Record<string, PracticeCompany[]> = {
   pipe: ["google"],
   memoize: ["google", "amazon"],
   delay: ["google"],
-  retry: ["microsoft", "uber", "google"],
+  retry: ["microsoft", "uber", "google", "rubrik"],
   "curry-add": ["swiggy"],
   throttle: ["google", "microsoft", "uber", "swiggy"],
   debounce: ["google", "microsoft", "swiggy", "zomato", "uber", "flipkart", "arcana"],
@@ -61,7 +62,7 @@ export const companyBySlug: Record<string, PracticeCompany[]> = {
   "promise-race-polyfill": ["swiggy"],
   "promise-any-polyfill": ["swiggy"],
   "object-assign-polyfill": ["microsoft"],
-  "event-emitter": ["google", "microsoft", "meta"],
+  "event-emitter": ["google", "microsoft", "meta", "rubrik"],
   "custom-promise": ["google", "swiggy"],
   "json-stringify-polyfill": ["swiggy"],
   "event-delegation": ["google", "microsoft"],
@@ -79,7 +80,7 @@ export const companyBySlug: Record<string, PracticeCompany[]> = {
   "use-local-storage": ["zomato"],
   "use-interval": ["zomato"],
   "use-click-outside": ["microsoft"],
-  "use-fetch": ["zomato", "arcana"],
+  "use-fetch": ["zomato", "arcana", "rubrik"],
   "use-media-query": ["zomato"],
   "use-intersection-observer": ["zomato", "swiggy"],
   "todo-list": ["microsoft"],
@@ -91,7 +92,7 @@ export const companyBySlug: Record<string, PracticeCompany[]> = {
   pagination: ["microsoft", "swiggy", "arcana"],
   stopwatch: ["google"],
   "countdown-timer": ["swiggy"],
-  "image-carousel": ["amazon", "flipkart"],
+  "image-carousel": ["amazon", "flipkart", "rubrik"],
   "error-boundary": ["swiggy", "zomato"],
   "tic-tac-toe": ["google", "microsoft"],
   "form-validation": ["swiggy", "microsoft"],
@@ -100,7 +101,7 @@ export const companyBySlug: Record<string, PracticeCompany[]> = {
   "nested-comments": ["google", "meta"],
   "file-explorer": ["google"],
   "infinite-scroll-list": ["swiggy", "zomato", "meta", "netflix"],
-  "virtualized-list": ["google", "swiggy", "zomato", "arcana", "netflix"],
+  "virtualized-list": ["google", "swiggy", "zomato", "arcana", "netflix", "rubrik"],
   "data-table": ["microsoft", "arcana"],
   "reverse-integer": ["swiggy"],
   "longest-palindrome": ["swiggy"],
@@ -120,6 +121,12 @@ export const companyBySlug: Record<string, PracticeCompany[]> = {
   "luhn-check": ["swiggy"],
   "prefix-trie": ["google", "flipkart", "amazon"],
   "with-loading": ["flipkart"],
+  "retry-backoff": ["rubrik"],
+  "throttle-promises": ["rubrik"],
+  "carousel-controls": ["rubrik"],
+  "responsive-app-shell": ["rubrik"],
+  "use-cached-fetch": ["rubrik"],
+  "shuffle-index": ["rubrik"],
 };
 
 export function companiesFor(slug: string): PracticeCompany[] {
