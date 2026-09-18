@@ -1,0 +1,213 @@
+---
+title: HTTP/1 vs HTTP/2 — connections, multiplexing, and what actually changed
+description: Why HTTP/1.1 needed six sockets, concatenation, and domain sharding — and how HTTP/2 binary streams, HPACK, and one TLS connection replaced that playbook. TCP head-of-line blocking is the leftover that HTTP/3 fixes.
+slug: http1-vs-http2
+date: 2026-09-18
+subject: browser
+tags:
+  - browser
+  - web-apis
+  - interview
+---
+
+HTTP is still request and response. What changed between 1.1 and 2 is **how those messages share a connection**. HTTP/1.1 is text, one exchange at a time per TCP socket. HTTP/2 is binary frames on many concurrent streams over **one** connection. Almost every “HTTP/2 is faster” story is that difference, not a new kind of GET.
+
+Browsers speak HTTP/2 only over TLS (`h2`). Plain `http://` stays HTTP/1.1. HTTP/3 (`h3` over QUIC) is a separate transport; it is the sequel when TCP itself is the bottleneck.
+
+## The contract that did not change
+
+Both versions carry the same application meaning: a method, a target, headers, an optional body, a status, response headers, a body. `GET /styles.css` still means “give me that file.” Cookies, [CORS](/blog/cors-and-cookies), caching (`Cache-Control`, `ETag`), and REST semantics are unchanged.
+
+What is **not** the same:
+
+| | HTTP/1.1 | HTTP/2 |
+| --- | --- | --- |
+| On the wire | Text lines (`GET /path HTTP/1.1`) | Binary frames (`HEADERS`, `DATA`, `SETTINGS`, …) |
+| Concurrent requests on one TCP connection | Effectively one (pipelining exists; browsers disabled it) | Many streams, interleaved |
+| Header compression | None (repeat `Cookie` and `User-Agent` every time) | HPACK (static table + per-connection dynamic table) |
+| Browser sockets per origin | About **6** | **1** (then streams) |
+| Server push | No | Spec yes; browsers dropped it |
+| Typical URL | `https://` may still negotiate 1.1 | `https://` with ALPN `h2` |
+
+DevTools → Network → Protocol column: `http/1.1`, `h2`, or `h3`. That is the source of truth for a given request, not “the site is on HTTPS.”
+
+## HTTP/1.1 — one conversation per socket
+
+### Keep-alive, then a queue
+
+HTTP/1.0 opened a TCP (and TLS) handshake for **every** request, then closed. HTTP/1.1 defaulted to **persistent connections**: after the response, the socket stays open for the next request.
+
+Persistence is not parallelism. On one socket the client still waits for response *n* before sending request *n+1*. Six images means six round trips in series on that socket, or more sockets.
+
+```txt
+TCP+TLS handshake          (expensive, once per socket)
+GET /app.js  →  200 + body
+GET /app.css →  200 + body
+GET /logo.png → 200 + body
+…
+```
+
+A page that needs 40 assets on one origin therefore needs either a long queue or extra connections.
+
+### The six-connection cap
+
+Browsers cap **about six** concurrent HTTP/1.1 connections **per origin** (scheme + host + port). A seventh request waits until a socket frees. Six open [SSE](/blog/websockets-and-sse) streams on HTTP/1.1 can stall the rest of the origin — including other tabs.
+
+That cap is why the 2010s frontend playbook existed:
+
+- **Concatenation** — one `bundle.js` and one `app.css` instead of dozens of files. Fewer requests beat the queue.
+- **Image sprites** — one PNG, CSS offsets.
+- **Inlining** — small CSS/JS in the HTML so they skip a request.
+- **Domain sharding** — `static1.cdn.com` … `static4.cdn.com` so the browser would open 6 × *N* sockets.
+
+Those tricks **hurt** on HTTP/2. Extra hostnames cost extra TLS handshakes and extra congestion windows. Giant bundles wreck caching: one changed line downloads megabytes. See [Web performance](/blog/web-performance) for the current split.
+
+### Pipelining, and why you never used it
+
+HTTP/1.1 allowed **pipelining**: send request 2 before response 1 finished. In practice browsers turned it off. A proxy that buffered the first slow response blocked every request behind it (**HTTP-level head-of-line blocking**). A misbehaving intermediary could also mix responses. The safe subset was “one outstanding request per socket.”
+
+### Head-of-line blocking on HTTP/1.1
+
+Two layers:
+
+1. **HTTP:** the next request cannot start until the current response finishes (without working pipelining).
+2. **TCP:** bytes are ordered. A lost packet stalls *everything* on that socket until retransmission — even bytes from a later response that already arrived.
+
+HTTP/2 removes (1) on a single connection. It does **not** remove (2). That leftover is why HTTP/3 moved to QUIC.
+
+## HTTP/2 — one connection, many streams
+
+### Binary frames and streams
+
+HTTP/2 splits messages into **frames**. Each frame has a **stream id**. Streams are independent request/response pairs that **interleave** on one TCP connection.
+
+```txt
+[HEADERS stream 1  GET /index.html]
+[HEADERS stream 3  GET /app.css]
+[DATA    stream 1  …html bytes…]
+[HEADERS stream 5  GET /app.js]
+[DATA    stream 3  …css bytes…]
+[DATA    stream 5  …js bytes…]
+[DATA    stream 1  …more html…]
+```
+
+The HTML does not have to finish before CSS starts. A large download does not freeze a tiny API call on the same origin — at the HTTP layer.
+
+Stream ids are odd for client-initiated streams. Stream `0` is the connection (SETTINGS, PING, GOAWAY). `RST_STREAM` cancels one stream (`fetch` abort, React Strict Mode teardown, a navigated-away request) without tearing down the socket.
+
+### Multiplexing vs six sockets
+
+One HTTP/2 connection replaces the six HTTP/1.1 sockets:
+
+- **One** TCP handshake, **one** TLS handshake, **one** congestion window that grows as the page loads.
+- Hundreds of concurrent streams (the server advertises `SETTINGS_MAX_CONCURRENT_STREAMS`; browsers often sit around 100).
+- No domain sharding. One origin, one connection is the point.
+
+Connection coalescing can go further: if `a.example` and `b.example` share a certificate and resolve to the same IP, some browsers reuse one HTTP/2 connection. Do not shard hosts hoping for more parallelism.
+
+### HPACK — headers are the chatty part
+
+Every HTTP/1.1 request repeats `User-Agent`, `Cookie`, `Accept`, `Origin`. Cookies in particular can dwarf a small JSON body.
+
+HPACK gives each connection:
+
+- A **static table** of common field names and values (`:method GET`, `content-type`, …).
+- A **dynamic table** both sides update: “index 62 is this `cookie` value.” Later requests send the index, not the string.
+
+HTTP/2 also uses **pseudo-headers** instead of the request line:
+
+```http
+:method: GET
+:scheme: https
+:authority: api.example
+:path: /v1/me
+cookie: …compressed via HPACK…
+```
+
+HPACK is stateful per connection. That is a feature for size and a reason intermediaries cannot casually merge two users’ HTTP/2 sessions.
+
+### Server push (historical)
+
+The spec let a server push `/app.css` when it saw `GET /index.html`, hoping to save a round trip. Browsers **removed** HTTP/2 push: caches were wrong, pushed bytes raced with what the client already had, and 103 Early Hints plus `<link rel="preload">` did the job with less regret. If an interview mentions push, say it existed, Chrome shipped it, Chrome killed it.
+
+### Priorities
+
+HTTP/2 originally had stream dependencies and weights so the browser could say “HTML and CSS before the third-party beacon.” The old tree model was poorly implemented. RFC 9218 (**extensible prioritization**) is the replacement: urgency and incremental flags. You rarely set this from application JS; the browser does it from the resource’s destination (`document`, `style`, `script`, `image`, `fetch`).
+
+### How the browser picks HTTP/2
+
+HTTPS handshake includes **ALPN** (Application-Layer Protocol Negotiation). The client offers `h2` and `http/1.1`. The server picks. If ALPN is missing (old TLS stack, a middlebox that terminates TLS badly), you fall back to HTTP/1.1 on the same certificate.
+
+```txt
+ClientHello  ALPN: h2, http/1.1
+ServerHello  ALPN: h2
+```
+
+`curl -I --http2 https://example.com` and Chrome’s Protocol column both reflect that choice. A CDN that speaks HTTP/2 to the browser can still speak HTTP/1.1 to the origin — hop by hop.
+
+## What this does to frontend work
+
+### Stop concatenating as a default
+
+HTTP/2 made “one giant `vendor.js`” the wrong default. Many medium files cache independently; a one-line change does not bust the whole bundle. HTTP/2 does **not** make thousands of 200-byte modules free: each stream still has frame overhead, compression context, and JS parse cost. Bundlers still bundle; they just split into cacheable chunks instead of one file. Vite and webpack code-splitting assume this world.
+
+### Stop sharding
+
+`img1.cdn` / `img2.cdn` / `img3.cdn` was a hack to multiply the six-connection cap. On HTTP/2 it adds DNS, TLS, and extra congestion windows. One canonical asset origin is faster.
+
+### Waterfalls still exist
+
+Multiplexing does not download HTML you have not parsed yet. A CSS file discovered late in the HTML still starts late. Preload, Early Hints, and not blocking render on huge JS still matter. HTTP/2 is not a substitute for a shallow critical path.
+
+### Long-lived streams
+
+[SSE](/blog/websockets-and-sse) over HTTP/2 shares the origin connection instead of burning one of six sockets per tab. [WebSockets](/blog/websockets) still **upgrade** (or use HTTP/2 Extended CONNECT, RFC 8441, where supported) and then stop being request/response. Do not expect `new WebSocket` to multiplex inside the page’s HTTP/2 session on every browser.
+
+### Priorities vs `fetch`
+
+`fetch('/api')` and `<script src>` compete for the same connection. The browser usually ranks documents, CSS, and fonts above XHR/fetch. A chatty SPA that fires 40 API calls in `useEffect` can delay CSS on a slow link. HTTP/2 makes that *possible*; it does not make it *wise*. Batch or defer non-critical calls until after first paint.
+
+## TCP head-of-line blocking — the HTTP/2 hangover
+
+All HTTP/2 streams share **one TCP byte stream**. If packet 47 is lost, TCP withholds packets 48, 49, 50 from the application until 47 is retransmitted — including frames that belong to *other* streams that were not lost.
+
+On a clean wired network this is rare. On lossy mobile Wi-Fi, one dropped packet stalls **every** in-flight request on that origin. HTTP/1.1’s six sockets accidentally isolated loss: a lost packet on socket 3 did not freeze socket 5. HTTP/2 wins on handshake and header cost, and can lose on packet loss.
+
+**HTTP/3** runs on **QUIC** (UDP). Loss is recovered per stream. That is the actual reason to care about HTTP/3, not marketing “it’s newer.” Same HTTP semantics, different transport. Browsers need HTTPS for `h3` as well.
+
+## Debugging and interviews
+
+### Confirm the protocol
+
+- Chrome Network → Protocol: `h2` vs `http/1.1` vs `h3`.
+- `chrome://net-export` / `chrome://net-internals` for ALPN failures.
+- Response header `alt-svc: h3=":443"` advertises HTTP/3; it does not mean this request used it.
+
+A mixed page is normal: first navigation `h2`, later `h3` after Alt-Svc, third-party scripts still on `http/1.1`.
+
+### Common interview questions
+
+**Why was HTTP/2 invented?** To multiplex many requests on one connection without the HTTP/1.1 queue and without pipelining’s HOL bugs, and to compress repetitive headers.
+
+**Does HTTP/2 make my app faster?** If the page was request-bound on HTTP/1.1 (many small assets, six-connection stall), usually yes. If it was CPU-bound (huge JS parse) or a single 5 MB download, no.
+
+**Is HTTP/2 binary, so I cannot read it?** On the wire, yes. DevTools still shows logical headers and bodies. `nghttp`, Wireshark with TLS keys, or a proxy that terminates TLS.
+
+**Can I force HTTP/2 from `fetch`?** No. The browser and the server negotiate. You can serve TLS with ALPN `h2` and a server that implements it.
+
+**Why do we still bundle?** Parse/compile cost, module waterfall on first load, and request overhead that multiplexing does not fully erase. HTTP/2 changed *how much* you bundle, not *whether*.
+
+**HTTP/2 vs WebSocket?** HTTP/2 is still request/response (plus optional server push, now unused). A WebSocket is a duplex message pipe after an upgrade. Use HTTP/2 for resources and APIs; use a socket when both sides send for a long time. SSE is HTTP and multiplexes on `h2`.
+
+### Side-by-side, one page
+
+| Problem | HTTP/1.1 | HTTP/2 |
+| --- | --- | --- |
+| Many small files | Queue + 6 sockets; concatenate/shard | Multiplex; split for cache, do not shard |
+| Repeated cookies | Full header every request | HPACK |
+| One slow response | Blocks that socket | Other streams continue (until TCP loss) |
+| Packet loss | Isolated per socket | Stalls the whole connection |
+| SSE / many tabs | 6 streams/origin | Dozens–hundreds of streams |
+| Cleartext `http://` | Yes | Not in browsers (`h2` needs TLS) |
+
+Ship HTTP/2 at the edge (almost every CDN does). Keep HTTP/1.1 as the fallback ALPN result, not as the architecture you design bundles for. When field data shows lossy networks and stalled multiplexed pages, look at HTTP/3 — same messages, no TCP HOL.
