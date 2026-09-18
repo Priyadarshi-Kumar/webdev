@@ -283,15 +283,15 @@ The API is a day of work. These are the rest of it, and they apply to both trans
 
 ### Authentication
 
-You have three options, and the native APIs constrain you.
+You have three options, and the native APIs constrain you. The access-token + HttpOnly-refresh pattern is written out in [WebSockets](/blog/websockets#authentication--access-token-plus-httponly-refresh).
 
-**Cookies** are the simplest: `HttpOnly`, `Secure`, `SameSite`, sent automatically on both the SSE request and the WebSocket handshake. Cross-origin needs `withCredentials: true` for `EventSource` and correct CORS on the server. WebSocket does not use CORS — check the `Origin` header yourself in the upgrade handler or any site can open a socket to you with the user's cookies.
+**Cookies** are the simplest: `HttpOnly`, `Secure`, `SameSite`, sent automatically on both the SSE request and the WebSocket handshake. Cross-origin needs `withCredentials: true` for `EventSource` and correct CORS on the server. WebSocket does not use CORS — check the `Origin` header yourself in the upgrade handler or any site can open a socket to you with the user's cookies. Do **not** hang a long-lived refresh cookie on the socket path.
 
 **Token in the query string** works everywhere and leaks into access logs, referrers, and proxy logs. If you must, use a short-lived one-time ticket fetched over a normal authenticated request, valid for seconds, single-use.
 
-**Token in the first message** only works with WebSocket. Connect unauthenticated, `send` the token immediately, and have the server close with `1008` if it does not arrive within a couple of seconds. This keeps the credential out of URLs. The cost is a brief window where the connection exists without identity, so refuse to subscribe anything until authenticated.
+**Token in the first message** only works with WebSocket. Connect unauthenticated, `send` the **access** token immediately, and have the server close with `1008` / `4001` if it does not arrive within a couple of seconds. Keep the **refresh** token in an `HttpOnly` cookie on `/auth/refresh` and rotate it with `fetch(..., { credentials: "include" })` — not over the socket.
 
-Tokens also expire mid-connection. Decide the policy up front: either the server closes with a specific code so the client re-authenticates and reconnects, or the client pushes a refreshed token over the existing socket.
+Tokens also expire mid-connection. Refresh early and send a new `auth` frame on the same socket, or have the server `close(4001)` so the client refreshes via HTTP and reconnects. Blind reconnect with a dead access token is a tight failure loop.
 
 ### Heartbeats and idle timeouts
 

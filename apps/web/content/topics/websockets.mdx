@@ -1,6 +1,6 @@
 ---
 title: WebSockets — status, breaks, and everything that fails
-description: Handshake, readyState, close codes, dirty disconnects, heartbeats, reconnect with backoff, outbound queues, and a UI status the user can trust.
+description: Handshake, readyState, close codes, access + HttpOnly refresh, dirty disconnects, heartbeats, reconnect, and a UI status the user can trust.
 slug: websockets
 date: 2026-09-18
 subject: browser
@@ -13,7 +13,7 @@ tags:
 
 A <Term id="websocket">WebSocket</Term> is a long-lived **duplex** pipe. The browser asks HTTP to upgrade; if the server answers `101 Switching Protocols`, both sides send framed messages until one of them closes. There is no request/response pairing after that. There is also **no automatic reconnect**.
 
-This note is the production version: `readyState`, every close code that actually shows up, handshake failures, silent half-open sockets, what to paint in the UI, and a manager that queues sends while the pipe is down. For “should this even be a socket?” see [WebSockets vs SSE](/blog/websockets-and-sse).
+This note is the production version: `readyState`, every close code that actually shows up, handshake failures, **access token + HttpOnly refresh cookie**, silent half-open sockets, what to paint in the UI, and a manager that queues sends while the pipe is down. For “should this even be a socket?” see [WebSockets vs SSE](/blog/websockets-and-sse). Sessions and the BFF pattern live in [Web authentication](/blog/auth-sessions-oauth).
 
 ## The connection is a state machine
 
@@ -121,6 +121,205 @@ function connectWithTimeout(url, ms = 10_000) {
 ```
 
 Use an application close code (`4000`–`4999`) so `onclose` can tell “we gave up waiting” from “the peer closed.”
+
+## Authentication — access token plus HttpOnly refresh
+
+`new WebSocket(url)` **cannot set headers**. There is no `Authorization: Bearer`. That constraint, plus XSS, decides the design.
+
+Keep a **short-lived access token in memory** (a module variable, not `localStorage`). Keep the **refresh token in an `HttpOnly` cookie** so JavaScript cannot read it. The socket sees only the access token. Refresh happens over a normal `fetch` to a cookie-scoped path. Cookie flags and CSRF are in [Web security](/blog/web-security); token rotation is in [Web authentication](/blog/auth-sessions-oauth).
+
+### What not to do
+
+| Approach | Why it is wrong |
+| --- | --- |
+| Access token in `localStorage` / `sessionStorage` | Any XSS on the origin copies a portable Bearer credential |
+| Refresh token in JavaScript | Same, and it lasts days. `HttpOnly` exists so this cannot happen |
+| `wss://host/socket?access_token=` | Access logs, proxies, `Referer`, analytics, APM. Treat as leaked |
+| `Path=/` refresh cookie on the handshake | The upgrade authenticates with a **long-lived** credential. XSS cannot *read* it, but any script can `new WebSocket` and ride the cookie. Keep the cookie off `/socket` |
+| Blind reconnect after `1008` | Same dead access token, tight loop. Refresh first, or send the user to login |
+
+A same-origin [BFF](/blog/auth-sessions-oauth#the-bff-pattern) that holds both tokens server-side and gives the browser only a session cookie is stricter still. If you cannot, **memory access + HttpOnly refresh** is the next-best pattern the rest of this section uses.
+
+### Cookie for refresh only
+
+Login returns the access token in JSON and sets the refresh cookie on a **narrow path**:
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+Set-Cookie: refresh=v1.MRq7Fw2x; Path=/auth/refresh; HttpOnly; Secure; SameSite=Strict; Max-Age=1209600
+
+{"accessToken":"eyJhbGciOiJSUzI1NiIs...","expiresIn":900}
+```
+
+- **`HttpOnly`** — `document.cookie` cannot read it. XSS cannot exfiltrate the refresh token.
+- **`Secure`** — HTTPS only, which you already need for `wss:`.
+- **`SameSite=Strict`** (or `Lax`) — a foreign site’s form POST cannot refresh. Pair with an `Origin` check on `POST /auth/refresh`.
+- **`Path=/auth/refresh`** — the cookie is **not** sent on `GET /socket`. The WebSocket handshake stays unauthenticated. That is what you want.
+
+Do not set `Domain=.example.com` unless you must share the cookie across subdomains; the default (exact host) is tighter.
+
+### Connect: first message, not the query string
+
+1. Handshake with **no** credential (cookie is not on this path).
+2. On `open`, immediately `send` the in-memory access token.
+3. Server authenticates, then allows subscribe. If the token is missing, invalid, or late, `close(1008)` or `close(4001)`.
+4. Until that succeeds, treat the socket as unauthenticated: no rooms, no fan-out.
+
+```js
+let accessToken = null; // memory only — set at login / refresh
+
+function connectSocket(url) {
+  const socket = new WebSocket(url); // no query token
+
+  socket.addEventListener("open", () => {
+    socket.send(JSON.stringify({ type: "auth", accessToken }));
+  });
+
+  socket.addEventListener("message", (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.type === "auth-ok") {
+      setStatus("open");
+      flush(socket);
+      return;
+    }
+    handle(msg);
+  });
+
+  return socket;
+}
+```
+
+```js
+// server, after accept
+socket.authed = false;
+const timer = setTimeout(() => {
+  if (!socket.authed) socket.close(4001, "auth-timeout");
+}, 2000);
+
+socket.on("message", (raw) => {
+  const msg = JSON.parse(raw);
+  if (!socket.authed) {
+    if (msg.type !== "auth" || !verifyAccess(msg.accessToken)) {
+      socket.close(4001, "unauthorized");
+      return;
+    }
+    clearTimeout(timer);
+    socket.authed = true;
+    socket.sub = claims.sub;
+    socket.send(JSON.stringify({ type: "auth-ok" }));
+    return;
+  }
+  handleAuthed(socket, msg);
+});
+```
+
+Always check **`Origin`** on the upgrade. WebSocket is not CORS. A page on `https://evil.example` can open `wss://your-api` and, if you ever attached a cookie to `/socket`, the browser would send it.
+
+### Refresh: cookie on fetch, never on the socket
+
+JavaScript cannot read the refresh token. It also **must not** need to. `credentials: "include"` sends the cookie to `POST /auth/refresh` only.
+
+```js
+let refreshInflight = null;
+
+function refreshAccess() {
+  refreshInflight ??= fetch("/auth/refresh", {
+    method: "POST",
+    credentials: "include", // HttpOnly cookie
+    headers: { "Content-Type": "application/json" },
+  })
+    .then(async (res) => {
+      if (res.status === 401) {
+        accessToken = null;
+        setStatus("auth");
+        throw new Error("session-expired");
+      }
+      if (!res.ok) throw new Error("refresh-failed");
+      const body = await res.json();
+      accessToken = body.accessToken;
+      scheduleProactiveRefresh(body.expiresIn);
+      return accessToken;
+    })
+    .finally(() => {
+      refreshInflight = null;
+    });
+
+  return refreshInflight;
+}
+```
+
+Share **one** in-flight refresh. Ten sockets or ten `401`s firing ten refreshes look like refresh-token reuse; authorization servers that rotate refresh tokens will kill the whole family. Same rule as REST in [OAuth 2.0](/blog/oauth-2).
+
+The refresh endpoint:
+
+- Reads the cookie, rotates the refresh token, `Set-Cookie` the successor, returns a new access token.
+- Checks `Origin` / CSRF. `SameSite` is necessary, not always sufficient if you ever drop to `None` for a cross-site API.
+- Does **not** speak WebSocket.
+
+```http
+POST /auth/refresh HTTP/1.1
+Host: api.example.com
+Origin: https://app.example.com
+Cookie: refresh=v1.MRq7Fw2x
+```
+
+### Access token expires while the socket is open
+
+Access tokens should last minutes (5–15). A socket lasts hours. Plan for expiry **on a live connection**.
+
+**Proactive (preferred):** when `expiresIn` is known, refresh ~60s early. Then send a new `auth` on the **same** socket. No reconnect, no missed frames.
+
+```js
+function scheduleProactiveRefresh(expiresInSec) {
+  clearTimeout(refreshTimer);
+  const wait = Math.max(5_000, (expiresInSec - 60) * 1000);
+  refreshTimer = setTimeout(async () => {
+    try {
+      await refreshAccess();
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: "auth", accessToken }));
+      }
+    } catch {
+      socket?.close(4001, "refresh-failed");
+    }
+  }, wait);
+}
+```
+
+**Reactive:** server tracks `exp`, and on expiry (or on the next message after `exp`) sends `close(4001, "access-expired")`. The client **does not** reconnect with the old token:
+
+```js
+socket.addEventListener("close", async (event) => {
+  if (event.code === 4001 || event.code === 1008) {
+    try {
+      await refreshAccess();
+      connectSocket(url); // new WebSocket, first-message auth
+    } catch {
+      setStatus("auth"); // login
+    }
+    return;
+  }
+  scheduleReconnect(event);
+});
+```
+
+Do not run that refresh *and* a generic reconnect in parallel. `4001` is an auth event, not a network event.
+
+Re-auth on the open socket is cheaper than tearing TCP down. Use reconnect-after-refresh when the server refuses in-place `auth` messages or has already closed.
+
+### Cross-origin (`app.example` → `api.example`)
+
+The refresh cookie lives on **`api.example`**. The browser will send it on `fetch("https://api.example.com/auth/refresh", { credentials: "include" })` only if:
+
+- CORS on that response includes `Access-Control-Allow-Origin: https://app.example.com` (exact origin, not `*`) and `Access-Control-Allow-Credentials: true`.
+- The cookie is `SameSite=None; Secure` — because the request is cross-site.
+
+That is a weaker cookie than `Strict` on a same-origin BFF. Prefer putting the BFF on `app.example` so refresh stays first-party `SameSite=Strict` and the socket is `wss://app.example.com/socket` (proxied). If the socket must hit `api.example` directly, keep using **first-message access tokens**; still do not widen `Path` to `/` just to “make the handshake authed.”
+
+### XSS still matters
+
+`HttpOnly` stops theft of the **refresh** token. XSS can still call `refreshAccess()` (cookie goes along) and read the **access** token from memory, or `send` on your open socket as the user. That is session riding, not token export of the long-lived secret. Defense is CSP and not putting secrets in JS-readable storage — not “the socket is magic.”
 
 ## How connections break
 
@@ -406,7 +605,7 @@ A [Shared Worker](/blog/shared-worker) still owns **one** manager for all tabs s
 ## Server side: the matching failures
 
 - Validate **`Origin`** on upgrade. WebSocket is **not** CORS. Cookies on the handshake will otherwise be sent to you from any site that opens `wss://your-api`.
-- Auth: cookie, one-time query ticket, or first message with a deadline — then `close(1008)`.
+- Auth: **do not** put the refresh cookie on `/socket`. Handshake stays anonymous. First message carries the in-memory access token; missing/invalid/`exp` → `close(4001)`. Refresh is `POST /auth/refresh` with the HttpOnly cookie, never a WebSocket frame.
 - Heartbeat: `ping` / `pong`; `terminate()` (not `close()`) for peers that miss two rounds. `close()` waits for a handshake the dead peer will never finish.
 - Cap outbound buffers; disconnect slow consumers so they resync instead of OOMing the node.
 - Pub/sub across instances. A socket on process A cannot be written by process B. Rolling deploys close everyone — jitter exists for that moment.
@@ -457,9 +656,20 @@ No. `1000` / kick codes stay down. `1008` re-auths first. `1006` retries. Reset 
 
 Deploys and outages drop every client at once. Identical timers DDoS your own handshake path.
 
+### How do you authenticate a WebSocket if you cannot set Authorization?
+
+Do not put the access token in the URL. Keep it in memory and send `{ type: "auth", accessToken }` as the first message; the server waits a couple of seconds then `close(4001)`. Put the refresh token in an `HttpOnly` cookie scoped to `Path=/auth/refresh` so it is not sent on the handshake. When access expires, `fetch("/auth/refresh", { credentials: "include" })` — one in-flight refresh — then re-auth on the same socket or reconnect.
+
+### Why not authenticate the handshake with the refresh cookie?
+
+The refresh token is long-lived. A `Path=/` cookie would ride every `new WebSocket` from XSS on your origin. Narrow path plus first-message access token keeps the durable secret off the socket.
+
 ## Related reading
 
 - [WebSockets vs SSE](/blog/websockets-and-sse) — when duplex is unnecessary
+- [Web authentication](/blog/auth-sessions-oauth) — refresh rotation, BFF, where tokens live
+- [OAuth 2.0](/blog/oauth-2) — access vs refresh, PKCE
+- [Web security](/blog/web-security) — `HttpOnly`, `SameSite`, CSRF
 - [Shared Workers](/blog/shared-worker) — one socket for every tab
 - [Broadcast Channel](/blog/broadcast-channel) — leader election if you cannot use a Shared Worker
 - [FastAPI](/blog/fastapi) — accept, disconnect, fan-out

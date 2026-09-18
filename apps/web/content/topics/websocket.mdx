@@ -24,4 +24,4 @@ socket.onclose = (event) => console.log(event.code, event.wasClean);
 
 `readyState` is `0` CONNECTING, `1` OPEN, `2` CLOSING, `3` CLOSED. `send` while `0` throws. A dropped network almost always shows close code **`1006`** with `wasClean === false` — no close frame arrived.
 
-The browser **does not reconnect**. You own backoff, heartbeats, and a status the UI can show. The full lifecycle — handshake, every failure mode, queues, React, and a connection manager — is in [WebSockets](/blog/websockets). When the server only needs to push, compare [SSE](/blog/websockets-and-sse).
+The browser **does not reconnect**. You own backoff, heartbeats, and a status the UI can show. Authenticate with an in-memory access token on the first message; keep the refresh token in an `HttpOnly` cookie. The full lifecycle — handshake, close codes, that auth pattern, queues, React, and a connection manager — is in [WebSockets](/blog/websockets). When the server only needs to push, compare [SSE](/blog/websockets-and-sse).
