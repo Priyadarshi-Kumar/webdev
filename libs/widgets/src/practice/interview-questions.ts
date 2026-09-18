@@ -1,6 +1,6 @@
 import type { PracticeQuestion } from "@webdev/types";
 
-export const interviewQuestions: Omit<PracticeQuestion, "companies">[] = [
+export const interviewQuestions: Omit<PracticeQuestion, "companies" | "solution">[] = [
   {
     slug: "reverse-integer",
     title: "Reverse an integer",

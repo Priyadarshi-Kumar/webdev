@@ -8,6 +8,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { CodeBlock } from "@webdev/components";
 import { readDoneSlugs, setDone } from "@webdev/store";
 import type { PracticeCompany, PracticeDifficulty, PracticeGroup, PracticeQuestion } from "@webdev/types";
 import {
@@ -605,10 +606,14 @@ function PracticeDetail({
   onToggleDone: () => void;
 }) {
   const [showHint, setShowHint] = useState(false);
+  const [tab, setTab] = useState<"prompt" | "solution">("prompt");
 
   useEffect(() => {
     setShowHint(false);
+    setTab("prompt");
   }, [question.slug]);
+
+  const solutionLanguage = question.group === "react" ? "tsx" : "javascript";
 
   const inSubject = practiceQuestions
     .filter((item) => item.group === question.group)
@@ -651,6 +656,42 @@ function PracticeDetail({
         {question.title}
       </h1>
 
+      <div
+        role="tablist"
+        aria-label="Question sections"
+        className="mt-5 flex w-fit gap-1 rounded-full border border-zinc-200/90 bg-white/70 p-1 dark:border-white/10 dark:bg-zinc-950/40"
+      >
+        {(
+          [
+            ["prompt", "Prompt"],
+            ["solution", "Solution"],
+          ] as const
+        ).map(([id, label]) => {
+          const selected = tab === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              id={`practice-tab-${id}`}
+              aria-selected={selected}
+              aria-controls={`practice-panel-${id}`}
+              tabIndex={selected ? 0 : -1}
+              onClick={() => setTab(id)}
+              className={`min-h-9 rounded-full px-3.5 text-sm font-semibold transition ${
+                selected
+                  ? "bg-sky-500/15 text-sky-800 dark:text-sky-200"
+                  : "text-zinc-600 hover:text-sky-700 dark:text-zinc-300 dark:hover:text-sky-300"
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === "prompt" ? (
+      <div role="tabpanel" id="practice-panel-prompt" aria-labelledby="practice-tab-prompt">
       <p className="mt-4 text-base leading-relaxed text-zinc-700 dark:text-zinc-300">{question.prompt}</p>
 
       <div className="mt-5 rounded-2xl border border-zinc-200/80 bg-zinc-50/80 px-4 py-3 dark:border-white/10 dark:bg-zinc-950/40">
@@ -705,7 +746,27 @@ function PracticeDetail({
           <Lightbulb size={15} aria-hidden />
           {showHint ? "Hide hint" : "Show hint"}
         </button>
-        {ready ? (
+      </div>
+
+      {showHint ? (
+        <p className="mt-3 rounded-2xl border border-amber-400/25 bg-amber-400/10 px-4 py-3 font-mono text-xs leading-relaxed text-amber-900 dark:text-amber-100">
+          {question.hint}
+        </p>
+      ) : null}
+      </div>
+      ) : (
+      <div role="tabpanel" id="practice-panel-solution" aria-labelledby="practice-tab-solution" className="mt-5">
+        <p className="mb-3 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+          Optimized reference — same contract as the prompt, written for interview time and complexity, not golf.
+        </p>
+        <CodeBlock>
+          <code className={`language-${solutionLanguage}`}>{question.solution}</code>
+        </CodeBlock>
+      </div>
+      )}
+
+      {ready ? (
+        <div className="mt-8">
           <button
             type="button"
             onClick={onToggleDone}
@@ -719,13 +780,7 @@ function PracticeDetail({
             <Check size={15} aria-hidden />
             {done ? "Marked as done" : "Mark as done"}
           </button>
-        ) : null}
-      </div>
-
-      {showHint ? (
-        <p className="mt-3 rounded-2xl border border-amber-400/25 bg-amber-400/10 px-4 py-3 font-mono text-xs leading-relaxed text-amber-900 dark:text-amber-100">
-          {question.hint}
-        </p>
+        </div>
       ) : null}
 
       <nav className="mt-10 grid gap-3 border-t border-zinc-200/80 pt-5 sm:grid-cols-2 dark:border-white/10">

@@ -2,6 +2,7 @@ import type { PracticeDifficulty, PracticeGroup, PracticeQuestion } from "@webde
 import { findBySlug } from "@webdev/utils";
 import { companiesFor } from "./company-tags";
 import { interviewQuestions } from "./interview-questions";
+import { practiceSolutions } from "./solutions";
 
 export { practiceCompanies, companyOrder } from "./company-tags";
 
@@ -25,7 +26,7 @@ export const practiceGroups: { id: PracticeGroup; label: string; description: st
   { id: "react", label: "React", description: "Custom hooks and machine-coding UI components." },
 ];
 
-const practiceCatalog: Omit<PracticeQuestion, "companies">[] = [
+const practiceCatalog: Omit<PracticeQuestion, "companies" | "solution">[] = [
   {
     slug: "sum",
     title: "Add two numbers",
@@ -2707,10 +2708,15 @@ const practiceCatalog: Omit<PracticeQuestion, "companies">[] = [
   },
 ];
 
-export const practiceQuestions: PracticeQuestion[] = [...practiceCatalog, ...interviewQuestions].map((question) => ({
-  ...question,
-  companies: companiesFor(question.slug),
-}));
+export const practiceQuestions: PracticeQuestion[] = [...practiceCatalog, ...interviewQuestions].map((question) => {
+  const solution = practiceSolutions[question.slug];
+  if (!solution) throw new Error(`Missing practice solution for ${question.slug}`);
+  return {
+    ...question,
+    companies: companiesFor(question.slug),
+    solution,
+  };
+});
 
 export function getPracticeQuestion(slug: string): PracticeQuestion | undefined {
   return findBySlug(practiceQuestions, slug);

@@ -101,6 +101,8 @@ export type PracticeQuestion = {
   examples: PracticeExample[];
   notes: string[];
   hint: string;
+  /** Optimized reference implementation shown on the Solution tab. */
+  solution: string;
 };
 
 export type ToolGroup = "encode" | "format" | "generate" | "inspect";
