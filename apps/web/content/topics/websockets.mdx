@@ -1,0 +1,466 @@
+---
+title: WebSockets — status, breaks, and everything that fails
+description: Handshake, readyState, close codes, dirty disconnects, heartbeats, reconnect with backoff, outbound queues, and a UI status the user can trust.
+slug: websockets
+date: 2026-09-18
+subject: browser
+tags:
+  - browser
+  - web-apis
+  - javascript
+  - interview
+---
+
+A <Term id="websocket">WebSocket</Term> is a long-lived **duplex** pipe. The browser asks HTTP to upgrade; if the server answers `101 Switching Protocols`, both sides send framed messages until one of them closes. There is no request/response pairing after that. There is also **no automatic reconnect**.
+
+This note is the production version: `readyState`, every close code that actually shows up, handshake failures, silent half-open sockets, what to paint in the UI, and a manager that queues sends while the pipe is down. For “should this even be a socket?” see [WebSockets vs SSE](/blog/websockets-and-sse).
+
+## The connection is a state machine
+
+Treat the socket as four protocol states plus the ones *your app* adds (`reconnecting`, `offline`, `failed`). Mixing them is how UIs lie (“Connected”) while `send` throws.
+
+### readyState
+
+| Value | Name | Meaning | `send` |
+| --- | --- | --- | --- |
+| `0` | `CONNECTING` | Handshake in flight. No messages yet. | Throws `InvalidStateError` |
+| `1` | `OPEN` | Frames flow both ways. | Queues bytes onto TCP |
+| `2` | `CLOSING` | Close handshake started. | Throws |
+| `3` | `CLOSED` | Dead. New object required. | Throws |
+
+`WebSocket.CONNECTING` / `.OPEN` / `.CLOSING` / `.CLOSED` are the same numbers. Always check `readyState === WebSocket.OPEN` before `send`. Checking `socket` for null is not enough — a ref can hold a socket that already closed.
+
+A **new** `WebSocket(url)` is always `CONNECTING`. You cannot reuse a `CLOSED` instance. Reconnect means `new WebSocket`, not “open the old one again.”
+
+### Events, in the order you will see them
+
+```js
+const socket = new WebSocket("wss://example.com/socket");
+
+socket.addEventListener("open", () => {
+  // readyState is OPEN. Safe to send.
+});
+
+socket.addEventListener("message", (event) => {
+  // event.data: string | Blob | ArrayBuffer (see binaryType)
+});
+
+socket.addEventListener("error", () => {
+  // No message, no code, no HTTP status. A close event always follows.
+});
+
+socket.addEventListener("close", (event) => {
+  // readyState is CLOSED. This is the one you branch on.
+  const { code, reason, wasClean } = event;
+});
+```
+
+Rules that surprise people:
+
+- **`error` is not useful.** The spec hides handshake details from script (no status, no body). Log it; decide from `close`.
+- **`open` may never fire.** DNS failure, TLS failure, a `200` instead of `101`, a blocked upgrade — you get `error` then `close`.
+- **`message` can arrive only while OPEN.** After `close`, the object is inert.
+- Listeners registered after `open` missed `open`. If you attach in a React effect that runs late, check `readyState` immediately.
+
+### binaryType
+
+Default is `"blob"`. Set `"arraybuffer"` *before* the first binary frame if you will parse bytes synchronously. Switching later does not rewrite frames already queued.
+
+```js
+socket.binaryType = "arraybuffer";
+```
+
+## Handshake — when it never becomes a socket
+
+The client sends an HTTP GET with `Upgrade: websocket`. Success is **only** `101`. Anything else is not a WebSocket.
+
+```http
+GET /socket HTTP/1.1
+Host: example.com
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+Sec-WebSocket-Version: 13
+Origin: https://app.example.com
+```
+
+```http
+HTTP/1.1 101 Switching Protocols
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=
+```
+
+### Handshake failures you will actually hit
+
+| What you see in JS | Typical cause |
+| --- | --- |
+| `error` + `close` code `1006`, never `open` | TCP/TLS failed, CORS-looking block, mixed content (`ws://` from HTTPS), or the server returned `200`/`400`/`502` instead of `101` |
+| Instant close, still `1006` | Browser or extension blocked it; DevTools “Offline”; wrong host |
+| `open` then immediate `1008` | Server accepted the upgrade, then rejected Origin or the first-message token |
+| Hangs in `CONNECTING` | SYN dropped, VPN, captive portal. Impose your own connect timeout |
+
+There is **no** `socket.statusCode`. To debug the handshake, watch the Network panel (status on the WS row) or `curl` the upgrade yourself. A load balancer that does not forward `Upgrade` and `Connection` is the usual `502` / `200` culprit.
+
+### Connect timeout
+
+The platform will not fail a stuck handshake quickly. Wrap it:
+
+```js
+function connectWithTimeout(url, ms = 10_000) {
+  const socket = new WebSocket(url);
+  const timer = setTimeout(() => {
+    if (socket.readyState === WebSocket.CONNECTING) {
+      socket.close(4000, "connect-timeout");
+    }
+  }, ms);
+  socket.addEventListener("open", () => clearTimeout(timer));
+  socket.addEventListener("close", () => clearTimeout(timer));
+  return socket;
+}
+```
+
+Use an application close code (`4000`–`4999`) so `onclose` can tell “we gave up waiting” from “the peer closed.”
+
+## How connections break
+
+TCP does not tell you the other side is gone. Phones enter tunnels. Laptops sleep. Load balancers idle-timeout. The close event you wanted never arrives until something writes and TCP finally RSTs — often **minutes** later. That gap is a **half-open** connection: `readyState === OPEN`, `send` “works” (buffers), nothing is alive on the other end.
+
+### CloseEvent fields
+
+| Field | Meaning |
+| --- | --- |
+| `code` | 16-bit close code. `1006` if no close frame. |
+| `reason` | UTF-8 string, max 123 bytes. Empty on most network deaths. |
+| `wasClean` | `true` only if both sides sent a close frame. Network failure is `false`. |
+
+`wasClean === false` is the signal for “retry.” `wasClean === true` with code `1000` or `1001` usually means stay closed (user left, you called `close(1000)`).
+
+### Close codes worth branching on
+
+| Code | Name | Retry? | Notes |
+| --- | --- | --- | --- |
+| `1000` | Normal | No | You or the server finished on purpose |
+| `1001` | Going away | Usually no | Tab closing, server shutting down — still reconnect if the *server* bounced |
+| `1006` | Abnormal | Yes | No close frame. Wi-Fi drop, process kill, proxy cut, failed handshake |
+| `1008` | Policy violation | Only after re-auth | Token/origin rejected. Blind retry loops the same failure |
+| `1011` | Server error | Yes, with backoff | Transient on their side |
+| `1012` | Service restart | Yes, immediately-ish | Rare; treat like deploy |
+| `1013` | Try again later | Yes, honor `reason` if it carries a delay | Overloaded |
+| `4000`–`4999` | Application | You decide | e.g. `4001` auth expired, `4002` kicked, `4003` protocol mismatch |
+
+Server should send **`1008` or `4001`** when the session is no longer valid so the client fetches a new token instead of hammering the same dead cookie.
+
+```js
+socket.onclose = (event) => {
+  if (event.code === 1000 || event.code === 4002) {
+    setStatus("closed"); // stay down
+    return;
+  }
+  if (event.code === 1008 || event.code === 4001) {
+    setStatus("auth"); // refresh token, then connect
+    return;
+  }
+  // 1006, 1011, 1012, 1013, …
+  scheduleReconnect(event);
+};
+```
+
+### Heartbeats — the only way to notice silence
+
+Browsers **answer protocol pings automatically** and **do not let JavaScript send them**. The server must ping and kill sockets that miss pongs. If you also need the *tab* to notice a dead server, send an application message both ways:
+
+```js
+const HEARTBEAT_MS = 25_000;
+const DEAD_AFTER_MS = 60_000;
+
+let lastSeen = Date.now();
+
+socket.addEventListener("message", (event) => {
+  lastSeen = Date.now();
+  const msg = JSON.parse(event.data);
+  if (msg.type === "pong") return;
+  handle(msg);
+});
+
+const beat = setInterval(() => {
+  if (socket.readyState !== WebSocket.OPEN) return;
+  if (Date.now() - lastSeen > DEAD_AFTER_MS) {
+    socket.close(4004, "heartbeat-timeout");
+    return;
+  }
+  socket.send(JSON.stringify({ type: "ping", t: Date.now() }));
+}, HEARTBEAT_MS);
+```
+
+On `close`, `clearInterval(beat)`. A “keepalive” that only sends and never checks `lastSeen` hides the half-open state — you are writing into a kernel buffer, not proving the peer is there.
+
+Idle proxies (AWS ALB default **60s**) close connections with no bytes. Ping under that budget — 20–30s is the usual window.
+
+### Sleep, background tabs, and bfcache
+
+- **Mobile browsers freeze timers** in background tabs. Your reconnect `setTimeout` may fire an hour late against a socket that died immediately.
+- On `visibilitychange` to `visible`, if `readyState !== OPEN`, reconnect **now**, do not wait for the timer.
+- `pagehide` / `pageshow` (bfcache): freeze reconnect while frozen; on `pageshow` with `event.persisted`, assume the socket is dead and open a new one.
+- `navigator.onLine === false` is “OS thinks there is no network,” not “the API is up.” Skip reconnect while offline; listen for `online` and try again. `true` does not mean your server answers — still use heartbeats.
+
+```js
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    if (!socket || socket.readyState === WebSocket.CLOSED) reconnect("visible");
+  }
+});
+
+window.addEventListener("online", () => reconnect("online"));
+window.addEventListener("offline", () => setStatus("offline"));
+```
+
+## Status the UI should show
+
+Do not bind the badge to `readyState` alone. Map a **product** status:
+
+| UI status | When | User-facing copy |
+| --- | --- | --- |
+| `connecting` | First handshake | “Connecting…” |
+| `open` | `readyState === OPEN` and a heartbeat has succeeded (optional) | “Live” |
+| `reconnecting` | `close` was dirty; retry scheduled | “Reconnecting…” + attempt / next try |
+| `offline` | `navigator.onLine === false` | “You’re offline” |
+| `auth` | Close `1008` / `4001` | “Session expired” + sign-in |
+| `failed` | Attempts exhausted or connect timeout budget blown | “Can’t reach the server” + Retry |
+| `closed` | Deliberate `1000` | Hide the badge or “Disconnected” |
+
+A live region (`role="status"`) should announce transitions to `reconnecting` and `failed`. Spamming every 200ms heartbeat is noise.
+
+`open` after reconnect is not “nothing happened.” The user missed messages. Either replay from a cursor or show “Back online — some updates may have been missed.”
+
+## Reconnect without melting the server
+
+Naive `onclose → new WebSocket` in a loop is a thundering herd. Every laptop in a meeting room comes back from sleep together.
+
+```js
+function backoffDelay(attempt) {
+  const cap = 30_000;
+  const base = Math.min(1000 * 2 ** attempt, cap);
+  return base / 2 + Math.random() * (base / 2);
+}
+
+function shouldReconnect(event, attempt, maxAttempts = 12) {
+  if (event.code === 1000 || event.code === 4002) return false;
+  if (attempt >= maxAttempts) return false;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return false;
+  return true;
+}
+```
+
+Reset `attempt` to `0` only on `open` **and** after a successful heartbeat if you are strict. A socket that `open`s and dies in 50ms should not reset the counter — that is a crash loop.
+
+Give up after N attempts and surface **Retry**. Infinite reconnect with a 30s cap is also fine for a chat app; a trading UI may want `failed` faster.
+
+Do not reconnect if a new connect is already `CONNECTING`. Store the instance; ignore a second `reconnect()` until `close`.
+
+## Outbound queue while down
+
+If the user hits Send during `reconnecting`, either disable the button or **queue**. Dropping chat is a bug; dropping cursor positions is correct.
+
+```js
+const outbox = []; // { payload, kind: "reliable" | "ephemeral" }
+
+function send(socket, msg, kind = "reliable") {
+  const payload = JSON.stringify(msg);
+  if (socket?.readyState === WebSocket.OPEN) {
+    if (socket.bufferedAmount > 1_000_000 && kind === "ephemeral") return;
+    socket.send(payload);
+    return;
+  }
+  if (kind === "ephemeral") return;
+  outbox.push({ payload, kind });
+}
+
+function flush(socket) {
+  while (outbox.length && socket.readyState === WebSocket.OPEN) {
+    if (socket.bufferedAmount > 1_000_000) break;
+    socket.send(outbox.shift().payload);
+  }
+}
+
+socket.addEventListener("open", () => flush(socket));
+```
+
+Cap the outbox (e.g. 100 reliable messages). When it overflows, fail the oldest send in the UI rather than growing forever.
+
+`bufferedAmount` is bytes **accepted by `send` but not yet on the wire**. It is your only client backpressure signal. High-frequency state should drop when it is large; logs and chat should wait.
+
+## Missed messages after a break
+
+Order is preserved **on one connection**. After reconnect you can miss a gap or see duplicates.
+
+1. Server stamps a monotonic `id` (or `{ stream, seq }`).
+2. Client stores `lastId`.
+3. First message after `open`: `{ type: "hello", lastId }`.
+4. Server replays `id > lastId`, or replies `{ type: "resync" }` if the gap is too old.
+5. Client ignores `id <= lastId`.
+
+Handlers must be **idempotent**. Exactly-once needs acks on both sides; at-least-once plus ignore-seen-ids is what most products ship.
+
+## A connection manager
+
+One module, one socket, explicit status. Call `connect` from a React effect; do not put this state machine *inside* JSX.
+
+```js
+export function createSocketManager(url, { onMessage, onStatus }) {
+  let socket = null;
+  let attempt = 0;
+  let closedByUs = false;
+  let retryTimer;
+  let status = "connecting";
+
+  const setStatus = (next) => {
+    status = next;
+    onStatus?.(next);
+  };
+
+  function connect() {
+    if (socket && (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN)) {
+      return;
+    }
+    closedByUs = false;
+    setStatus(attempt === 0 ? "connecting" : "reconnecting");
+    socket = new WebSocket(url);
+
+    const connectTimer = setTimeout(() => {
+      if (socket?.readyState === WebSocket.CONNECTING) socket.close(4000, "connect-timeout");
+    }, 10_000);
+
+    socket.addEventListener("open", () => {
+      clearTimeout(connectTimer);
+      attempt = 0;
+      setStatus("open");
+    });
+
+    socket.addEventListener("message", (event) => onMessage(event.data));
+
+    socket.addEventListener("close", (event) => {
+      clearTimeout(connectTimer);
+      socket = null;
+      if (closedByUs) {
+        setStatus("closed");
+        return;
+      }
+      if (!shouldReconnect(event, attempt)) {
+        setStatus(event.code === 1008 || event.code === 4001 ? "auth" : "failed");
+        return;
+      }
+      setStatus("reconnecting");
+      const delay = backoffDelay(attempt++);
+      retryTimer = setTimeout(connect, delay);
+    });
+  }
+
+  function disconnect() {
+    closedByUs = true;
+    clearTimeout(retryTimer);
+    socket?.close(1000, "client-shutdown");
+    socket = null;
+    setStatus("closed");
+  }
+
+  function send(data) {
+    if (socket?.readyState === WebSocket.OPEN) socket.send(data);
+  }
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("online", connect);
+    window.addEventListener("offline", () => setStatus("offline"));
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && status !== "open" && status !== "closed") connect();
+    });
+  }
+
+  return { connect, disconnect, send, getStatus: () => status };
+}
+```
+
+`closedByUs` is what makes React Strict Mode safe: the first effect cleanup must not leave a retry that opens a socket for an unmounted tree.
+
+## React wiring
+
+Create the manager in an effect. Depend on `url` only. Keep `onMessage` in a ref. Expose `status` as state so the badge rerenders; keep the socket itself in a ref.
+
+```tsx
+useEffect(() => {
+  const mgr = createSocketManager(url, {
+    onMessage: (data) => handlerRef.current(data),
+    onStatus: setStatus,
+  });
+  mgr.connect();
+  return () => mgr.disconnect();
+}, [url]);
+```
+
+Do not put `status` in that dependency list. Do not open a socket during render or in a module scope that runs on the server — `WebSocket` is a browser API.
+
+Batch high-frequency `onMessage` into a ref and flush on `requestAnimationFrame` or a 50–100ms interval, or each tick will rerender the tree. Cap the retained message list.
+
+A [Shared Worker](/blog/shared-worker) still owns **one** manager for all tabs so five tabs do not mean five reconnect storms.
+
+## Server side: the matching failures
+
+- Validate **`Origin`** on upgrade. WebSocket is **not** CORS. Cookies on the handshake will otherwise be sent to you from any site that opens `wss://your-api`.
+- Auth: cookie, one-time query ticket, or first message with a deadline — then `close(1008)`.
+- Heartbeat: `ping` / `pong`; `terminate()` (not `close()`) for peers that miss two rounds. `close()` waits for a handshake the dead peer will never finish.
+- Cap outbound buffers; disconnect slow consumers so they resync instead of OOMing the node.
+- Pub/sub across instances. A socket on process A cannot be written by process B. Rolling deploys close everyone — jitter exists for that moment.
+- On shutdown, send `1001` so well-behaved clients reconnect instead of waiting for `1006`.
+
+## Debugging a break
+
+1. Network panel → **WS** → **Messages**. Did frames stop before `close`?
+2. Was the close `1006` / `wasClean false`? Network or proxy. `1000`? You called `close`.
+3. Did `open` ever fire? Handshake. `curl -i` the upgrade; look for `101`.
+4. Throttle to Offline, then Online. Did backoff fire once or stampede?
+5. Background the tab for a minute. Did heartbeat notice, or did the badge stay “Live”?
+6. Two server instances: does a message published on B reach a client on A?
+
+```bash
+npx wscat -c wss://example.com/socket
+curl -i -N \
+  -H "Connection: Upgrade" \
+  -H "Upgrade: websocket" \
+  -H "Sec-WebSocket-Version: 13" \
+  -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+  https://example.com/socket
+```
+
+## Interview questions
+
+### Why can send throw even though you constructed the socket?
+
+Construction is `CONNECTING`. `send` is legal only in `OPEN`. Call it from `onopen` or gate on `readyState`.
+
+### What does close code 1006 mean?
+
+Abnormal closure: no close frame. Wi-Fi, killed process, failed handshake, proxy idle cut. `wasClean` is false. Retry with backoff.
+
+### Why is error useless?
+
+The platform hides handshake HTTP details from script. `close` carries the code you can branch on.
+
+### How do you detect a connection that looks OPEN but is dead?
+
+Heartbeats. Server protocol ping, or app ping with a last-seen deadline. TCP will not tell you for a long time.
+
+### Should you reconnect on every close?
+
+No. `1000` / kick codes stay down. `1008` re-auths first. `1006` retries. Reset attempt count only after a stable `open`, not after a 50ms flap.
+
+### Why jitter the backoff?
+
+Deploys and outages drop every client at once. Identical timers DDoS your own handshake path.
+
+## Related reading
+
+- [WebSockets vs SSE](/blog/websockets-and-sse) — when duplex is unnecessary
+- [Shared Workers](/blog/shared-worker) — one socket for every tab
+- [Broadcast Channel](/blog/broadcast-channel) — leader election if you cannot use a Shared Worker
+- [FastAPI](/blog/fastapi) — accept, disconnect, fan-out
+- [Event loop](/blog/event-loop) — timers, visibility, and why background tabs lie

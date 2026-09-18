@@ -242,6 +242,11 @@ export const glossary = {
     explain:
       "OAuth 2.0 is delegated authorization: an app gets a scoped, revocable access token for a user's data on another service, without ever seeing the user's password.",
   },
+  websocket: {
+    slug: "websocket",
+    explain:
+      "A long-lived duplex connection. HTTP upgrades to a framed protocol so both sides can send messages until someone closes. The browser does not reconnect for you.",
+  },
 } as const;
 
 export type GlossaryId = keyof typeof glossary;

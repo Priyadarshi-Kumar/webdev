@@ -1,0 +1,27 @@
+---
+title: What is a WebSocket?
+description: HTTP upgrades to a framed duplex connection. Both sides send messages until someone closes. Reconnect is your job.
+slug: websocket
+date: 2026-09-18
+tags:
+  - glossary
+  - browser
+  - javascript
+  - web-apis
+---
+
+A <Term id="websocket">WebSocket</Term> starts as an HTTP request (`Upgrade: websocket`) and then **stops being HTTP**. After status `101`, both sides send framed messages — text or binary — until one of them closes.
+
+That is why chat, presence, and collaborative cursors use it: the **server** can talk without waiting for a request, and the **client** can talk without opening a new HTTP call each time.
+
+```js
+const socket = new WebSocket("wss://example.com/socket");
+
+socket.onopen = () => socket.send(JSON.stringify({ type: "hello" }));
+socket.onmessage = (event) => console.log(event.data);
+socket.onclose = (event) => console.log(event.code, event.wasClean);
+```
+
+`readyState` is `0` CONNECTING, `1` OPEN, `2` CLOSING, `3` CLOSED. `send` while `0` throws. A dropped network almost always shows close code **`1006`** with `wasClean === false` — no close frame arrived.
+
+The browser **does not reconnect**. You own backoff, heartbeats, and a status the UI can show. The full lifecycle — handshake, every failure mode, queues, React, and a connection manager — is in [WebSockets](/blog/websockets). When the server only needs to push, compare [SSE](/blog/websockets-and-sse).

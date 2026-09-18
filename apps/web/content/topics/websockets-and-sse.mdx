@@ -13,7 +13,9 @@ tags:
 
 HTTP is a request/response protocol. The browser asks, the server answers, the connection is done. That model is fine for pages and REST calls and terrible for anything where the **server** decides when there is news: a chat message, a price tick, a build finishing, an LLM emitting its next token.
 
-Two browser APIs solve this without plugins: **Server-Sent Events** (`EventSource`) and **WebSocket**. They are not competitors so much as different shapes. Pick the wrong one and you spend months rebuilding reconnect logic the platform already gave you, or you ship a protocol that cannot answer back.
+Two browser APIs solve this without plugins: **Server-Sent Events** (`EventSource`) and <Term id="websocket">WebSocket</Term>. They are not competitors so much as different shapes. Pick the wrong one and you spend months rebuilding reconnect logic the platform already gave you, or you ship a protocol that cannot answer back.
+
+The production WebSocket story — `readyState`, close codes, dirty disconnects, heartbeats, queues, and UI status — lives in [WebSockets](/blog/websockets). This page is the comparison and the SSE half.
 
 ## Why request/response is not enough
 
@@ -158,7 +160,7 @@ Store enough recent history server-side (a Redis list, a Kafka offset, a databas
 
 ## WebSockets
 
-A WebSocket starts as an HTTP request and then stops being HTTP. After the handshake, both sides speak a compact binary framing protocol over the same TCP connection, in both directions, until someone closes it.
+A WebSocket starts as an HTTP request and then stops being HTTP. After the handshake, both sides speak a compact binary framing protocol over the same TCP connection, in both directions, until someone closes it. Failure modes, `1006`, half-open sockets, and a reconnect manager are in [WebSockets](/blog/websockets).
 
 ### The upgrade handshake
 
@@ -835,6 +837,7 @@ When updates are rare or staleness is acceptable, poll. When you need sub-50ms p
 
 ## Related reading
 
+- [WebSockets](/blog/websockets) — status, close codes, breaks, reconnect, queues
 - [Shared Workers](/blog/shared-worker) — one connection shared across every tab
 - [Broadcast Channel API](/blog/broadcast-channel) — fan messages out to tabs, and elect a socket leader
 - [Web Workers](/blog/web-worker) — move message parsing off the main thread
